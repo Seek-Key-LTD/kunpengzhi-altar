@@ -1,11 +1,13 @@
 import React from 'react';
-import { Volume2, VolumeX, ShieldAlert, Sparkles, Droplets } from 'lucide-react';
+import { Volume2, VolumeX, ShieldAlert, Sparkles, Droplets, BookOpen, ScrollText } from 'lucide-react';
 
 interface HeaderProps {
   isMuted: boolean;
   onToggleMute: () => void;
   onOpenSubmit: () => void;
   onOpenCompliance: () => void;
+  onOpenTeaLanterns: () => void;
+  onOpenInteriorPoems: () => void;
   activeSeatId: number;
 }
 
@@ -14,6 +16,8 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleMute,
   onOpenSubmit,
   onOpenCompliance,
+  onOpenTeaLanterns,
+  onOpenInteriorPoems,
   activeSeatId
 }) => {
   return (
@@ -38,11 +42,31 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Global Status & Quick Actions */}
-      <div className="pointer-events-auto flex items-center space-x-3 mt-3 md:mt-0">
-        <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-700/60 text-xs text-slate-300 backdrop-blur-md">
+      <div className="pointer-events-auto flex items-center flex-wrap gap-2 mt-3 md:mt-0">
+        <div className="hidden xl:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-700/60 text-xs text-slate-300 backdrop-blur-md">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-          <span>水利回环：第 <strong className="text-sky-300 font-mono">#{activeSeatId}</strong> 席灌溉中</span>
+          <span>水利回环：<strong className="text-sky-300 font-mono">#{activeSeatId}</strong> 席</span>
         </div>
+
+        {/* Outer 16 Tea Lanterns Button */}
+        <button
+          onClick={onOpenTeaLanterns}
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-950/70 hover:bg-amber-900/80 border border-amber-500/50 text-amber-300 text-xs font-serif backdrop-blur-md transition-all active:scale-95 shadow-md shadow-amber-500/10"
+          title="查看最外围 16 面转经走马大茶灯《茶史五绝赋》"
+        >
+          <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+          <span>外围 16 面大茶灯</span>
+        </button>
+
+        {/* Interior Hollow Cavern Poems Button */}
+        <button
+          onClick={onOpenInteriorPoems}
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-sky-950/70 hover:bg-sky-900/80 border border-sky-500/50 text-sky-300 text-xs font-serif backdrop-blur-md transition-all active:scale-95 shadow-md shadow-sky-500/10"
+          title="入塔中殿 · 第一季诗词歌赋长廊"
+        >
+          <ScrollText className="w-3.5 h-3.5 text-sky-400" />
+          <span>中空地宫诗词</span>
+        </button>
 
         <button
           onClick={onOpenSubmit}

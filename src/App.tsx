@@ -8,6 +8,8 @@ import { ControlsBar } from './components/ControlsBar';
 import { SeatDetailPanel } from './components/SeatDetailPanel';
 import { StarPaperModal } from './components/StarPaperModal';
 import { ComplianceModal } from './components/ComplianceModal';
+import { TeaLanternsModal } from './components/TeaLanternsModal';
+import { InteriorPoetryModal } from './components/InteriorPoetryModal';
 
 export const App: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -19,17 +21,34 @@ export const App: React.FC = () => {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [cameraMode, setCameraMode] = useState<CameraMode>('orbit');
   
+  // Modals
   const [isSubmitOpen, setIsSubmitOpen] = useState<boolean>(false);
   const [isComplianceOpen, setIsComplianceOpen] = useState<boolean>(false);
+  const [isTeaLanternsOpen, setIsTeaLanternsOpen] = useState<boolean>(false);
+  const [selectedTeaChapter, setSelectedTeaChapter] = useState<number>(1);
+  const [isInteriorPoemsOpen, setIsInteriorPoemsOpen] = useState<boolean>(false);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('S01');
   const [submitTargetSeat, setSubmitTargetSeat] = useState<number>(1);
 
   // Initialize 3D Scene
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const scene = new AltarScene(containerRef.current, events, (seatId) => {
-      setActiveSeatId(seatId);
-    });
+    const scene = new AltarScene(
+      containerRef.current,
+      events,
+      (seatId) => {
+        setActiveSeatId(seatId);
+      },
+      (chapterIndex) => {
+        setSelectedTeaChapter(chapterIndex);
+        setIsTeaLanternsOpen(true);
+      },
+      (seasonId) => {
+        setSelectedSeasonId(seasonId);
+        setIsInteriorPoemsOpen(true);
+      }
+    );
     altarSceneRef.current = scene;
 
     return () => {
@@ -38,7 +57,7 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Sync events to 3D scene when state changes
+  // Sync events to 3D scene
   useEffect(() => {
     if (altarSceneRef.current) {
       altarSceneRef.current.updateEvents(events);
@@ -67,7 +86,6 @@ export const App: React.FC = () => {
         altarSceneRef.current.setCameraMode('patrol');
       }
     }
-    // Initialize audio context on user interaction
     altarAudio.init();
   };
 
@@ -135,6 +153,16 @@ export const App: React.FC = () => {
           setIsSubmitOpen(true);
         }}
         onOpenCompliance={() => setIsComplianceOpen(true)}
+        onOpenTeaLanterns={() => {
+          setSelectedTeaChapter(1);
+          setIsTeaLanternsOpen(true);
+          handleChangeCameraMode('outer_lanterns');
+        }}
+        onOpenInteriorPoems={() => {
+          setSelectedSeasonId('S01');
+          setIsInteriorPoemsOpen(true);
+          handleChangeCameraMode('interior');
+        }}
         activeSeatId={activeSeatId}
       />
 
@@ -173,6 +201,20 @@ export const App: React.FC = () => {
         totalSeats={events.length}
         onClose={() => setIsSubmitOpen(false)}
         onSubmit={handleStarPaperSubmit}
+      />
+
+      {/* Outer 16 Tea Lanterns Modal */}
+      <TeaLanternsModal
+        isOpen={isTeaLanternsOpen}
+        initialChapter={selectedTeaChapter}
+        onClose={() => setIsTeaLanternsOpen(false)}
+      />
+
+      {/* Interior Cavern Poetry Modal */}
+      <InteriorPoetryModal
+        isOpen={isInteriorPoemsOpen}
+        initialSeasonId={selectedSeasonId}
+        onClose={() => setIsInteriorPoemsOpen(false)}
       />
 
       {/* Compliance Modal */}

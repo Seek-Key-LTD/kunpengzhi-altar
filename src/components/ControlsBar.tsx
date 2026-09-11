@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, ChevronLeft, ChevronRight, Eye, RefreshCw, Compass, ArrowUpCircle } from 'lucide-react';
+import { Play, Pause, ChevronLeft, ChevronRight, Eye, RefreshCw, Compass, ArrowUpCircle, BookOpen, ScrollText } from 'lucide-react';
 import { CameraMode } from '../types/altar';
 
 interface ControlsBarProps {
@@ -25,16 +25,18 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
 }) => {
   const cameraModes: Array<{ id: CameraMode; label: string; icon: React.ReactNode }> = [
     { id: 'orbit', label: '自由环绕', icon: <Compass className="w-3.5 h-3.5" /> },
+    { id: 'interior', label: '入塔中殿', icon: <ScrollText className="w-3.5 h-3.5" /> },
+    { id: 'outer_lanterns', label: '外围16灯', icon: <BookOpen className="w-3.5 h-3.5" /> },
     { id: 'patrol', label: '水道巡礼', icon: <Eye className="w-3.5 h-3.5" /> },
     { id: 'topdown', label: '俯视九宫', icon: <ArrowUpCircle className="w-3.5 h-3.5" /> },
     { id: 'fountain', label: '泉眼无极', icon: <RefreshCw className="w-3.5 h-3.5" /> },
   ];
 
   return (
-    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-none w-11/12 max-w-2xl">
-      <div className="pointer-events-auto bg-slate-900/85 border border-slate-700/60 backdrop-blur-xl rounded-2xl px-5 py-3.5 shadow-2xl shadow-black/80 flex flex-col space-y-3">
+    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-none w-11/12 max-w-3xl">
+      <div className="pointer-events-auto bg-slate-900/90 border border-slate-700/70 backdrop-blur-xl rounded-2xl px-5 py-3.5 shadow-2xl shadow-black/80 flex flex-col space-y-3">
         {/* Main Transport Row */}
-        <div className="flex items-center justify-between space-x-3">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Play / Step Buttons */}
           <div className="flex items-center space-x-2">
             <button
@@ -86,7 +88,7 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
           </div>
 
           {/* Camera Presets */}
-          <div className="hidden sm:flex items-center space-x-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center flex-wrap gap-1 bg-slate-950/70 p-1 rounded-xl border border-slate-800">
             {cameraModes.map((mode) => (
               <button
                 key={mode.id}
@@ -106,7 +108,7 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
 
         {/* Spiral Timeline Scrubber */}
         <div className="flex items-center space-x-3 text-xs text-slate-400">
-          <span className="font-mono text-amber-300 font-semibold w-10">#{currentSeatId}</span>
+          <span className="font-mono text-amber-300 font-semibold w-12">#{currentSeatId} 席</span>
           <div className="flex-1 relative flex items-center">
             <input
               type="range"
@@ -117,7 +119,7 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
               className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-400"
             />
           </div>
-          <span className="font-mono text-slate-500 w-10 text-right">#{totalSeats}</span>
+          <span className="font-mono text-slate-500 w-12 text-right">#{totalSeats} 席</span>
         </div>
       </div>
     </div>
