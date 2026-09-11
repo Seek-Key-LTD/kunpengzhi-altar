@@ -1,4 +1,5 @@
 import { SpiralEvent } from '../types/altar';
+import { ringToElevation, ringToLayer } from './altarGeometry';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -85,18 +86,10 @@ export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = spiralCoords.map((coord, idx
   const isFinale = seatId === 49;
   const isPrime = isPrimeNumber(seatId);
 
-  // Layer (1 to 7)
-  let layer = 1;
-  if (seatId === 1) layer = 1;
-  else if (seatId <= 5) layer = 2;
-  else if (seatId <= 9) layer = 3;
-  else if (seatId <= 17) layer = 4;
-  else if (seatId <= 25) layer = 5;
-  else if (seatId <= 37) layer = 6;
-  else layer = 7;
-
-  // STRICTLY MONOTONIC CONTINUOUS HEIGHT GRADIENT: from 7.20m (Seat 1) down to 0.80m (Seat 49)
-  const continuousElevation = Number((7.20 - ((seatId - 1) * 6.40 / 48)).toFixed(3));
+  // 席位落在台阶暴露带上：台阶级号与高程由平面切比雪夫半径决定（见 altarGeometry.ts）
+  const ring = Math.max(Math.abs(coord.x), Math.abs(coord.z)); // 0..3
+  const layer = ringToLayer(ring); // 1 / 3 / 5 / 7
+  const elevation = ringToElevation(ring); // 10.5 / 7.5 / 4.5 / 1.5
 
   const arrivalBeat = idx * 1.5;
   const arrivalSeconds = Number((arrivalBeat * 0.75).toFixed(2));
@@ -115,7 +108,7 @@ export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = spiralCoords.map((coord, idx
   const message = isReserved 
     ? reservedInfo.msg 
     : (isFinale 
-        ? '四十九席圆满，黄道回流归元。水运无极，自运维生生不息。' 
+        ? '四十九席圆满，黄道回流归元。水入回收渠，翻斗排空复位，等待下一轮。' 
         : (isPrime
             ? `质数在混沌里自排斜线，文明在乱世里走出秩序。此为第${seatId}席质数锚点。`
             : `寄语于第${seatId}席，顺水流而巡礼，承连续螺旋之梯度，与天地同波。`));
@@ -128,7 +121,7 @@ export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = spiralCoords.map((coord, idx
     spiral_index: seatId,
     grid_x: coord.x,
     grid_z: coord.z,
-    elevation: continuousElevation,
+    elevation,
     water_arrival_beat: arrivalBeat,
     water_arrival_seconds: arrivalSeconds,
     midi_note: midiNote,

@@ -25,11 +25,11 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
 }) => {
   const cameraModes: Array<{ id: CameraMode; label: string; icon: React.ReactNode }> = [
     { id: 'orbit', label: '自由环绕', icon: <Compass className="w-3.5 h-3.5" /> },
-    { id: 'interior', label: '井道水梯', icon: <ScrollText className="w-3.5 h-3.5" /> },
-    { id: 'fountain', label: '顶层浇花', icon: <RefreshCw className="w-3.5 h-3.5" /> },
+    { id: 'interior', label: '入塔中殿', icon: <ScrollText className="w-3.5 h-3.5" /> },
     { id: 'outer_lanterns', label: '外围16灯', icon: <BookOpen className="w-3.5 h-3.5" /> },
     { id: 'patrol', label: '水道巡礼', icon: <Eye className="w-3.5 h-3.5" /> },
     { id: 'topdown', label: '俯视九宫', icon: <ArrowUpCircle className="w-3.5 h-3.5" /> },
+    { id: 'fountain', label: '泉眼无极', icon: <RefreshCw className="w-3.5 h-3.5" /> },
   ];
 
   return (

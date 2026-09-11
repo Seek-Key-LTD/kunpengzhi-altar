@@ -54,6 +54,11 @@ export const App: React.FC = () => {
       (chapterIndex) => {
         setActiveTeaChapter(chapterIndex);
         setDramaTrack('tea_lanterns');
+      },
+      (seasonId) => {
+        const idx = SEASON1_POEMS.findIndex((p) => p.seasonId === seasonId);
+        if (idx >= 0) setActiveSeasonIndex(idx);
+        setDramaTrack('interior_poems');
       }
     );
     altarSceneRef.current = scene;
@@ -101,9 +106,11 @@ export const App: React.FC = () => {
           return next;
         });
       } else if (dramaTrack === 'interior_poems') {
-        setActiveSeasonIndex((prev) => (prev < SEASON1_POEMS.length - 1 ? prev + 1 : 0));
-        setCameraMode('interior');
-        altarSceneRef.current?.setCameraMode('interior');
+        setActiveSeasonIndex((prev) => {
+          const next = prev < SEASON1_POEMS.length - 1 ? prev + 1 : 0;
+          altarSceneRef.current?.focusInteriorPoem(SEASON1_POEMS[next].seasonId);
+          return next;
+        });
       } else if (dramaTrack === 'altar_spiral') {
         setActiveSeatId((prev) => (prev < 49 ? prev + 1 : 1));
       }
@@ -126,9 +133,9 @@ export const App: React.FC = () => {
   const handleSelectSeasonIndex = (idx: number) => {
     setActiveSeasonIndex(idx);
     setDramaTrack('interior_poems');
-    setCameraMode('interior');
+    const sId = SEASON1_POEMS[idx].seasonId;
     if (altarSceneRef.current) {
-      altarSceneRef.current.setCameraMode('interior');
+      altarSceneRef.current.focusInteriorPoem(sId);
     }
     altarAudio.init();
   };
