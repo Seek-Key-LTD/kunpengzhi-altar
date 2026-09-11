@@ -10,6 +10,9 @@ import { StarPaperModal } from './components/StarPaperModal';
 import { ComplianceModal } from './components/ComplianceModal';
 import { TeaLanternsModal } from './components/TeaLanternsModal';
 import { InteriorPoetryModal } from './components/InteriorPoetryModal';
+import { DramaTheaterHUD, DramaTrack } from './components/DramaTheaterHUD';
+import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { SEASON1_POEMS } from './data/season1_poems';
 
 export const App: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -20,14 +23,20 @@ export const App: React.FC = () => {
   const [isPatrolling, setIsPatrolling] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [cameraMode, setCameraMode] = useState<CameraMode>('orbit');
-  
+  const [isDetailPanelOpen, setIsDetailPanelOpen] = useState<boolean>(false); // default collapsed for clean view!
+
+  // Drama Theater state
+  const [dramaTrack, setDramaTrack] = useState<DramaTrack>('tea_lanterns');
+  const [activeTeaChapter, setActiveTeaChapter] = useState<number>(1);
+  const [activeSeasonIndex, setActiveSeasonIndex] = useState<number>(0);
+  const [isDramaPlaying, setIsDramaPlaying] = useState<boolean>(false);
+  const [speedMode, setSpeedMode] = useState<'pause' | 'ultra_slow' | 'slow'>('ultra_slow');
+
   // Modals
   const [isSubmitOpen, setIsSubmitOpen] = useState<boolean>(false);
   const [isComplianceOpen, setIsComplianceOpen] = useState<boolean>(false);
   const [isTeaLanternsOpen, setIsTeaLanternsOpen] = useState<boolean>(false);
-  const [selectedTeaChapter, setSelectedTeaChapter] = useState<number>(1);
   const [isInteriorPoemsOpen, setIsInteriorPoemsOpen] = useState<boolean>(false);
-  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('S01');
   const [submitTargetSeat, setSubmitTargetSeat] = useState<number>(1);
 
   // Initialize 3D Scene
@@ -39,14 +48,17 @@ export const App: React.FC = () => {
       events,
       (seatId) => {
         setActiveSeatId(seatId);
+        setDramaTrack('altar_spiral');
+        setIsDetailPanelOpen(true);
       },
       (chapterIndex) => {
-        setSelectedTeaChapter(chapterIndex);
-        setIsTeaLanternsOpen(true);
+        setActiveTeaChapter(chapterIndex);
+        setDramaTrack('tea_lanterns');
       },
       (seasonId) => {
-        setSelectedSeasonId(seasonId);
-        setIsInteriorPoemsOpen(true);
+        const idx = SEASON1_POEMS.findIndex((p) => p.seasonId === seasonId);
+        if (idx >= 0) setActiveSeasonIndex(idx);
+        setDramaTrack('interior_poems');
       }
     );
     altarSceneRef.current = scene;
@@ -57,12 +69,19 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Sync events to 3D scene
+  // Sync events
   useEffect(() => {
     if (altarSceneRef.current) {
       altarSceneRef.current.updateEvents(events);
     }
   }, [events]);
+
+  // Sync speed mode
+  useEffect(() => {
+    if (altarSceneRef.current) {
+      altarSceneRef.current.setSpeedMode(speedMode);
+    }
+  }, [speedMode]);
 
   // When activeSeatId changes, trigger audio & highlight
   useEffect(() => {
@@ -75,7 +94,66 @@ export const App: React.FC = () => {
     }
   }, [activeSeatId]);
 
-  // Handle Patrol Mode
+  // Drama auto-stepper timer (Relaxed reading pace: 10s per chapter)
+  useEffect(() => {
+    if (!isDramaPlaying) return;
+
+    const timer = setInterval(() => {
+      if (dramaTrack === 'tea_lanterns') {
+        setActiveTeaChapter((prev) => {
+          const next = prev < 16 ? prev + 1 : 1;
+          altarSceneRef.current?.focusTeaLantern(next);
+          return next;
+        });
+      } else if (dramaTrack === 'interior_poems') {
+        setActiveSeasonIndex((prev) => {
+          const next = prev < SEASON1_POEMS.length - 1 ? prev + 1 : 0;
+          altarSceneRef.current?.focusInteriorPoem(SEASON1_POEMS[next].seasonId);
+          return next;
+        });
+      } else if (dramaTrack === 'altar_spiral') {
+        setActiveSeatId((prev) => (prev < 49 ? prev + 1 : 1));
+      }
+    }, 10000);
+
+    return () => clearInterval(timer);
+  }, [isDramaPlaying, dramaTrack]);
+
+  // Handle Tea Chapter Selection
+  const handleSelectTeaChapter = (ch: number) => {
+    setActiveTeaChapter(ch);
+    setDramaTrack('tea_lanterns');
+    if (altarSceneRef.current) {
+      altarSceneRef.current.focusTeaLantern(ch);
+    }
+    altarAudio.init();
+  };
+
+  // Handle Season Index Selection
+  const handleSelectSeasonIndex = (idx: number) => {
+    setActiveSeasonIndex(idx);
+    setDramaTrack('interior_poems');
+    const sId = SEASON1_POEMS[idx].seasonId;
+    if (altarSceneRef.current) {
+      altarSceneRef.current.focusInteriorPoem(sId);
+    }
+    altarAudio.init();
+  };
+
+  // Handle Track Change
+  const handleChangeDramaTrack = (track: DramaTrack) => {
+    setDramaTrack(track);
+    if (track === 'tea_lanterns') {
+      handleSelectTeaChapter(activeTeaChapter);
+    } else if (track === 'interior_poems') {
+      handleSelectSeasonIndex(activeSeasonIndex);
+    } else if (track === 'altar_spiral') {
+      setCameraMode('patrol');
+      altarSceneRef.current?.setCameraMode('patrol');
+    }
+  };
+
+  // Handle Patrol Toggle
   const handleTogglePatrol = () => {
     const nextPatrol = !isPatrolling;
     setIsPatrolling(nextPatrol);
@@ -103,12 +181,20 @@ export const App: React.FC = () => {
     if (altarSceneRef.current) {
       altarSceneRef.current.setCameraMode(mode);
     }
+    if (mode === 'outer_lanterns') {
+      setDramaTrack('tea_lanterns');
+    } else if (mode === 'interior') {
+      setDramaTrack('interior_poems');
+    } else if (mode === 'patrol') {
+      setDramaTrack('altar_spiral');
+    }
   };
 
   // Handle Reset Cycle
   const handleResetCycle = () => {
     setActiveSeatId(1);
     setIsPatrolling(false);
+    setIsDramaPlaying(false);
     if (altarSceneRef.current) {
       altarSceneRef.current.setAutoPatrol(false);
       altarSceneRef.current.setActiveSeat(1);
@@ -135,6 +221,7 @@ export const App: React.FC = () => {
       })
     );
     setActiveSeatId(data.targetSeatId);
+    setIsDetailPanelOpen(true);
   };
 
   const currentEvent = events.find((e) => e.seat_id === activeSeatId) || events[0];
@@ -154,30 +241,83 @@ export const App: React.FC = () => {
         }}
         onOpenCompliance={() => setIsComplianceOpen(true)}
         onOpenTeaLanterns={() => {
-          setSelectedTeaChapter(1);
+          handleSelectTeaChapter(activeTeaChapter);
           setIsTeaLanternsOpen(true);
-          handleChangeCameraMode('outer_lanterns');
         }}
         onOpenInteriorPoems={() => {
-          setSelectedSeasonId('S01');
+          handleSelectSeasonIndex(activeSeasonIndex);
           setIsInteriorPoemsOpen(true);
-          handleChangeCameraMode('interior');
         }}
         activeSeatId={activeSeatId}
       />
 
-      {/* Right Side Detail Panel */}
-      <SeatDetailPanel
-        event={currentEvent}
-        onOpenSubmit={(seatId) => {
-          setSubmitTargetSeat(seatId);
-          setIsSubmitOpen(true);
+      {/* Drama Theater HUD */}
+      <DramaTheaterHUD
+        track={dramaTrack}
+        onChangeTrack={handleChangeDramaTrack}
+        activeTeaChapter={activeTeaChapter}
+        onSelectTeaChapter={handleSelectTeaChapter}
+        activeSeatId={activeSeatId}
+        onSelectSeat={(id) => {
+          setActiveSeatId(id);
+          setIsDetailPanelOpen(true);
         }}
-        onPlaySound={() => {
-          altarAudio.init();
-          altarAudio.triggerSeatEvent(currentEvent);
+        activeSeasonIndex={activeSeasonIndex}
+        onSelectSeasonIndex={handleSelectSeasonIndex}
+        isPlaying={isDramaPlaying}
+        onTogglePlay={() => setIsDramaPlaying(!isDramaPlaying)}
+        speedMode={speedMode}
+        onChangeSpeed={setSpeedMode}
+        onOpenFullModal={() => {
+          if (dramaTrack === 'tea_lanterns') {
+            setIsTeaLanternsOpen(true);
+          } else if (dramaTrack === 'interior_poems') {
+            setIsInteriorPoemsOpen(true);
+          } else {
+            setIsDetailPanelOpen(true);
+          }
         }}
       />
+
+      {/* Toggle Right Side Detail Panel Button */}
+      <div className="absolute right-6 top-20 z-30">
+        <button
+          onClick={() => setIsDetailPanelOpen(!isDetailPanelOpen)}
+          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium backdrop-blur-xl transition-all shadow-lg ${
+            isDetailPanelOpen
+              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+              : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 border-slate-700/60'
+          }`}
+          title={isDetailPanelOpen ? '收起席位面板（无遮挡全屏观察）' : '展开席位详细信息'}
+        >
+          {isDetailPanelOpen ? (
+            <>
+              <PanelRightClose className="w-3.5 h-3.5" />
+              <span>收起面板</span>
+            </>
+          ) : (
+            <>
+              <PanelRightOpen className="w-3.5 h-3.5" />
+              <span>席位详情</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Right Side Detail Panel (Optional, collapsible to avoid blocking view) */}
+      {isDetailPanelOpen && (
+        <SeatDetailPanel
+          event={currentEvent}
+          onOpenSubmit={(seatId) => {
+            setSubmitTargetSeat(seatId);
+            setIsSubmitOpen(true);
+          }}
+          onPlaySound={() => {
+            altarAudio.init();
+            altarAudio.triggerSeatEvent(currentEvent);
+          }}
+        />
+      )}
 
       {/* Bottom Timeline & Controls */}
       <ControlsBar
@@ -188,6 +328,7 @@ export const App: React.FC = () => {
         onTogglePatrol={handleTogglePatrol}
         onSelectSeat={(id) => {
           setActiveSeatId(id);
+          setIsDetailPanelOpen(true);
           altarAudio.init();
         }}
         onChangeCameraMode={handleChangeCameraMode}
@@ -206,14 +347,14 @@ export const App: React.FC = () => {
       {/* Outer 16 Tea Lanterns Modal */}
       <TeaLanternsModal
         isOpen={isTeaLanternsOpen}
-        initialChapter={selectedTeaChapter}
+        initialChapter={activeTeaChapter}
         onClose={() => setIsTeaLanternsOpen(false)}
       />
 
       {/* Interior Cavern Poetry Modal */}
       <InteriorPoetryModal
         isOpen={isInteriorPoemsOpen}
-        initialSeasonId={selectedSeasonId}
+        initialSeasonId={SEASON1_POEMS[activeSeasonIndex]?.seasonId || 'S01'}
         onClose={() => setIsInteriorPoemsOpen(false)}
       />
 

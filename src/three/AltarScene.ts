@@ -27,7 +27,9 @@ export class AltarScene {
   private starshipMeshes: Map<number, THREE.Group> = new Map();
   private seatLabels: Map<number, THREE.Sprite> = new Map();
   private lanternPanels: Map<number, THREE.Mesh> = new Map();
+  private lanternGroupList: THREE.Group[] = [];
   private interiorStelae: Map<string, THREE.Mesh> = new Map();
+  private interiorStelaeGroups: Map<string, THREE.Group> = new Map();
 
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
@@ -41,9 +43,15 @@ export class AltarScene {
   private onInteriorPoemSelect?: (seasonId: string) => void;
   private clock = new THREE.Clock();
 
-  // Animation Progress
+  // Speed & Rotation
+  private lanternRotationSpeed = 0.0015; // Ultra-gentle slow rotation by default
   private currentProgress = 1;
   private isAutoPatrol = false;
+
+  // Smooth Camera Target
+  private targetCameraPos = new THREE.Vector3(28, 30, 36);
+  private targetControlsTarget = new THREE.Vector3(0, 4, 0);
+  private isCameraTransitioning = false;
 
   constructor(
     container: HTMLElement,
@@ -61,7 +69,7 @@ export class AltarScene {
     // 1. Scene setup
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x05070d);
-    this.scene.fog = new THREE.FogExp2(0x05070d, 0.015);
+    this.scene.fog = new THREE.FogExp2(0x05070d, 0.012);
 
     // 2. Camera setup
     const aspect = container.clientWidth / container.clientHeight;
@@ -83,7 +91,7 @@ export class AltarScene {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
     this.controls.minDistance = 2;
-    this.controls.maxDistance = 140;
+    this.controls.maxDistance = 150;
     this.controls.target.set(0, 4, 0);
 
     // 5. Structure Groups
@@ -112,16 +120,14 @@ export class AltarScene {
     window.addEventListener('resize', this.onWindowResize);
     this.container.addEventListener('pointerdown', this.onPointerDown);
 
-    // 8. Start render loop
+    // 8. Start loop
     this.animate();
   }
 
   private initLighting() {
-    // Ambient light
     const ambientLight = new THREE.AmbientLight(0x1e293b, 1.4);
     this.scene.add(ambientLight);
 
-    // Main golden directional light
     const sunLight = new THREE.DirectionalLight(0xffecd2, 2.6);
     sunLight.position.set(35, 55, 25);
     sunLight.castShadow = true;
@@ -129,17 +135,14 @@ export class AltarScene {
     sunLight.shadow.mapSize.height = 2048;
     this.scene.add(sunLight);
 
-    // Cyan rim light
     const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.6);
     rimLight.position.set(-35, 12, -35);
     this.scene.add(rimLight);
 
-    // Apex golden point light
     const apexLight = new THREE.PointLight(0xfbbf24, 3.2, 50, 1.2);
     apexLight.position.set(0, 10, 0);
     this.scene.add(apexLight);
 
-    // Hollow Interior Mood Point Light
     const interiorLight = new THREE.PointLight(0x38bdf8, 2.5, 25, 1.5);
     interiorLight.position.set(0, 3.5, 0);
     this.interiorGroup.add(interiorLight);
@@ -150,7 +153,7 @@ export class AltarScene {
   }
 
   private buildHollowSevenTierAltar() {
-    const tierHeights = [1.2, 2.0, 2.8, 3.6, 4.4, 5.2, 6.0]; // 7 tiers
+    const tierHeights = [1.2, 2.0, 2.8, 3.6, 4.4, 5.2, 6.0];
     const tierHalfSizes = [11.0, 9.5, 8.0, 6.5, 5.0, 3.5, 2.0];
 
     const stoneMaterial = new THREE.MeshStandardMaterial({
@@ -176,12 +179,12 @@ export class AltarScene {
     basinMesh.receiveShadow = true;
     this.altarGroup.add(basinMesh);
 
-    // 7 stepped tiers (constructed with perimeter hollow shells so interior is open!)
+    // 7 stepped tiers (hollowed out on lower levels to create interior cavern)
     for (let i = 0; i < 7; i++) {
       const halfSize = tierHalfSizes[i];
       const h = tierHeights[i];
       
-      // Step plinth
+      // Step box
       const boxGeo = new THREE.BoxGeometry(halfSize * 2, h, halfSize * 2);
       const boxMesh = new THREE.Mesh(boxGeo, stoneMaterial);
       boxMesh.position.y = h / 2;
@@ -189,7 +192,7 @@ export class AltarScene {
       boxMesh.receiveShadow = true;
       this.altarGroup.add(boxMesh);
 
-      // Bronze edge trim
+      // Bronze trim
       const trimGeo = new THREE.BoxGeometry(halfSize * 2 + 0.1, 0.08, halfSize * 2 + 0.1);
       const trimMesh = new THREE.Mesh(trimGeo, bronzeEdgeMaterial);
       trimMesh.position.y = h + 0.04;
@@ -198,7 +201,7 @@ export class AltarScene {
   }
 
   private buildInteriorCavern() {
-    // 1. Interior Floor - Inscribed Bronze & Obsidian Mirror
+    // 1. Interior Floor
     const floorGeo = new THREE.CylinderGeometry(8.5, 8.5, 0.2, 32);
     const floorMat = new THREE.MeshStandardMaterial({
       color: 0x0a0f1d,
@@ -211,7 +214,7 @@ export class AltarScene {
     floor.position.y = 0.1;
     this.interiorGroup.add(floor);
 
-    // 2. Central Water Light Vortex (Streaming down from apex)
+    // 2. Central Water Light Vortex
     const tubeGeo = new THREE.CylinderGeometry(0.6, 0.6, 6.2, 16, 1, true);
     const tubeMat = new THREE.MeshBasicMaterial({
       color: 0x38bdf8,
@@ -237,7 +240,7 @@ export class AltarScene {
     well.position.set(0, 0.2, 0);
     this.interiorGroup.add(well);
 
-    // 3. 12 Floating Stelae for S01–S12 Season Poetry Collection
+    // 3. 12 Floating Stelae for S01–S12 Season Poems
     const radius = 6.2;
     SEASON1_POEMS.forEach((poem, idx) => {
       const angle = (idx / 12) * Math.PI * 2;
@@ -246,9 +249,8 @@ export class AltarScene {
 
       const stelaGroup = new THREE.Group();
       stelaGroup.position.set(x, 2.6, z);
-      stelaGroup.rotation.y = angle + Math.PI; // Face towards center
+      stelaGroup.rotation.y = angle + Math.PI;
 
-      // Jade Stela Slab
       const slabGeo = new THREE.BoxGeometry(1.8, 2.8, 0.08);
       const slabMat = new THREE.MeshStandardMaterial({
         color: 0x0f172a,
@@ -263,8 +265,8 @@ export class AltarScene {
       slab.userData = { type: 'interior_stela', seasonId: poem.seasonId };
       stelaGroup.add(slab);
       this.interiorStelae.set(poem.seasonId, slab);
+      this.interiorStelaeGroups.set(poem.seasonId, stelaGroup);
 
-      // Gold Frame Trim
       const frameGeo = new THREE.BoxGeometry(1.86, 2.86, 0.06);
       const frameMat = new THREE.MeshStandardMaterial({
         color: 0xf59e0b,
@@ -276,7 +278,6 @@ export class AltarScene {
       const frame = new THREE.Mesh(frameGeo, frameMat);
       stelaGroup.add(frame);
 
-      // Inscribed Canvas Texture Sprite
       const sprite = this.createInteriorStelaSprite(poem);
       sprite.position.set(0, 0, 0.06);
       stelaGroup.add(sprite);
@@ -291,15 +292,13 @@ export class AltarScene {
     canvas.height = 384;
     const ctx = canvas.getContext('2d')!;
 
-    // Header background
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
     ctx.roundRect(8, 8, 240, 368, 12);
     ctx.fill();
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Season tag
     ctx.fillStyle = '#f59e0b';
     ctx.font = 'bold 28px "Noto Serif SC", serif';
     ctx.textAlign = 'center';
@@ -309,7 +308,6 @@ export class AltarScene {
     ctx.font = '16px "Noto Serif SC", serif';
     ctx.fillText(poem.opening.title, 128, 80);
 
-    // Lines preview
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '14px "Noto Serif SC", serif';
     ctx.textAlign = 'left';
@@ -332,9 +330,9 @@ export class AltarScene {
   }
 
   private buildOuter16TeaLanterns() {
-    // 16-Faceted Rotating Lantern Pavilion (十六面转经走马大茶灯回廊)
-    const lanternRadius = 19.5;
-    const lanternHeight = 4.2;
+    // 16-Faceted Rotating Lantern Pavilion at unobstructed wide radius 23.5
+    const lanternRadius = 23.5;
+    const lanternHeight = 4.6;
 
     TEA_POEM_16_CHAPTERS.forEach((ch, idx) => {
       const angle = (idx / 16) * Math.PI * 2;
@@ -342,11 +340,11 @@ export class AltarScene {
       const z = Math.cos(angle) * lanternRadius;
 
       const panelGroup = new THREE.Group();
-      panelGroup.position.set(x, lanternHeight / 2 + 0.2, z);
+      panelGroup.position.set(x, lanternHeight / 2 + 0.3, z);
       panelGroup.rotation.y = angle; // Face outward
 
-      // 1. Lantern Fabric Screen (垂帘)
-      const screenGeo = new THREE.PlaneGeometry(3.6, lanternHeight);
+      // Lantern Screen
+      const screenGeo = new THREE.PlaneGeometry(3.8, lanternHeight);
       const screenMat = new THREE.MeshStandardMaterial({
         color: 0x0c1322,
         emissive: 0x1e293b,
@@ -361,7 +359,7 @@ export class AltarScene {
       this.lanternPanels.set(ch.chapterIndex, screenMesh);
 
       // Top & Bottom Bronze Scroll Rods
-      const rodGeo = new THREE.CylinderGeometry(0.08, 0.08, 3.8, 8);
+      const rodGeo = new THREE.CylinderGeometry(0.08, 0.08, 4.0, 8);
       rodGeo.rotateZ(Math.PI / 2);
       const rodMat = new THREE.MeshStandardMaterial({
         color: 0xf59e0b,
@@ -378,11 +376,12 @@ export class AltarScene {
       botRod.position.y = -lanternHeight / 2;
       panelGroup.add(botRod);
 
-      // 2. High-Res Inscribed Canvas Texture Sprite
+      // High-Res Inscribed Canvas Texture Sprite
       const sprite = this.createTeaLanternSprite(ch);
-      sprite.position.set(0, 0, 0.04);
+      sprite.position.set(0, 0, 0.05);
       panelGroup.add(sprite);
 
+      this.lanternGroupList.push(panelGroup);
       this.lanternsGroup.add(panelGroup);
     });
   }
@@ -393,15 +392,13 @@ export class AltarScene {
     canvas.height = 512;
     const ctx = canvas.getContext('2d')!;
 
-    // Background
-    ctx.fillStyle = 'rgba(10, 15, 29, 0.92)';
+    ctx.fillStyle = 'rgba(10, 15, 29, 0.94)';
     ctx.roundRect(10, 10, 364, 492, 16);
     ctx.fill();
     ctx.strokeStyle = '#f59e0b';
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    // Chapter Number badge
     ctx.fillStyle = '#f59e0b';
     ctx.font = 'bold 30px "Noto Serif SC", serif';
     ctx.textAlign = 'center';
@@ -411,7 +408,6 @@ export class AltarScene {
     ctx.font = '16px "Noto Serif SC", serif';
     ctx.fillText(ch.historicalTheme, 192, 95);
 
-    // Left Column Preview
     ctx.fillStyle = '#fef08a';
     ctx.font = '18px "Noto Serif SC", serif';
     ctx.textAlign = 'left';
@@ -421,7 +417,6 @@ export class AltarScene {
       ctx.fillText(line, 30, 175 + i * 32);
     });
 
-    // Right Column Preview
     ctx.fillStyle = '#7dd3fc';
     ctx.fillText('【右栏·转合】', 30, 295);
     ctx.fillStyle = '#f1f5f9';
@@ -438,7 +433,7 @@ export class AltarScene {
     texture.needsUpdate = true;
     const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
     const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(3.4, 4.0, 1);
+    sprite.scale.set(3.6, 4.4, 1);
     return sprite;
   }
 
@@ -702,7 +697,37 @@ export class AltarScene {
 
     this.raycaster.setFromCamera(this.mouse, this.camera);
     
-    // Check Seat Pads
+    // 1. Check Outer Tea Lanterns first
+    const lanterns = Array.from(this.lanternPanels.values());
+    const lanternHits = this.raycaster.intersectObjects(lanterns);
+    if (lanternHits.length > 0) {
+      const hit = lanternHits[0].object;
+      const chIdx = hit.userData?.chapterIndex;
+      if (chIdx) {
+        this.focusTeaLantern(chIdx);
+        if (this.onLanternSelect) {
+          this.onLanternSelect(chIdx);
+        }
+        return;
+      }
+    }
+
+    // 2. Check Interior Stelae
+    const stelae = Array.from(this.interiorStelae.values());
+    const stelaHits = this.raycaster.intersectObjects(stelae);
+    if (stelaHits.length > 0) {
+      const hit = stelaHits[0].object;
+      const sId = hit.userData?.seasonId;
+      if (sId) {
+        this.focusInteriorPoem(sId);
+        if (this.onInteriorPoemSelect) {
+          this.onInteriorPoemSelect(sId);
+        }
+        return;
+      }
+    }
+
+    // 3. Check Seat Pads
     const pads = Array.from(this.seatPads.values());
     const seatHits = this.raycaster.intersectObjects(pads);
     if (seatHits.length > 0) {
@@ -711,30 +736,6 @@ export class AltarScene {
       if (seatId && this.onSeatSelect) {
         this.onSeatSelect(seatId);
         this.setActiveSeat(seatId);
-        return;
-      }
-    }
-
-    // Check Outer Tea Lanterns
-    const lanterns = Array.from(this.lanternPanels.values());
-    const lanternHits = this.raycaster.intersectObjects(lanterns);
-    if (lanternHits.length > 0) {
-      const hit = lanternHits[0].object;
-      const chIdx = hit.userData?.chapterIndex;
-      if (chIdx && this.onLanternSelect) {
-        this.onLanternSelect(chIdx);
-        return;
-      }
-    }
-
-    // Check Interior Stelae
-    const stelae = Array.from(this.interiorStelae.values());
-    const stelaHits = this.raycaster.intersectObjects(stelae);
-    if (stelaHits.length > 0) {
-      const hit = stelaHits[0].object;
-      const sId = hit.userData?.seasonId;
-      if (sId && this.onInteriorPoemSelect) {
-        this.onInteriorPoemSelect(sId);
         return;
       }
     }
@@ -753,33 +754,91 @@ export class AltarScene {
       const ev = this.events.find(e => e.seat_id === seatId);
       if (ev) {
         const targetPos = this.getSeatWorldPos(ev);
-        this.controls.target.lerp(targetPos, 0.4);
+        this.targetControlsTarget.copy(targetPos);
+        this.targetCameraPos.set(targetPos.x + 6, targetPos.y + 5, targetPos.z + 6);
+        this.isCameraTransitioning = true;
       }
+    }
+  }
+
+  public focusTeaLantern(chapterIndex: number) {
+    this.cameraMode = 'outer_lanterns';
+    const angle = ((chapterIndex - 1) / 16) * Math.PI * 2;
+    const lanternRadius = 23.5;
+    const lanternHeight = 2.6;
+
+    // Current world angle accounting for slow group rotation
+    const currentGroupAngle = this.lanternsGroup.rotation.y;
+    const effectiveAngle = angle + currentGroupAngle;
+
+    const x = Math.sin(effectiveAngle) * lanternRadius;
+    const z = Math.cos(effectiveAngle) * lanternRadius;
+
+    // Position camera just outside this lantern, facing towards the lantern
+    const camDist = 6.2;
+    const camX = Math.sin(effectiveAngle) * (lanternRadius + camDist);
+    const camZ = Math.cos(effectiveAngle) * (lanternRadius + camDist);
+
+    this.targetCameraPos.set(camX, lanternHeight + 0.5, camZ);
+    this.targetControlsTarget.set(x, lanternHeight, z);
+    this.isCameraTransitioning = true;
+  }
+
+  public focusInteriorPoem(seasonId: string) {
+    this.cameraMode = 'interior';
+    const idx = SEASON1_POEMS.findIndex(p => p.seasonId === seasonId);
+    const safeIdx = idx >= 0 ? idx : 0;
+    const angle = (safeIdx / 12) * Math.PI * 2;
+    const stelaRadius = 6.2;
+    const x = Math.sin(angle) * stelaRadius;
+    const z = Math.cos(angle) * stelaRadius;
+
+    // Camera stands slightly towards center looking outward at stela
+    const camDist = 3.2;
+    const camX = Math.sin(angle) * (stelaRadius - camDist);
+    const camZ = Math.cos(angle) * (stelaRadius - camDist);
+
+    this.targetCameraPos.set(camX, 2.5, camZ);
+    this.targetControlsTarget.set(x, 2.6, z);
+    this.isCameraTransitioning = true;
+  }
+
+  public setLanternRotationSpeed(speed: number) {
+    this.lanternRotationSpeed = speed;
+  }
+
+  public setSpeedMode(mode: 'pause' | 'ultra_slow' | 'slow') {
+    if (mode === 'pause') {
+      this.lanternRotationSpeed = 0.0;
+    } else if (mode === 'ultra_slow') {
+      this.lanternRotationSpeed = 0.0015;
+    } else if (mode === 'slow') {
+      this.lanternRotationSpeed = 0.005;
     }
   }
 
   public setCameraMode(mode: CameraMode) {
     this.cameraMode = mode;
+    this.isCameraTransitioning = true;
+
     if (mode === 'interior') {
-      // Fly into the hollow pyramid interior
-      this.camera.position.set(0, 2.4, 4.5);
-      this.controls.target.set(0, 2.6, 0);
+      this.targetCameraPos.set(0, 2.5, 4.2);
+      this.targetControlsTarget.set(0, 2.6, 0);
     } else if (mode === 'outer_lanterns') {
-      // Focus on the outer 16 tea lanterns
-      this.camera.position.set(0, 3.8, 23.5);
-      this.controls.target.set(0, 2.2, 19.5);
+      this.targetCameraPos.set(0, 3.2, 29.5);
+      this.targetControlsTarget.set(0, 2.4, 23.5);
     } else if (mode === 'topdown') {
-      this.camera.position.set(0, 52, 0.1);
-      this.controls.target.set(0, 0, 0);
+      this.targetCameraPos.set(0, 56, 0.1);
+      this.targetControlsTarget.set(0, 0, 0);
     } else if (mode === 'fountain') {
-      this.camera.position.set(0, 16, 12);
-      this.controls.target.set(0, 8, 0);
+      this.targetCameraPos.set(0, 16, 12);
+      this.targetControlsTarget.set(0, 8, 0);
     } else if (mode === 'cinematic') {
-      this.camera.position.set(30, 15, 30);
-      this.controls.target.set(0, 3, 0);
+      this.targetCameraPos.set(34, 16, 34);
+      this.targetControlsTarget.set(0, 3, 0);
     } else if (mode === 'orbit') {
-      this.camera.position.set(28, 30, 36);
-      this.controls.target.set(0, 4, 0);
+      this.targetCameraPos.set(28, 30, 36);
+      this.targetControlsTarget.set(0, 4, 0);
     }
   }
 
@@ -805,37 +864,46 @@ export class AltarScene {
     this.animationFrameId = requestAnimationFrame(this.animate);
     const elapsedTime = this.clock.getElapsedTime();
 
-    this.controls.update();
-
-    // 1. Slow continuous rotation of the outer 16 Tea Lanterns (Clockwise history wheel)
-    if (this.lanternsGroup) {
-      this.lanternsGroup.rotation.y = elapsedTime * 0.05;
+    // 1. Smooth Camera Transition Lerp
+    if (this.isCameraTransitioning) {
+      this.camera.position.lerp(this.targetCameraPos, 0.05);
+      this.controls.target.lerp(this.targetControlsTarget, 0.05);
+      if (this.camera.position.distanceTo(this.targetCameraPos) < 0.1) {
+        this.isCameraTransitioning = false;
+      }
     }
 
-    // 2. Subtle floating oscillation for Interior Stelae
+    this.controls.update();
+
+    // 2. Slow continuous rotation of the outer 16 Tea Lanterns
+    if (this.lanternsGroup) {
+      this.lanternsGroup.rotation.y += this.lanternRotationSpeed;
+    }
+
+    // 3. Subtle floating oscillation for Interior Stelae
     this.interiorStelae.forEach((stela, idx) => {
-      stela.position.y = 2.6 + Math.sin(elapsedTime * 2 + Number(idx.replace('S', ''))) * 0.05;
+      stela.position.y = 2.6 + Math.sin(elapsedTime * 2 + Number(idx.replace('S', ''))) * 0.03;
     });
 
-    // 3. Rotate apex fountain ring and animate fountain particles
+    // 4. Rotate apex fountain ring & fountain particles
     if (this.fountainGroup) {
-      this.fountainGroup.rotation.y = elapsedTime * 0.2;
+      this.fountainGroup.rotation.y = elapsedTime * 0.15;
     }
     if (this.fountainParticles) {
       const posAttr = this.fountainParticles.geometry.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < posAttr.count; i++) {
-        let y = posAttr.getY(i) - 0.05;
+        let y = posAttr.getY(i) - 0.03;
         if (y < 6.0) y = 10.0;
         posAttr.setY(i, y);
       }
       posAttr.needsUpdate = true;
     }
 
-    // 4. Water particles flowing along spiral
+    // 5. Water particles flowing along spiral
     if (this.waterParticles && this.waterSpiralPath.length > 0) {
       const pAttr = this.waterParticles.geometry.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < pAttr.count; i++) {
-        const step = (elapsedTime * 8 + i * 0.25) % this.waterSpiralPath.length;
+        const step = (elapsedTime * 6 + i * 0.25) % this.waterSpiralPath.length;
         const idxA = Math.floor(step);
         const idxB = (idxA + 1) % this.waterSpiralPath.length;
         const frac = step - idxA;
@@ -844,32 +912,32 @@ export class AltarScene {
 
         pAttr.setXYZ(
           i,
-          pA.x + (pB.x - pA.x) * frac + Math.sin(elapsedTime * 4 + i) * 0.05,
+          pA.x + (pB.x - pA.x) * frac + Math.sin(elapsedTime * 4 + i) * 0.04,
           pA.y + (pB.y - pA.y) * frac + 0.12,
-          pA.z + (pB.z - pA.z) * frac + Math.cos(elapsedTime * 4 + i) * 0.05
+          pA.z + (pB.z - pA.z) * frac + Math.cos(elapsedTime * 4 + i) * 0.04
         );
       }
       pAttr.needsUpdate = true;
     }
 
-    // 5. Starships floating
+    // 6. Starships floating
     this.starshipMeshes.forEach((ship, id) => {
-      ship.position.y += Math.sin(elapsedTime * 2 + id) * 0.003;
-      ship.rotation.y = elapsedTime * 0.3 + id;
+      ship.position.y += Math.sin(elapsedTime * 2 + id) * 0.002;
+      ship.rotation.y = elapsedTime * 0.2 + id;
     });
 
-    // 6. Flowers breathing
+    // 7. Flowers breathing
     this.flowerMeshes.forEach((flower, id) => {
-      const pulse = 1.0 + Math.sin(elapsedTime * 3 + id) * 0.05;
-      flower.rotation.y = elapsedTime * 0.4 + id;
+      const pulse = 1.0 + Math.sin(elapsedTime * 2.5 + id) * 0.04;
+      flower.rotation.y = elapsedTime * 0.2 + id;
       if (id !== this.activeSeatId) {
         flower.scale.set(0.6 * pulse, 0.6 * pulse, 0.6 * pulse);
       }
     });
 
-    // 7. Auto patrol
+    // 8. Auto patrol
     if (this.isAutoPatrol) {
-      this.currentProgress += 0.08;
+      this.currentProgress += 0.05;
       if (this.currentProgress > 49.5) {
         this.currentProgress = 1;
       }
