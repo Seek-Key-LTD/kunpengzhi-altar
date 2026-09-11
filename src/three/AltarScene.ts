@@ -446,7 +446,7 @@ export class AltarScene {
       }
     }
 
-    // Top Collar at Tier 1 (1号位顶层受水口与浇花台)
+    // Top Collar at Tier 1 (1号位顶层受水口与天井浇花台)
     const topCollarGroup = new THREE.Group();
     topCollarGroup.position.set(0, 6 * brickHeight + brickHeight / 2, 0);
 
@@ -454,7 +454,7 @@ export class AltarScene {
     const collarMesh = new THREE.Mesh(collarGeo, bronzeEdgeMat);
     topCollarGroup.add(collarMesh);
 
-    // Top Receiving Basin (1号位花池)
+    // Top Receiving Basin & Seat Pad for Seat #1
     const basinGeo = new THREE.CylinderGeometry(1.0, 0.8, 0.3, 32);
     const basinMat = new THREE.MeshStandardMaterial({
       color: 0x0284c7,
@@ -465,7 +465,14 @@ export class AltarScene {
     });
     const basinMesh = new THREE.Mesh(basinGeo, basinMat);
     basinMesh.position.y = brickHeight / 2 + 0.15;
+    basinMesh.userData = { type: 'seat_pad', seatId: 1 };
     topCollarGroup.add(basinMesh);
+    this.seatPads.set(1, basinMesh);
+
+    // Top Seat #1 Number Badge
+    const seat1Sprite = this.createSeatNumberSprite(1, false);
+    seat1Sprite.position.set(0, brickHeight / 2 + 0.95, 0);
+    topCollarGroup.add(seat1Sprite);
 
     // Top Central Peony / Sacred Flower (1号主花)
     this.topFlowerMesh = new THREE.Group();
@@ -490,6 +497,7 @@ export class AltarScene {
 
     this.topFlowerMesh.position.set(0, brickHeight / 2 + 0.35, 0);
     topCollarGroup.add(this.topFlowerMesh);
+    this.seatLotusMeshes.set(1, this.topFlowerMesh);
 
     this.pyramid140Group.add(topCollarGroup);
 
@@ -906,9 +914,13 @@ export class AltarScene {
   private getSeatWorldPos(event: SpiralEvent): THREE.Vector3 {
     const spacing = 3.0;
     const brickHeight = 0.95;
+    if (event.seat_id === 1) {
+      return new THREE.Vector3(0, 6 * brickHeight + brickHeight + 0.15, 0);
+    }
     const x = event.grid_x * spacing;
     const z = event.grid_z * spacing;
-    const layer = event.layer || Math.max(Math.abs(event.grid_x), Math.abs(event.grid_z)) + 1;
+    const ring = Math.max(Math.abs(event.grid_x), Math.abs(event.grid_z));
+    const layer = Math.min(7, ring + 1);
     const y = (7 - layer) * brickHeight + brickHeight;
     return new THREE.Vector3(x, y, z);
   }
