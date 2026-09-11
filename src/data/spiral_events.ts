@@ -1,6 +1,5 @@
 import { SpiralEvent } from '../types/altar';
 
-// 12-TET Note helper
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 function getMidiNoteName(midi: number): string {
@@ -9,7 +8,17 @@ function getMidiNoteName(midi: number): string {
   return `${note}${octave}`;
 }
 
-// Generate square Ulam spiral points for 49 seats
+function isPrimeNumber(n: number): boolean {
+  if (n <= 1) return false;
+  if (n <= 3) return true;
+  if (n % 2 === 0 || n % 3 === 0) return false;
+  for (let i = 5; i * i <= n; i += 6) {
+    if (n % i === 0 || n % (i + 2) === 0) return false;
+  }
+  return true;
+}
+
+// Generate square Ulam spiral points for 49 seats (7x7 grid)
 function generateSpiralCoords(total: number = 49): Array<{ x: number; z: number }> {
   const coords: Array<{ x: number; z: number }> = [{ x: 0, z: 0 }];
   let x = 0;
@@ -17,23 +26,23 @@ function generateSpiralCoords(total: number = 49): Array<{ x: number; z: number 
   let stepSize = 1;
   
   while (coords.length < total) {
-    // Move East (+X)
+    // East (+X)
     for (let i = 0; i < stepSize && coords.length < total; i++) {
       x += 1;
       coords.push({ x, z });
     }
-    // Move North (+Z)
+    // North (+Z)
     for (let i = 0; i < stepSize && coords.length < total; i++) {
       z += 1;
       coords.push({ x, z });
     }
     stepSize += 1;
-    // Move West (-X)
+    // West (-X)
     for (let i = 0; i < stepSize && coords.length < total; i++) {
       x -= 1;
       coords.push({ x, z });
     }
-    // Move South (-Z)
+    // South (-Z)
     for (let i = 0; i < stepSize && coords.length < total; i++) {
       z -= 1;
       coords.push({ x, z });
@@ -45,8 +54,7 @@ function generateSpiralCoords(total: number = 49): Array<{ x: number; z: number 
 
 const spiralCoords = generateSpiralCoords(49);
 
-// Pentatonic / Modal 12-TET motif seeds across 7 layers
-const LAYER_BASE_NOTES = [72, 69, 65, 62, 57, 53, 48]; // High register down to deep bass
+const LAYER_BASE_NOTES = [72, 69, 65, 62, 57, 53, 48];
 const FLOWER_TYPES: Array<SpiralEvent['flower_type']> = [
   'peony', 'lotus', 'plum', 'orchid', 'bamboo', 'chrysanthemum', 'pine'
 ];
@@ -75,8 +83,9 @@ const OPEN_SEAT_NAMES = [
 export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = spiralCoords.map((coord, idx) => {
   const seatId = idx + 1;
   const isFinale = seatId === 49;
-  
-  // Distribute 4 rings into 7 stepped elevation tiers
+  const isPrime = isPrimeNumber(seatId);
+
+  // Layer (1 to 7)
   let layer = 1;
   if (seatId === 1) layer = 1;
   else if (seatId <= 5) layer = 2;
@@ -86,11 +95,12 @@ export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = spiralCoords.map((coord, idx
   else if (seatId <= 37) layer = 6;
   else layer = 7;
 
-  const elevation = 8 - layer; // Height 7 down to 1
+  // STRICTLY MONOTONIC CONTINUOUS HEIGHT GRADIENT: from 7.20m (Seat 1) down to 0.80m (Seat 49)
+  const continuousElevation = Number((7.20 - ((seatId - 1) * 6.40 / 48)).toFixed(3));
+
   const arrivalBeat = idx * 1.5;
-  const arrivalSeconds = Number((arrivalBeat * 0.75).toFixed(2)); // Tempo ~80bpm
+  const arrivalSeconds = Number((arrivalBeat * 0.75).toFixed(2));
   
-  // Musical mapping: pentatonic notes distributed on 12-TET
   const baseMidi = LAYER_BASE_NOTES[layer - 1];
   const pentatonicOffsets = [0, 2, 4, 7, 9, 12, 14];
   const midiNote = baseMidi + pentatonicOffsets[idx % pentatonicOffsets.length];
@@ -101,12 +111,14 @@ export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = spiralCoords.map((coord, idx
   const displayName = isReserved 
     ? reservedInfo.name 
     : (OPEN_SEAT_NAMES[seatId - 9] || `守坛人·${seatId}`);
-  const roleTitle = isReserved ? reservedInfo.title : `第${seatId}席·星宿探索者`;
+  const roleTitle = isReserved ? reservedInfo.title : (isPrime ? `质数序列 · 秩序涌现位` : `第${seatId}席·星宿探索者`);
   const message = isReserved 
     ? reservedInfo.msg 
     : (isFinale 
         ? '四十九席圆满，黄道回流归元。水运无极，自运维生生不息。' 
-        : `寄语于第${seatId}席，顺水流而巡礼，承七级之声光，与天地同波。`);
+        : (isPrime
+            ? `质数在混沌里自排斜线，文明在乱世里走出秩序。此为第${seatId}席质数锚点。`
+            : `寄语于第${seatId}席，顺水流而巡礼，承连续螺旋之梯度，与天地同波。`));
   const starshipName = isReserved ? reservedInfo.starship : `巡天舟·0${seatId}号`;
 
   return {
@@ -116,17 +128,17 @@ export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = spiralCoords.map((coord, idx
     spiral_index: seatId,
     grid_x: coord.x,
     grid_z: coord.z,
-    elevation,
+    elevation: continuousElevation,
     water_arrival_beat: arrivalBeat,
     water_arrival_seconds: arrivalSeconds,
     midi_note: midiNote,
     midi_note_name: getMidiNoteName(midiNote),
-    midi_velocity: isFinale ? 100 : (70 + (seatId % 20)),
+    midi_velocity: isFinale ? 100 : (isPrime ? 92 : (70 + (seatId % 18))),
     midi_duration_beats: isFinale ? 4.0 : 1.5,
-    harmony_event: isFinale ? 'cadence_finale_major' : (seatId % 4 === 0 ? 'mode_shift' : 'pentatonic_flow'),
+    harmony_event: isFinale ? 'cadence_finale_major' : (isPrime ? 'prime_overtone_chime' : 'pentatonic_flow'),
     flower_type: FLOWER_TYPES[idx % FLOWER_TYPES.length],
-    flower_color: FLOWER_COLORS[idx % FLOWER_COLORS.length],
-    light_preset: LIGHT_PRESETS[idx % LIGHT_PRESETS.length],
+    flower_color: isPrime ? '#38bdf8' : FLOWER_COLORS[idx % FLOWER_COLORS.length],
+    light_preset: isPrime ? 'cyan_prime_ray' : LIGHT_PRESETS[idx % LIGHT_PRESETS.length],
     camera_target: `seat_${seatId}`,
     starship_id: `ship_${seatId}`,
     starship_name: starshipName,
@@ -134,6 +146,7 @@ export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = spiralCoords.map((coord, idx
     role_title: roleTitle,
     message_excerpt: message,
     zodiac_sector: zodiacSector,
+    is_prime: isPrime,
     is_finale: isFinale,
     metadata_version: 1
   };

@@ -25,6 +25,7 @@ export interface SpiralEvent {
   role_title?: string;
   message_excerpt: string;
   zodiac_sector: number; // 1 to 12
+  is_prime: boolean; // Ulam spiral prime alignment
   is_finale: boolean;
   metadata_version: number;
 }

@@ -17,11 +17,11 @@ export class AltarScene {
   private fountainGroup: THREE.Group;
   private interiorGroup: THREE.Group;
   private lanternsGroup: THREE.Group;
+  private primeLinesGroup: THREE.Group;
   
   // Interactive Objects
   private waterSpiralPath: THREE.Vector3[] = [];
   private waterParticles: THREE.Points | null = null;
-  private cascadeParticles: THREE.Points | null = null;
   private fountainParticles: THREE.Points | null = null;
   private flowerMeshes: Map<number, THREE.Group> = new Map();
   private seatPads: Map<number, THREE.Mesh> = new Map();
@@ -99,19 +99,22 @@ export class AltarScene {
     this.fountainGroup = new THREE.Group();
     this.interiorGroup = new THREE.Group();
     this.lanternsGroup = new THREE.Group();
+    this.primeLinesGroup = new THREE.Group();
 
     this.scene.add(this.altarGroup);
     this.scene.add(this.fountainGroup);
     this.scene.add(this.interiorGroup);
     this.scene.add(this.lanternsGroup);
+    this.scene.add(this.primeLinesGroup);
 
     // 6. Build All Complex Layers
     this.initLighting();
     this.buildOuterRecyclingBasin();
-    this.build49SlopedCubicPedestals();
+    this.build49ContinuousGradientCubes();
+    this.buildUlamPrimeDiagonalLines();
     this.buildInteriorCavern();
     this.buildOuter16TeaLanterns();
-    this.buildWaterCanalAndCascades();
+    this.buildContinuousWaterFlume();
     this.buildWujiFountain();
     this.buildStarships();
     this.buildSurroundingAtmosphere();
@@ -153,7 +156,6 @@ export class AltarScene {
   }
 
   private buildOuterRecyclingBasin() {
-    // Outer Stone & Bronze Water Recycling Basin (回收渠)
     const basinGeo = new THREE.BoxGeometry(26, 0.4, 26);
     const basinMat = new THREE.MeshStandardMaterial({
       color: 0x090d16,
@@ -165,7 +167,6 @@ export class AltarScene {
     basinMesh.receiveShadow = true;
     this.altarGroup.add(basinMesh);
 
-    // Deep water moat rim in basin
     const rimGeo = new THREE.BoxGeometry(26.4, 0.1, 26.4);
     const rimMat = new THREE.MeshStandardMaterial({
       color: 0xd97706,
@@ -183,20 +184,26 @@ export class AltarScene {
     const spacing = 3.1;
     const x = event.grid_x * spacing;
     const z = event.grid_z * spacing;
-    const tierHeights = [6.0, 5.2, 4.4, 3.6, 2.8, 2.0, 1.2];
-    const y = tierHeights[event.layer - 1] + 0.15;
+    const y = event.elevation + 0.12;
     return new THREE.Vector3(x, y, z);
   }
 
-  private build49SlopedCubicPedestals() {
+  private build49ContinuousGradientCubes() {
     const spacing = 3.1;
     const cubeWidth = 2.9;
-    const tierHeights = [6.0, 5.2, 4.4, 3.6, 2.8, 2.0, 1.2];
 
-    const stoneMat = new THREE.MeshStandardMaterial({
+    const normalStoneMat = new THREE.MeshStandardMaterial({
       color: 0x111827,
       roughness: 0.55,
       metalness: 0.3
+    });
+
+    const primeStoneMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      roughness: 0.4,
+      metalness: 0.5,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.25
     });
 
     const bronzeEdgeMat = new THREE.MeshStandardMaterial({
@@ -207,10 +214,18 @@ export class AltarScene {
       emissiveIntensity: 0.3
     });
 
+    const primeBronzeEdgeMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      roughness: 0.2,
+      metalness: 0.9,
+      emissive: 0x0369a1,
+      emissiveIntensity: 0.6
+    });
+
     const waterGrooveMat = new THREE.MeshStandardMaterial({
-      color: 0x0369a1,
-      emissive: 0x0284c7,
-      emissiveIntensity: 0.5,
+      color: 0x0284c7,
+      emissive: 0x0369a1,
+      emissiveIntensity: 0.6,
       roughness: 0.1,
       metalness: 0.9,
       transparent: true,
@@ -221,26 +236,25 @@ export class AltarScene {
       const cubeGroup = new THREE.Group();
       const x = ev.grid_x * spacing;
       const z = ev.grid_z * spacing;
-      const h = tierHeights[ev.layer - 1];
+      const h = ev.elevation; // Strict continuous gradient: 7.20m -> 0.80m
 
       cubeGroup.position.set(x, 0, z);
 
-      // 1. Solid Stepped Cubic Column (立方体基石)
+      // 1. Solid Cubic Pillar (高度严格单调递减)
       const colGeo = new THREE.BoxGeometry(cubeWidth, h, cubeWidth);
-      const colMesh = new THREE.Mesh(colGeo, stoneMat);
+      const colMesh = new THREE.Mesh(colGeo, ev.is_prime ? primeStoneMat : normalStoneMat);
       colMesh.position.y = h / 2;
       colMesh.castShadow = true;
       colMesh.receiveShadow = true;
       cubeGroup.add(colMesh);
 
-      // 2. Top Bronze Trim Frame (顶面斜切金铜包边)
+      // 2. Top Rim Frame
       const topTrimGeo = new THREE.BoxGeometry(cubeWidth + 0.06, 0.08, cubeWidth + 0.06);
-      const topTrim = new THREE.Mesh(topTrimGeo, bronzeEdgeMat);
+      const topTrim = new THREE.Mesh(topTrimGeo, ev.is_prime ? primeBronzeEdgeMat : bronzeEdgeMat);
       topTrim.position.y = h + 0.04;
       cubeGroup.add(topTrim);
 
-      // 3. Dual-Slope Water Canal Incline (嵌入式微坡水渠槽底: 进水高、出水低)
-      // Determine next seat direction in spiral to tilt the slope correctly
+      // 3. Sloped Continuous Water Channel (坡度槽: 从当前块高程平滑倾斜向下一个块)
       let nextX = x;
       let nextZ = z;
       if (idx < this.events.length - 1) {
@@ -250,46 +264,36 @@ export class AltarScene {
       const dirX = Math.sign(nextX - x);
       const dirZ = Math.sign(nextZ - z);
 
-      // Recessed canal along the top
       const grooveGeo = new THREE.BoxGeometry(cubeWidth * 0.75, 0.12, cubeWidth * 0.75);
       const grooveMesh = new THREE.Mesh(grooveGeo, waterGrooveMat);
-      // Slope incline tilt: 2% slope in flow direction
-      grooveMesh.position.set(dirX * 0.1, h + 0.06, dirZ * 0.1);
-      grooveMesh.rotation.x = dirZ * 0.035;
-      grooveMesh.rotation.z = -dirX * 0.035;
+      // Continuous downhill tilt along spiral tangent
+      grooveMesh.position.set(dirX * 0.12, h + 0.06, dirZ * 0.12);
+      grooveMesh.rotation.x = dirZ * 0.045;
+      grooveMesh.rotation.z = -dirX * 0.045;
       cubeGroup.add(grooveMesh);
 
-      // 4. Swallow-tail Spillway Weir (层间跌水燕尾檐) for Tier Drop
-      const isTierDrop = idx < this.events.length - 1 && this.events[idx + 1].layer > ev.layer;
-      if (isTierDrop || ev.is_finale) {
-        const weirGeo = new THREE.BoxGeometry(1.2, 0.06, 0.5);
-        const weirMesh = new THREE.Mesh(weirGeo, bronzeEdgeMat);
-        weirMesh.position.set(dirX * 1.5, h + 0.02, dirZ * 1.5);
-        cubeGroup.add(weirMesh);
-
-        // Water Cascade Sheet (层间垂直跌水水幕)
-        const nextH = idx < this.events.length - 1 ? tierHeights[this.events[idx + 1].layer - 1] : 0;
-        const dropHeight = Math.max(0.4, h - nextH);
-        const sheetGeo = new THREE.PlaneGeometry(1.0, dropHeight);
-        const sheetMat = new THREE.MeshBasicMaterial({
-          color: 0x67e8f9,
+      // 4. Prime Number Runic Emblem (如果是乌兰质数席位，刻印金色质数光纹)
+      if (ev.is_prime) {
+        const primeRingGeo = new THREE.RingGeometry(0.9, 1.1, 16);
+        const primeRingMat = new THREE.MeshBasicMaterial({
+          color: 0x38bdf8,
+          side: THREE.DoubleSide,
           transparent: true,
-          opacity: 0.65,
-          side: THREE.DoubleSide
+          opacity: 0.8
         });
-        const sheet = new THREE.Mesh(sheetGeo, sheetMat);
-        sheet.position.set(dirX * 1.55, h - dropHeight / 2, dirZ * 1.55);
-        if (dirX !== 0) sheet.rotation.y = Math.PI / 2;
-        cubeGroup.add(sheet);
+        const primeRing = new THREE.Mesh(primeRingGeo, primeRingMat);
+        primeRing.rotation.x = -Math.PI / 2;
+        primeRing.position.y = h + 0.09;
+        cubeGroup.add(primeRing);
       }
 
-      // 5. Flower Plinth Pad (立于微拱副坡之上的受水莲花台)
+      // 5. Flower Plinth Pad
       const padGeo = new THREE.CylinderGeometry(0.85, 0.95, 0.16, 8);
       const padMat = new THREE.MeshStandardMaterial({
-        color: ev.seat_status === 'reserved' ? 0xd97706 : 0x1e293b,
+        color: ev.seat_status === 'reserved' ? 0xd97706 : (ev.is_prime ? 0x0284c7 : 0x1e293b),
         metalness: 0.7,
         roughness: 0.3,
-        emissive: ev.seat_status === 'reserved' ? 0x78350f : 0x0f172a,
+        emissive: ev.seat_status === 'reserved' ? 0x78350f : (ev.is_prime ? 0x0369a1 : 0x0f172a),
         emissiveIntensity: 0.4
       });
       const padMesh = new THREE.Mesh(padGeo, padMat);
@@ -305,11 +309,11 @@ export class AltarScene {
       const flowerMat = new THREE.MeshStandardMaterial({
         color: new THREE.Color(ev.flower_color),
         emissive: new THREE.Color(ev.flower_color),
-        emissiveIntensity: 0.6,
+        emissiveIntensity: ev.is_prime ? 0.85 : 0.6,
         roughness: 0.2,
         metalness: 0.3,
         transparent: true,
-        opacity: 0.88,
+        opacity: 0.9,
         side: THREE.DoubleSide
       });
 
@@ -345,27 +349,56 @@ export class AltarScene {
     });
   }
 
+  private buildUlamPrimeDiagonalLines() {
+    // Connect primes along diagonal alignments ("质数在混沌里自排斜线，文明在乱世里走出秩序")
+    const primes = this.events.filter(e => e.is_prime);
+
+    const diagLineMat = new THREE.LineBasicMaterial({
+      color: 0x38bdf8,
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.6
+    });
+
+    for (let i = 0; i < primes.length; i++) {
+      for (let j = i + 1; j < primes.length; j++) {
+        const p1 = primes[i];
+        const p2 = primes[j];
+        // Check if on same diagonal (dx == dz or dx == -dz)
+        const dx = Math.abs(p1.grid_x - p2.grid_x);
+        const dz = Math.abs(p1.grid_z - p2.grid_z);
+        if (dx === dz && dx <= 3) {
+          const v1 = this.getSeatWorldPos(p1);
+          const v2 = this.getSeatWorldPos(p2);
+          const geo = new THREE.BufferGeometry().setFromPoints([v1, v2]);
+          const line = new THREE.Line(geo, diagLineMat);
+          this.primeLinesGroup.add(line);
+        }
+      }
+    }
+  }
+
   private createSeatSprite(ev: SpiralEvent): THREE.Sprite {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 128;
     const ctx = canvas.getContext('2d')!;
 
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
     ctx.roundRect(10, 10, 236, 108, 16);
     ctx.fill();
-    ctx.strokeStyle = ev.seat_status === 'reserved' ? '#f59e0b' : '#38bdf8';
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = ev.is_prime ? '#38bdf8' : (ev.seat_status === 'reserved' ? '#f59e0b' : '#64748b');
+    ctx.lineWidth = ev.is_prime ? 4 : 2.5;
     ctx.stroke();
 
     ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 32px "Noto Serif SC", serif';
+    ctx.font = 'bold 30px "Noto Serif SC", serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`#${ev.seat_id} ${ev.display_name}`, 128, 60);
+    ctx.fillText(`#${ev.seat_id} ${ev.display_name}`, 128, 56);
 
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '22px sans-serif';
-    ctx.fillText(`${ev.midi_note_name} · ${ev.harmony_event}`, 128, 96);
+    ctx.fillStyle = ev.is_prime ? '#38bdf8' : '#94a3b8';
+    ctx.font = '20px sans-serif';
+    ctx.fillText(`${ev.midi_note_name} · ${ev.is_prime ? '【质数涌现位】' : ev.harmony_event}`, 128, 92);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -376,7 +409,6 @@ export class AltarScene {
   }
 
   private buildInteriorCavern() {
-    // 1. Interior Floor
     const floorGeo = new THREE.CylinderGeometry(8.5, 8.5, 0.2, 32);
     const floorMat = new THREE.MeshStandardMaterial({
       color: 0x0a0f1d,
@@ -389,7 +421,6 @@ export class AltarScene {
     floor.position.y = 0.1;
     this.interiorGroup.add(floor);
 
-    // 2. Central Water Light Vortex
     const tubeGeo = new THREE.CylinderGeometry(0.6, 0.6, 6.2, 16, 1, true);
     const tubeMat = new THREE.MeshBasicMaterial({
       color: 0x38bdf8,
@@ -401,7 +432,6 @@ export class AltarScene {
     tube.position.set(0, 3.1, 0);
     this.interiorGroup.add(tube);
 
-    // Central Reflection Well
     const wellGeo = new THREE.TorusGeometry(1.8, 0.15, 16, 32);
     const wellMat = new THREE.MeshStandardMaterial({
       color: 0xd97706,
@@ -415,7 +445,6 @@ export class AltarScene {
     well.position.set(0, 0.2, 0);
     this.interiorGroup.add(well);
 
-    // 3. 12 Floating Stelae for S01–S12 Season Poems
     const radius = 6.2;
     SEASON1_POEMS.forEach((poem, idx) => {
       const angle = (idx / 12) * Math.PI * 2;
@@ -606,23 +635,24 @@ export class AltarScene {
     return sprite;
   }
 
-  private buildWaterCanalAndCascades() {
+  private buildContinuousWaterFlume() {
+    // Strictly descending continuous gradient path from Seat 1 down to Seat 49
     this.waterSpiralPath = this.events.map((ev) => this.getSeatWorldPos(ev));
-    const curve = new THREE.CatmullRomCurve3(this.waterSpiralPath, false, 'catmullrom', 0.15);
-    const points = curve.getPoints(320);
+    const curve = new THREE.CatmullRomCurve3(this.waterSpiralPath, false, 'catmullrom', 0.1);
+    const points = curve.getPoints(360);
 
     const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
     const lineMat = new THREE.LineBasicMaterial({
       color: 0x38bdf8,
       linewidth: 3,
       transparent: true,
-      opacity: 0.8
+      opacity: 0.85
     });
     const waterLine = new THREE.Line(lineGeo, lineMat);
     this.altarGroup.add(waterLine);
 
-    // Main stream particles
-    const particleCount = 240;
+    // Continuous Flowing Particles
+    const particleCount = 280;
     const particleGeo = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
     const colors = new Float32Array(particleCount * 3);
@@ -632,8 +662,8 @@ export class AltarScene {
       positions[i * 3] = p.x;
       positions[i * 3 + 1] = p.y + 0.08;
       positions[i * 3 + 2] = p.z;
-      colors[i * 3] = 0.3;
-      colors[i * 3 + 1] = 0.8;
+      colors[i * 3] = 0.2;
+      colors[i * 3 + 1] = 0.85;
       colors[i * 3 + 2] = 1.0;
     }
 
@@ -649,27 +679,6 @@ export class AltarScene {
 
     this.waterParticles = new THREE.Points(particleGeo, particleMat);
     this.altarGroup.add(this.waterParticles);
-
-    // Cascade Waterfall droplets at tier transitions
-    const cascadeCount = 150;
-    const casGeo = new THREE.BufferGeometry();
-    const casPos = new Float32Array(cascadeCount * 3);
-    for (let i = 0; i < cascadeCount; i++) {
-      const p = this.waterSpiralPath[i % this.waterSpiralPath.length];
-      casPos[i * 3] = p.x + (Math.random() - 0.5) * 0.4;
-      casPos[i * 3 + 1] = p.y - Math.random() * 0.8;
-      casPos[i * 3 + 2] = p.z + (Math.random() - 0.5) * 0.4;
-    }
-    casGeo.setAttribute('position', new THREE.BufferAttribute(casPos, 3));
-    const casMat = new THREE.PointsMaterial({
-      size: 0.2,
-      color: 0x67e8f9,
-      transparent: true,
-      opacity: 0.8,
-      blending: THREE.AdditiveBlending
-    });
-    this.cascadeParticles = new THREE.Points(casGeo, casMat);
-    this.altarGroup.add(this.cascadeParticles);
   }
 
   private buildWujiFountain() {
@@ -702,7 +711,7 @@ export class AltarScene {
     const fPos = new Float32Array(fountainPCount * 3);
     for (let i = 0; i < fountainPCount; i++) {
       fPos[i * 3] = (Math.random() - 0.5) * 1.5;
-      fPos[i * 3 + 1] = 6.2 + Math.random() * 4.0;
+      fPos[i * 3 + 1] = 7.4 + Math.random() * 4.0;
       fPos[i * 3 + 2] = (Math.random() - 0.5) * 1.5;
     }
     fGeo.setAttribute('position', new THREE.BufferAttribute(fPos, 3));
@@ -937,7 +946,7 @@ export class AltarScene {
       if (oldSprite && oldSprite.parent) {
         oldSprite.parent.remove(oldSprite);
         const newSprite = this.createSeatSprite(ev);
-        newSprite.position.set(0, 1.4, 0);
+        newSprite.position.set(0, ev.elevation + 1.4, 0);
         this.seatLabels.set(ev.seat_id, newSprite);
         this.altarGroup.add(newSprite);
       }
@@ -948,7 +957,7 @@ export class AltarScene {
     this.animationFrameId = requestAnimationFrame(this.animate);
     const elapsedTime = this.clock.getElapsedTime();
 
-    // 1. Smooth Camera Transition Lerp
+    // 1. Smooth Camera Transition
     if (this.isCameraTransitioning) {
       this.camera.position.lerp(this.targetCameraPos, 0.05);
       this.controls.target.lerp(this.targetControlsTarget, 0.05);
@@ -969,7 +978,15 @@ export class AltarScene {
       stela.position.y = 2.6 + Math.sin(elapsedTime * 2 + Number(idx.replace('S', ''))) * 0.03;
     });
 
-    // 4. Rotate apex fountain ring & fountain particles
+    // 4. Subtle pulse on Ulam Prime diagonal lines
+    if (this.primeLinesGroup) {
+      this.primeLinesGroup.children.forEach((line, idx) => {
+        const mat = (line as THREE.Line).material as THREE.LineBasicMaterial;
+        mat.opacity = 0.4 + Math.sin(elapsedTime * 3 + idx) * 0.3;
+      });
+    }
+
+    // 5. Rotate apex fountain ring & fountain particles
     if (this.fountainGroup) {
       this.fountainGroup.rotation.y = elapsedTime * 0.15;
     }
@@ -977,13 +994,13 @@ export class AltarScene {
       const posAttr = this.fountainParticles.geometry.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < posAttr.count; i++) {
         let y = posAttr.getY(i) - 0.03;
-        if (y < 6.0) y = 10.0;
+        if (y < 7.2) y = 11.2;
         posAttr.setY(i, y);
       }
       posAttr.needsUpdate = true;
     }
 
-    // 5. Water particles flowing along spiral
+    // 6. Water particles flowing along strictly descending spiral
     if (this.waterParticles && this.waterSpiralPath.length > 0) {
       const pAttr = this.waterParticles.geometry.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < pAttr.count; i++) {
@@ -997,22 +1014,11 @@ export class AltarScene {
         pAttr.setXYZ(
           i,
           pA.x + (pB.x - pA.x) * frac + Math.sin(elapsedTime * 4 + i) * 0.04,
-          pA.y + (pB.y - pA.y) * frac + 0.12,
+          pA.y + (pB.y - pA.y) * frac + 0.08,
           pA.z + (pB.z - pA.z) * frac + Math.cos(elapsedTime * 4 + i) * 0.04
         );
       }
       pAttr.needsUpdate = true;
-    }
-
-    // 6. Waterfall droplets at tier transitions
-    if (this.cascadeParticles) {
-      const cAttr = this.cascadeParticles.geometry.attributes.position as THREE.BufferAttribute;
-      for (let i = 0; i < cAttr.count; i++) {
-        let y = cAttr.getY(i) - 0.04;
-        if (y < 0.2) y = 5.8;
-        cAttr.setY(i, y);
-      }
-      cAttr.needsUpdate = true;
     }
 
     // 7. Starships floating
