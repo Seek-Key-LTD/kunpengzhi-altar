@@ -40,5 +40,5 @@ export interface StarPaperSubmission {
   targetSeatId: number;
 }
 
-export type CameraMode = 'orbit' | 'patrol' | 'interior' | 'outer_lanterns' | 'topdown' | 'fountain' | 'cinematic';
+export type CameraMode = 'orbit' | 'patrol' | 'yin' | 'interior' | 'outer_lanterns' | 'topdown' | 'fountain' | 'cinematic';
 export type AltarCycleState = 'accumulating' | 'overturning' | 'cascading' | 'recycling' | 'resetting';
