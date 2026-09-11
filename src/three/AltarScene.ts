@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import RAPIER from '@dimforge/rapier3d-compat';
 import { SpiralEvent, CameraMode } from '../types/altar';
 import { TEA_POEM_16_CHAPTERS } from '../data/tea_poem_16';
 
@@ -11,6 +12,13 @@ export class AltarScene {
   private controls: OrbitControls;
   private animationFrameId: number | null = null;
   
+  // Rapier Physics Engine
+  private physicsWorld: RAPIER.World | null = null;
+  private isPhysicsReady = false;
+  private carriageBody: RAPIER.RigidBody | null = null;
+  private bucketBody: RAPIER.RigidBody | null = null;
+  private dropletBodies: Array<{ body: RAPIER.RigidBody; mesh: THREE.Mesh }> = [];
+  
   // Scene Groups
   private pyramid140Group: THREE.Group;
   private shaftElevatorGroup: THREE.Group;
@@ -19,6 +27,7 @@ export class AltarScene {
   private lanternsGroup: THREE.Group;
   private primeLinesGroup: THREE.Group;
   private starshipsGroup: THREE.Group;
+  private physicsDropletsGroup: THREE.Group;
   
   // Interactive Objects & Meshes
   private waterSpiralPath: THREE.Vector3[] = [];
@@ -108,6 +117,7 @@ export class AltarScene {
     this.lanternsGroup = new THREE.Group();
     this.primeLinesGroup = new THREE.Group();
     this.starshipsGroup = new THREE.Group();
+    this.physicsDropletsGroup = new THREE.Group();
 
     this.scene.add(this.pyramid140Group);
     this.scene.add(this.shaftElevatorGroup);
@@ -116,6 +126,7 @@ export class AltarScene {
     this.scene.add(this.lanternsGroup);
     this.scene.add(this.primeLinesGroup);
     this.scene.add(this.starshipsGroup);
+    this.scene.add(this.physicsDropletsGroup);
 
     // 6. Build Layers
     this.initLighting();
@@ -126,12 +137,89 @@ export class AltarScene {
     this.buildStarships();
     this.buildAtmosphere();
 
-    // 7. Event listeners
+    // 7. Initialize Rapier Physics Engine
+    this.initRapierPhysics();
+
+    // 8. Event listeners
     window.addEventListener('resize', this.onWindowResize);
     this.container.addEventListener('pointerdown', this.onPointerDown);
 
-    // 8. Start loop
+    // 9. Start loop
     this.animate();
+  }
+
+  private async initRapierPhysics() {
+    try {
+      await RAPIER.init();
+      const gravity = { x: 0.0, y: -9.81, z: 0.0 };
+      this.physicsWorld = new RAPIER.World(gravity);
+
+      // 1. Fixed Basin & Ground Colliders
+      const groundColliderDesc = RAPIER.ColliderDesc.cuboid(13.0, 0.3, 13.0)
+        .setTranslation(0, -0.3, 0)
+        .setRestitution(0.2);
+      this.physicsWorld.createCollider(groundColliderDesc);
+
+      // Top Flower Basin Receptor Collider
+      const basinColliderDesc = RAPIER.ColliderDesc.cylinder(0.2, 1.1)
+        .setTranslation(0, 6.7, 0)
+        .setRestitution(0.1)
+        .setFriction(0.4);
+      this.physicsWorld.createCollider(basinColliderDesc);
+
+      // 2. Elevator Carriage RigidBody (Kinematic position based for precise winch hoist)
+      const carriageBodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
+        .setTranslation(0, 0, 0);
+      this.carriageBody = this.physicsWorld.createRigidBody(carriageBodyDesc);
+
+      // 3. Tipper Bucket Dynamic RigidBody (with real mass, inertia, and rotational hinge)
+      const bucketBodyDesc = RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(0, 0, 0)
+        .setLinearDamping(0.5)
+        .setAngularDamping(2.0);
+      this.bucketBody = this.physicsWorld.createRigidBody(bucketBodyDesc);
+      
+      const bucketColliderDesc = RAPIER.ColliderDesc.cuboid(0.65, 0.42, 0.55)
+        .setMass(45.0)
+        .setRestitution(0.1);
+      this.physicsWorld.createCollider(bucketColliderDesc, this.bucketBody);
+
+      // 4. Pool of Dynamic Physics Water Droplet Colliders
+      const dropletGeo = new THREE.SphereGeometry(0.09, 8, 8);
+      const dropletMat = new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        emissive: 0x0284c7,
+        emissiveIntensity: 0.8,
+        roughness: 0.1,
+        metalness: 0.9,
+        transparent: true,
+        opacity: 0.85
+      });
+
+      const maxDroplets = 40;
+      for (let i = 0; i < maxDroplets; i++) {
+        const dropMesh = new THREE.Mesh(dropletGeo, dropletMat);
+        dropMesh.visible = false;
+        this.physicsDropletsGroup.add(dropMesh);
+
+        const dropBodyDesc = RAPIER.RigidBodyDesc.dynamic()
+          .setTranslation(0, -100, 0)
+          .setLinearDamping(0.1)
+          .setAngularDamping(0.1);
+        const dropBody = this.physicsWorld.createRigidBody(dropBodyDesc);
+        const dropCollider = RAPIER.ColliderDesc.ball(0.09)
+          .setMass(0.5)
+          .setRestitution(0.3)
+          .setFriction(0.2);
+        this.physicsWorld.createCollider(dropCollider, dropBody);
+
+        this.dropletBodies.push({ body: dropBody, mesh: dropMesh });
+      }
+
+      this.isPhysicsReady = true;
+    } catch (err) {
+      console.warn('Rapier physics initialization fallback:', err);
+    }
   }
 
   private initLighting() {
@@ -980,7 +1068,12 @@ export class AltarScene {
       this.lanternsGroup.rotation.y += this.lanternRotationSpeed;
     }
 
-    // 3. Self-Operating Hydraulic Elevator & Tipper Physical Cycle (10-second period)
+    // 3. Step Rapier Physics World
+    if (this.physicsWorld && this.isPhysicsReady) {
+      this.physicsWorld.step();
+    }
+
+    // 4. Self-Operating Hydraulic Elevator & Tipper Physical Cycle (10-second period)
     const cyclePeriod = 10.0;
     const cycleTime = elapsedTime % cyclePeriod;
     const cycleProgress = cycleTime / cyclePeriod;
@@ -1011,8 +1104,27 @@ export class AltarScene {
       // Tilt bucket ~85 degrees
       bucketTilt = Math.sin(pourFrac * Math.PI) * (Math.PI * 0.48);
       isPouring = true;
-      if (pourFrac > 0.5 && this.bucketWaterMesh) {
+      if (pourFrac > 0.4 && this.bucketWaterMesh) {
         this.bucketWaterMesh.visible = false;
+      }
+
+      // Spawn physics water droplets dynamically into the top basin
+      if (this.physicsWorld && this.isPhysicsReady && pourFrac > 0.1 && pourFrac < 0.8) {
+        const dropIndex = Math.floor(Math.random() * this.dropletBodies.length);
+        const droplet = this.dropletBodies[dropIndex];
+        if (droplet) {
+          droplet.body.setTranslation({
+            x: 0.2 + (Math.random() - 0.5) * 0.4,
+            y: 6.8 + Math.random() * 0.3,
+            z: (Math.random() - 0.5) * 0.4
+          }, true);
+          droplet.body.setLinvel({
+            x: 0.8 + (Math.random() - 0.5) * 0.5,
+            y: -0.5 - Math.random() * 1.5,
+            z: (Math.random() - 0.5) * 0.8
+          }, true);
+          droplet.mesh.visible = true;
+        }
       }
     } else if (cycleProgress < 0.73) {
       // Phase 3: Bucket rights itself upright
@@ -1029,7 +1141,30 @@ export class AltarScene {
       if (this.topPulleyRight) this.topPulleyRight.rotation.z -= 0.08;
     }
 
-    // Update Elevator Position & Bucket Rotation
+    // Update Physics RigidBodies
+    if (this.carriageBody) {
+      this.carriageBody.setNextKinematicTranslation({ x: 0, y: currentElevatorY, z: 0 });
+    }
+    if (this.bucketBody) {
+      this.bucketBody.setTranslation({ x: 0, y: currentElevatorY, z: 0 }, true);
+    }
+
+    // Sync Rapier Physics Droplets to Three.js Meshes
+    if (this.isPhysicsReady) {
+      this.dropletBodies.forEach(({ body, mesh }) => {
+        if (mesh.visible) {
+          const t = body.translation();
+          mesh.position.set(t.x, t.y, t.z);
+          // If droplet falls below ground, hide and reset
+          if (t.y < -0.4) {
+            mesh.visible = false;
+            body.setTranslation({ x: 0, y: -100, z: 0 }, true);
+          }
+        }
+      });
+    }
+
+    // Update Elevator Visual Position & Bucket Rotation
     this.elevatorCarriage.position.y = currentElevatorY;
     this.tipperBucketMesh.rotation.x = bucketTilt;
 
@@ -1059,14 +1194,14 @@ export class AltarScene {
       }
     }
 
-    // 4. Top Flower Breathing & Oscillation
+    // 5. Top Flower Breathing & Oscillation
     if (this.topFlowerMesh) {
       this.topFlowerMesh.rotation.y = elapsedTime * 0.4;
       const pulse = 1.0 + Math.sin(elapsedTime * 3.0) * 0.06;
       this.topFlowerMesh.scale.set(pulse, pulse, pulse);
     }
 
-    // 5. Water particles flowing along 49 surface spiral steps
+    // 6. Water particles flowing along 49 surface spiral steps
     if (this.waterParticles && this.waterSpiralPath.length > 0) {
       const pAttr = this.waterParticles.geometry.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < pAttr.count; i++) {
@@ -1087,13 +1222,13 @@ export class AltarScene {
       pAttr.needsUpdate = true;
     }
 
-    // 6. Starships floating
+    // 7. Starships floating
     this.starshipMeshes.forEach((ship, id) => {
       ship.position.y += Math.sin(elapsedTime * 2 + id) * 0.002;
       ship.rotation.y = elapsedTime * 0.2 + id;
     });
 
-    // 7. Flowers breathing
+    // 8. Flowers breathing
     this.seatLotusMeshes.forEach((flower, id) => {
       const pulse = 1.0 + Math.sin(elapsedTime * 2.5 + id) * 0.04;
       flower.rotation.y = elapsedTime * 0.2 + id;
@@ -1102,7 +1237,7 @@ export class AltarScene {
       }
     });
 
-    // 8. Auto patrol
+    // 9. Auto patrol
     if (this.isAutoPatrol) {
       this.currentProgress += 0.05;
       if (this.currentProgress > 49.5) {
@@ -1123,6 +1258,10 @@ export class AltarScene {
   public destroy() {
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
+    }
+    if (this.physicsWorld) {
+      this.physicsWorld.free();
+      this.physicsWorld = null;
     }
     window.removeEventListener('resize', this.onWindowResize);
     this.container.removeEventListener('pointerdown', this.onPointerDown);
