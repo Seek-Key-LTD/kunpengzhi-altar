@@ -13,8 +13,10 @@ import {
   PLINTH_THICKNESS,
   RIVER_WIDTH,
   RIVER_HALF_LENGTH,
-  ringToBottom,
-  ringToElevation
+  layerTop,
+  layerRingBricks,
+  layerSideBricks,
+  pointOnSquareRing
 } from '../data/altarGeometry';
 
 export class AltarScene {
@@ -267,18 +269,18 @@ export class AltarScene {
   }
 
   /**
-   * 阳：49 块立方砖砌出的四圈同心环。
+   * 阳：七层中空方锥 —— 每层只砌最外面那一圈砖（暴露带）。
    *
-   * 每席一块砖，砖 = 1 格（BRICK = CELL）。第 r 圈（平面切比雪夫半径）的砖顶在
-   * 第 (4−r) 格；四圈在平面上正好铺满 7×7，每往里一圈收 1 格、抬 1 格
-   * ⟹ 坡度恒为 1:1 = 45°，轮廓就是"正八面体砍掉一半"。
+   * 第 n 层（1 = 顶 … 7 = 底）边长 n 格 = 2n 砖，相邻两层每边差 1/2 格；
+   * 每层高 1 砖、每边内收 1 砖 ⟹ 坡度恒为 1:1 = 精确 45°。
+   * 外圈砖数 = 8n − 4，正好是席位数 2n − 1 的 4 倍（每席占 4 块砖 = 1 格²）。
    *
-   * 只砌朝天暴露的这 49 块。标称实心的 140 块里剩下的 91 块（= 1²+…+6²）不砌，
-   * 于是四圈围出一座三层递收的空腔（"阴"）：5×5 → 3×3 → 1×1 格。
-   * 顶端第 1 席留天井（四根方柱托着），镜头由此降入阴锥。
+   * 标称实心 7 层 = 1²+…+7² = 140 格，其中暴露带 49 格（= 49 席）、
+   * 内部 91 格（= 1²+…+6²）。**内部 91 格全部不砌** ⟹ 里面是一座递收的空腔（阴），
+   * 镜头可入。第 7 层南面正中留一道 2 砖宽的水口，与南北向的河对齐。
    *
-   * 每块砖顶面沿外缘开槽，槽底统一外倾 0.5°（稳定梯度），
-   * 水只可能向外流到下一圈，不会积在砖上。
+   * 每层暴露带中心线上开一圈水槽，槽底统一外倾 0.5°（稳定梯度），
+   * 水只可能向外流到下一层，不会积在台上。
    */
   private buildCubePyramidAndSeats() {
     const brickMat = new THREE.MeshStandardMaterial({
@@ -297,76 +299,55 @@ export class AltarScene {
       opacity: 0.92
     });
 
-    // ---- 1. 49 块立方砖（每席一块；顶圈第 1 席留天井，不砌整砖）----
-    const solidEvents = this.events.filter(
-      (ev) => Math.max(Math.abs(ev.grid_x), Math.abs(ev.grid_z)) > 0
-    );
+    // ---- 1. 七层外圈砖（中空）----
+    const positions: Array<{ x: number; y: number; z: number }> = [];
+
+    for (let n = 1; n <= LAYERS; n++) {
+      const side = layerSideBricks(n);
+      const half = (side - 1) / 2;
+      const y = layerTop(n) - BRICK / 2;
+
+      layerRingBricks(n).forEach(({ bx, bz }) => {
+        // 第 7 层南面正中留 2 砖宽的水口（与南北向的河对齐）
+        if (n === LAYERS && bz === side - 1 && (bx === side / 2 - 1 || bx === side / 2)) return;
+
+        positions.push({ x: (bx - half) * BRICK, y, z: (bz - half) * BRICK });
+      });
+    }
 
     const brickGeo = new THREE.BoxGeometry(BRICK, BRICK, BRICK);
-    const blocks = new THREE.InstancedMesh(brickGeo, brickMat, solidEvents.length);
+    const blocks = new THREE.InstancedMesh(brickGeo, brickMat, positions.length);
     blocks.castShadow = true;
     blocks.receiveShadow = true;
 
     const mat4 = new THREE.Matrix4();
-    solidEvents.forEach((ev, i) => {
-      const ring = Math.max(Math.abs(ev.grid_x), Math.abs(ev.grid_z));
-      const y = (ringToBottom(ring) + ringToElevation(ring)) / 2;
-      mat4.makeTranslation(ev.grid_x * CELL, y, ev.grid_z * CELL);
+    positions.forEach((p, i) => {
+      mat4.makeTranslation(p.x, p.y, p.z);
       blocks.setMatrixAt(i, mat4);
     });
     blocks.instanceMatrix.needsUpdate = true;
     this.outerShellGroup.add(blocks);
 
-    // ---- 2. 天井：顶圈第 1 席由四根方柱托着，中间是空的（无极泉眼由此落水）----
-    const columnH = BRICK;
-    const columnY = ringToBottom(0) + columnH / 2;
-    const columnOffset = BRICK / 2 - BRICK * 0.12;
-    [-1, 1].forEach((sx) => {
-      [-1, 1].forEach((sz) => {
-        const col = new THREE.Mesh(
-          new THREE.BoxGeometry(BRICK * 0.24, columnH, BRICK * 0.24),
-          brickMat
-        );
-        col.position.set(sx * columnOffset, columnY, sz * columnOffset);
-        col.castShadow = true;
-        this.outerShellGroup.add(col);
-      });
-    });
-
-    // ---- 3. 每块砖顶面的水槽（统一外倾 0.5° = 稳定梯度）----
+    // ---- 2. 每层暴露带中心线上的水槽（统一外倾 0.5° = 稳定梯度）----
     const TILT = THREE.MathUtils.degToRad(0.5);
-    const stripW = BRICK * 0.42;
-    const stripLen = BRICK * 0.94;
+    const stripW = BRICK * 0.5;
 
-    this.events.forEach((ev) => {
-      const ring = Math.max(Math.abs(ev.grid_x), Math.abs(ev.grid_z));
-      const topY = ringToElevation(ring);
-      const cx = ev.grid_x * CELL;
-      const cz = ev.grid_z * CELL;
-      const outX = Math.abs(ev.grid_x) === ring ? Math.sign(ev.grid_x) : 0;
-      const outZ = Math.abs(ev.grid_z) === ring ? Math.sign(ev.grid_z) : 0;
+    for (let n = 1; n <= LAYERS; n++) {
+      const topY = layerTop(n);
+      const a = ((2 * n - 1) / 4) * CELL; // 环中心线半宽（世界单位）
 
-      if (ring === 0) {
-        // 中心席：水从泉眼落到天井，四面分水
-        const s = new THREE.Mesh(new THREE.BoxGeometry(stripW, 0.12, stripLen), grooveMat);
-        s.position.set(cx, topY - 0.04, cz);
-        this.outerShellGroup.add(s);
-        return;
-      }
+      [-1, 1].forEach((side) => {
+        const ew = new THREE.Mesh(new THREE.BoxGeometry(stripW, 0.12, 2 * a), grooveMat);
+        ew.position.set(side * a, topY - 0.04, 0);
+        ew.rotation.z = -side * TILT;
+        this.outerShellGroup.add(ew);
 
-      if (outX !== 0) {
-        const s = new THREE.Mesh(new THREE.BoxGeometry(stripW, 0.12, stripLen), grooveMat);
-        s.position.set(cx + outX * (BRICK / 2 - stripW / 2), topY - 0.04, cz);
-        s.rotation.z = -outX * TILT;
-        this.outerShellGroup.add(s);
-      }
-      if (outZ !== 0) {
-        const s = new THREE.Mesh(new THREE.BoxGeometry(stripLen, 0.12, stripW), grooveMat);
-        s.position.set(cx, topY - 0.04, cz + outZ * (BRICK / 2 - stripW / 2));
-        s.rotation.x = outZ * TILT;
-        this.outerShellGroup.add(s);
-      }
-    });
+        const ns = new THREE.Mesh(new THREE.BoxGeometry(2 * a, 0.12, stripW), grooveMat);
+        ns.position.set(0, topY - 0.04, side * a);
+        ns.rotation.x = side * TILT;
+        this.outerShellGroup.add(ns);
+      });
+    }
 
     // ---- 3. 49 席：托座 / 质数环 / 莲花 ----
     this.events.forEach((ev) => {
@@ -473,18 +454,16 @@ export class AltarScene {
   }
 
   /**
-   * 十二座青玉经卷壁碑 —— 贴在阴锥的内壁上。
+   * 十二座青玉经卷壁碑 —— 嵌在阴锥的内壁上。
    *
-   * 外壳最外圈（r=3）共 24 块砖，每块朝内那一面正对空腔。
-   * 隔一块取一座，正好 12 座，绕空腔一圈；碑面朝内，站在阴锥里看得见。
-   * 碑不再是浮在外面转的卡片，而是嵌在砖的内侧面上。
+   * 阴锥是七层外圈砖围出来的递收空腔。取第 6 层（半径 2.5 格 = 7.5 单位）
+   * 的内壁那一圈，周长 4 × 5 格 = 20 格 = 60 单位，12 座碑均分，间距 5 单位。
+   * 碑面朝内，站在空腔里一圈看得见 —— 不再是浮在外面转的卡片。
    */
   private buildInnerStelaeRing() {
-    const innerCubes = this.events
-      .filter((ev) => Math.max(Math.abs(ev.grid_x), Math.abs(ev.grid_z)) === 3)
-      .sort((a, b) => a.seat_id - b.seat_id);
-
-    const picks = innerCubes.filter((_, i) => i % 2 === 0).slice(0, SEASON1_POEMS.length);
+    const ringRadius = 2.5 * CELL; // 第 6 层内壁半径
+    const wallY = layerTop(6) - BRICK / 2; // 内壁那一砖的中高
+    const count = SEASON1_POEMS.length;
 
     const slabMat = new THREE.MeshStandardMaterial({
       color: 0x0f172a,
@@ -503,30 +482,24 @@ export class AltarScene {
       emissiveIntensity: 0.5
     });
 
-    const stelaH = BRICK * 0.86;
-    const stelaW = BRICK * 0.86;
-    const cy = (ringToBottom(3) + ringToElevation(3)) / 2;
+    const stelaH = BRICK * 0.9;
+    const stelaW = BRICK * 2.6;
 
-    picks.forEach((ev, idx) => {
-      const poem = SEASON1_POEMS[idx % SEASON1_POEMS.length];
+    const perimeter = 8 * ringRadius;
 
-      // 朝内的法线：取该砖"半径最大的那个方向"的反向
-      let nx = 0;
-      let nz = 0;
-      if (Math.abs(ev.grid_x) === 3) nx = -Math.sign(ev.grid_x);
-      else nz = -Math.sign(ev.grid_z);
+    for (let i = 0; i < count; i++) {
+      const poem = SEASON1_POEMS[i % SEASON1_POEMS.length];
+      const p = pointOnSquareRing(ringRadius, (i + 0.5) * (perimeter / count));
 
-      const cx = ev.grid_x * CELL + nx * (CELL / 2 - 0.06);
-      const cz = ev.grid_z * CELL + nz * (CELL / 2 - 0.06);
+      // 碑面朝坛心
+      const nx = -Math.sign(p.x) * (Math.abs(p.x) >= Math.abs(p.z) ? 1 : 0);
+      const nz = -Math.sign(p.z) * (Math.abs(p.z) > Math.abs(p.x) ? 1 : 0);
 
       const stelaGroup = new THREE.Group();
-      stelaGroup.position.set(cx, cy, cz);
+      stelaGroup.position.set(p.x, wallY, p.z);
       stelaGroup.rotation.y = Math.atan2(nx, nz);
 
-      const slab = new THREE.Mesh(
-        new THREE.BoxGeometry(stelaW, stelaH, 0.1),
-        slabMat
-      );
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(stelaW, stelaH, 0.1), slabMat);
       slab.userData = { type: 'interior_stela', seasonId: poem.seasonId };
       stelaGroup.add(slab);
       this.interiorStelae.set(poem.seasonId, slab);
@@ -544,7 +517,7 @@ export class AltarScene {
       stelaGroup.add(sprite);
 
       this.hollowInteriorGroup.add(stelaGroup);
-    });
+    }
   }
 
   private createInteriorStelaSprite(poem: typeof SEASON1_POEMS[0]): THREE.Sprite {
@@ -1170,9 +1143,9 @@ export class AltarScene {
     this.isCameraTransitioning = true;
 
     if (mode === 'yin') {
-      // 入阴：站在空腔正中，向北望对面三座青玉壁碑
-      this.targetCameraPos.set(0, 1.4, 0.6);
-      this.targetControlsTarget.set(0, 1.6, -7.0);
+      // 入阴：进到中空方锥的下层空腔（5×5×3 单位），略抬头看北壁的青玉碑
+      this.targetCameraPos.set(0, 1.8, 2.5);
+      this.targetControlsTarget.set(0, 2.6, -7.5);
     } else if (mode === 'interior') {
       this.targetCameraPos.set(0, 16, 18);
       this.targetControlsTarget.set(0, 6, 0);

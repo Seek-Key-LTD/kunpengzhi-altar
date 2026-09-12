@@ -1,5 +1,5 @@
 import { SpiralEvent } from '../types/altar';
-import { ringToElevation, ringToLayer } from './altarGeometry';
+import { LAYERS, layerSeatCount, layerTop, pointOnSquareRing } from './altarGeometry';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -19,41 +19,40 @@ function isPrimeNumber(n: number): boolean {
   return true;
 }
 
-// Generate square Ulam spiral points for 49 seats (7x7 grid)
-function generateSpiralCoords(total: number = 49): Array<{ x: number; z: number }> {
-  const coords: Array<{ x: number; z: number }> = [{ x: 0, z: 0 }];
-  let x = 0;
-  let z = 0;
-  let stepSize = 1;
-  
-  while (coords.length < total) {
-    // East (+X)
-    for (let i = 0; i < stepSize && coords.length < total; i++) {
-      x += 1;
-      coords.push({ x, z });
+/**
+ * 49 席的平面坐标。
+ *
+ * 第 n 层（1 = 顶 … 7 = 底）暴露带上有 2n − 1 席，沿该层的方环中心线均分：
+ *     1、3、5、7、9、11、13  →  共 49
+ * 环中心线半宽 a = (2n − 1) / 4 格，周长 = 8a = 2(2n − 1) 格，
+ * 于是 2n − 1 席的间距恒为 2 格（= 4 块砖）。
+ * 从南边中点起逆时针排，所以席位是"绕圈下沉"的：水从顶上第 1 席一路旋到第 49 席。
+ */
+function generateSeats(): Array<{ n: number; x: number; z: number }> {
+  const seats: Array<{ n: number; x: number; z: number }> = [];
+
+  for (let n = 1; n <= LAYERS; n++) {
+    const count = layerSeatCount(n);
+
+    if (n === 1) {
+      seats.push({ n, x: 0, z: 0 }); // 顶席落在正中（天井口）
+      continue;
     }
-    // North (+Z)
-    for (let i = 0; i < stepSize && coords.length < total; i++) {
-      z += 1;
-      coords.push({ x, z });
+
+    const a = (2 * n - 1) / 4;
+    const P = 8 * a;
+    const spacing = P / count;
+
+    for (let k = 0; k < count; k++) {
+      const p = pointOnSquareRing(a, (k + 0.5) * spacing);
+      seats.push({ n, x: p.x, z: p.z });
     }
-    stepSize += 1;
-    // West (-X)
-    for (let i = 0; i < stepSize && coords.length < total; i++) {
-      x -= 1;
-      coords.push({ x, z });
-    }
-    // South (-Z)
-    for (let i = 0; i < stepSize && coords.length < total; i++) {
-      z -= 1;
-      coords.push({ x, z });
-    }
-    stepSize += 1;
   }
-  return coords.slice(0, total);
+
+  return seats;
 }
 
-const spiralCoords = generateSpiralCoords(49);
+const SEAT_PLAN = generateSeats();
 
 const LAYER_BASE_NOTES = [72, 69, 65, 62, 57, 53, 48];
 const FLOWER_TYPES: Array<SpiralEvent['flower_type']> = [
@@ -81,46 +80,45 @@ const OPEN_SEAT_NAMES = [
   '滕王飞阁', '岳阳重楼', '锦官丝管', '秋水浮槎', '沧海遗珠', '长河落日', '紫禁星野', '终卷守夜人', '黄道归真'
 ];
 
-export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = spiralCoords.map((coord, idx) => {
+export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = SEAT_PLAN.map((seat, idx) => {
   const seatId = idx + 1;
+  const n = seat.n; // 台层级号 1..7
   const isFinale = seatId === 49;
   const isPrime = isPrimeNumber(seatId);
 
-  // 席位落在台阶暴露带上：台阶级号与高程由平面切比雪夫半径决定（见 altarGeometry.ts）
-  const ring = Math.max(Math.abs(coord.x), Math.abs(coord.z)); // 0..3
-  const layer = ringToLayer(ring); // 1 / 3 / 5 / 7
-  const elevation = ringToElevation(ring); // 10.5 / 7.5 / 4.5 / 1.5
-
+  const elevation = layerTop(n);
   const arrivalBeat = idx * 1.5;
   const arrivalSeconds = Number((arrivalBeat * 0.75).toFixed(2));
-  
-  const baseMidi = LAYER_BASE_NOTES[layer - 1];
+
+  const baseMidi = LAYER_BASE_NOTES[n - 1];
   const pentatonicOffsets = [0, 2, 4, 7, 9, 12, 14];
   const midiNote = baseMidi + pentatonicOffsets[idx % pentatonicOffsets.length];
-  
-  const zodiacSector = ((idx % 12) + 1);
+
+  const zodiacSector = (idx % 12) + 1;
   const isReserved = seatId <= 8;
   const reservedInfo = INITIAL_RESERVED_SEATS[seatId];
-  const displayName = isReserved 
-    ? reservedInfo.name 
+  const displayName = isReserved
+    ? reservedInfo.name
     : (OPEN_SEAT_NAMES[seatId - 9] || `守坛人·${seatId}`);
-  const roleTitle = isReserved ? reservedInfo.title : (isPrime ? `质数序列 · 秩序涌现位` : `第${seatId}席·星宿探索者`);
-  const message = isReserved 
-    ? reservedInfo.msg 
-    : (isFinale 
-        ? '四十九席圆满，黄道回流归元。水入回收渠，翻斗排空复位，等待下一轮。' 
-        : (isPrime
-            ? `质数在混沌里自排斜线，文明在乱世里走出秩序。此为第${seatId}席质数锚点。`
-            : `寄语于第${seatId}席，顺水流而巡礼，承连续螺旋之梯度，与天地同波。`));
+  const roleTitle = isReserved
+    ? reservedInfo.title
+    : (isPrime ? '质数序列 · 秩序涌现位' : `第${seatId}席·星宿探索者`);
+  const message = isReserved
+    ? reservedInfo.msg
+    : (isFinale
+      ? '四十九席圆满，黄道回流归元。水入回收渠，翻斗排空复位，等待下一轮。'
+      : (isPrime
+        ? `质数在混沌里自排斜线，文明在乱世里走出秩序。此为第${seatId}席质数锚点。`
+        : `寄语于第${seatId}席，顺水流而巡礼，承连续螺旋之梯度，与天地同波。`));
   const starshipName = isReserved ? reservedInfo.starship : `巡天舟·0${seatId}号`;
 
   return {
     seat_id: seatId,
     seat_status: isReserved ? 'reserved' : 'open',
-    layer,
+    layer: n,
     spiral_index: seatId,
-    grid_x: coord.x,
-    grid_z: coord.z,
+    grid_x: seat.x,
+    grid_z: seat.z,
     elevation,
     water_arrival_beat: arrivalBeat,
     water_arrival_seconds: arrivalSeconds,
@@ -141,6 +139,6 @@ export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = spiralCoords.map((coord, idx
     zodiac_sector: zodiacSector,
     is_prime: isPrime,
     is_finale: isFinale,
-    metadata_version: 1
+    metadata_version: 2
   };
 });
