@@ -13,11 +13,9 @@ import {
   PLINTH_THICKNESS,
   RIVER_WIDTH,
   RIVER_HALF_LENGTH,
-  layerTop,
-  layerRingBricks,
-  layerSideBricks,
-  pointOnSquareRing
+  SPIRAL_SLOPE
 } from '../data/altarGeometry';
+import RAPIER from '@dimforge/rapier3d-compat';
 
 export class AltarScene {
   private container: HTMLElement;
@@ -34,6 +32,7 @@ export class AltarScene {
   private primeLinesGroup: THREE.Group;
   private fountainGroup: THREE.Group;
   private waterworksGroup: THREE.Group;
+  private physicsDropletsGroup: THREE.Group;
 
   // 水利机关：主翻斗 + 配重水梯
   private bucketPivot: THREE.Group | null = null;
@@ -41,6 +40,17 @@ export class AltarScene {
   private ladderBuckets: THREE.Group[] = [];
   private ladderDrops: THREE.Mesh[] = [];
   private riverSurface: THREE.Mesh | null = null;
+
+  // 物理引擎（Rapier3D）—— 水到底流不流得通，由引擎说了算，不由我们算角度
+  private physicsWorld: RAPIER.World | null = null;
+  private physicsReady = false;
+  private physicsAccumulator = 0;
+  private droplets: Array<{ body: RAPIER.RigidBody; mesh: THREE.Mesh }> = [];
+  private dropletCursor = 0;
+  private spawnTimer = 0;
+  private maxSeatReached = 1;
+  private waterProgressEl: HTMLDivElement | null = null;
+  private numbersPanelEl: HTMLDivElement | null = null;
   
   // Interactive Objects & Meshes
   private waterSpiralPath: THREE.Vector3[] = [];
@@ -63,6 +73,7 @@ export class AltarScene {
   private onLanternSelect?: (chapterIndex: number) => void;
   private onInteriorPoemSelect?: (seasonId: string) => void;
   private clock = new THREE.Clock();
+  private lastElapsed = 0;
 
   // Speed & Rotation
   private lanternRotationSpeed = 0; // 默认不转：诗词灯是"挂着"的，不是在那儿乱转
@@ -111,7 +122,7 @@ export class AltarScene {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.minDistance = 2;
+    this.controls.minDistance = 0.5;
     this.controls.maxDistance = 220;
     this.controls.target.set(0, 6, 0);
 
@@ -122,6 +133,7 @@ export class AltarScene {
     this.primeLinesGroup = new THREE.Group();
     this.fountainGroup = new THREE.Group();
     this.waterworksGroup = new THREE.Group();
+    this.physicsDropletsGroup = new THREE.Group();
 
     this.scene.add(this.outerShellGroup);
     this.scene.add(this.hollowInteriorGroup);
@@ -129,6 +141,7 @@ export class AltarScene {
     this.scene.add(this.primeLinesGroup);
     this.scene.add(this.fountainGroup);
     this.scene.add(this.waterworksGroup);
+    this.scene.add(this.physicsDropletsGroup);
 
     // 6. Build All Complex Layers
     this.initLighting();
@@ -148,6 +161,60 @@ export class AltarScene {
 
     // 8. Start loop
     this.animate();
+
+    // 9. 物理引擎（异步）—— 起来之后由它接管水的运动
+    void this.initRapierPhysics();
+
+    // 10. 数表与物理读数（贴在容器上，不走 React）
+    this.buildOverlayReadouts();
+  }
+
+  /**
+   * 把这座坛子用到的几个数直接标在界面上。
+   *
+   *   140 = 1²+2²+…+7²          实心七级方锥的总格数
+   *    49 = 7² = 1+3+5+…+13      朝天暴露的格数 = 49 席
+   *    91 = 1²+…+6² = 140−49     内部（阴）的格数 = 364 ÷ 4
+   *    49 = 4×12+1               49 个音：四组键子 + 一个（中央 C 往下数）
+   *   364 = 4×91
+   */
+  private buildOverlayReadouts() {
+    const wrap = document.createElement('div');
+    wrap.style.cssText =
+      'position:fixed;left:16px;top:170px;z-index:50;pointer-events:none;' +
+      'font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;' +
+      'line-height:1.65;color:#94a3b8;background:rgba(2,6,23,.85);' +
+      'border:1px solid rgba(51,65,85,.8);border-radius:10px;padding:10px 12px;' +
+      'backdrop-filter:blur(6px);max-width:260px;';
+
+    const rows = [
+      ['140', '= 1²+2²+…+7²', '实心七级方锥的总格数'],
+      ['49', '= 7² = 1+3+5+7+9+11+13', '朝天暴露的格数 = 49 席'],
+      ['91', '= 1²+…+6² = 140 − 49', '内部（阴）的格数'],
+      ['364', '= 4 × 91', ''],
+      ['49', '= 4 组键子 × 12 + 1', '中央 C 往下数，四组零一个半音']
+    ];
+
+    rows.forEach(([num, expr, note]) => {
+      const line = document.createElement('div');
+      line.innerHTML =
+        `<span style="color:#fbbf24;font-weight:700">${num}</span>` +
+        `<span style="color:#64748b"> ${expr}</span>` +
+        (note ? `<div style="color:#475569;padding-left:10px">${note}</div>` : '');
+      wrap.appendChild(line);
+    });
+
+    const prog = document.createElement('div');
+    prog.style.cssText =
+      'margin-top:8px;padding-top:8px;border-top:1px solid rgba(51,65,85,.8);' +
+      'color:#7dd3fc;font-weight:600;';
+    prog.textContent = 'Rapier 物理验证：启动中…';
+    wrap.appendChild(prog);
+
+    // 挂在 document.body 上，避免被 Canvas 容器的 overflow / stacking 遮住
+    document.body.appendChild(wrap);
+    this.numbersPanelEl = wrap;
+    this.waterProgressEl = prog;
   }
 
   private initLighting() {
@@ -299,55 +366,54 @@ export class AltarScene {
       opacity: 0.92
     });
 
-    // ---- 1. 七层外圈砖（中空）----
-    const positions: Array<{ x: number; y: number; z: number }> = [];
+    // ---- 1. 49 根砖柱：每席一根，从地面砌到该席的台面高程 ----
+    const bricks: Array<{ x: number; y: number; z: number }> = [];
 
-    for (let n = 1; n <= LAYERS; n++) {
-      const side = layerSideBricks(n);
-      const half = (side - 1) / 2;
-      const y = layerTop(n) - BRICK / 2;
-
-      layerRingBricks(n).forEach(({ bx, bz }) => {
-        // 第 7 层南面正中留 2 砖宽的水口（与南北向的河对齐）
-        if (n === LAYERS && bz === side - 1 && (bx === side / 2 - 1 || bx === side / 2)) return;
-
-        positions.push({ x: (bx - half) * BRICK, y, z: (bz - half) * BRICK });
-      });
-    }
+    this.events.forEach((ev) => {
+      const levels = Math.max(1, Math.round(ev.elevation / BRICK));
+      for (let i = 0; i < levels; i++) {
+        bricks.push({
+          x: ev.grid_x * CELL,
+          y: (i + 0.5) * BRICK,
+          z: ev.grid_z * CELL
+        });
+      }
+    });
 
     const brickGeo = new THREE.BoxGeometry(BRICK, BRICK, BRICK);
-    const blocks = new THREE.InstancedMesh(brickGeo, brickMat, positions.length);
+    const blocks = new THREE.InstancedMesh(brickGeo, brickMat, bricks.length);
     blocks.castShadow = true;
     blocks.receiveShadow = true;
 
     const mat4 = new THREE.Matrix4();
-    positions.forEach((p, i) => {
-      mat4.makeTranslation(p.x, p.y, p.z);
+    bricks.forEach((b, i) => {
+      mat4.makeTranslation(b.x, b.y, b.z);
       blocks.setMatrixAt(i, mat4);
     });
     blocks.instanceMatrix.needsUpdate = true;
     this.outerShellGroup.add(blocks);
 
-    // ---- 2. 每层暴露带中心线上的水槽（统一外倾 0.5° = 稳定梯度）----
-    const TILT = THREE.MathUtils.degToRad(0.5);
-    const stripW = BRICK * 0.5;
+    // ---- 2. 每席柱顶的下垂水槽：顺螺旋方向朝下一席倾斜 ----
+    // 台面是一条连续下降的螺旋坡（相邻两席落差完全相等），所以水不会撞上上坡。
+    // 坡度用 SPIRAL_SLOPE —— 视觉台面和物理碰撞体用的是同一个值。
+    const TILT = SPIRAL_SLOPE;
+    const plateW = CELL;
 
-    for (let n = 1; n <= LAYERS; n++) {
-      const topY = layerTop(n);
-      const a = ((2 * n - 1) / 4) * CELL; // 环中心线半宽（世界单位）
+    this.events.forEach((ev, idx) => {
+      const topY = ev.elevation;
+      const cx = ev.grid_x * CELL;
+      const cz = ev.grid_z * CELL;
 
-      [-1, 1].forEach((side) => {
-        const ew = new THREE.Mesh(new THREE.BoxGeometry(stripW, 0.12, 2 * a), grooveMat);
-        ew.position.set(side * a, topY - 0.04, 0);
-        ew.rotation.z = -side * TILT;
-        this.outerShellGroup.add(ew);
+      const next = this.events[idx + 1];
+      const dx = next ? Math.sign(next.grid_x - ev.grid_x) : 0;
+      const dz = next ? Math.sign(next.grid_z - ev.grid_z) : 0;
 
-        const ns = new THREE.Mesh(new THREE.BoxGeometry(2 * a, 0.12, stripW), grooveMat);
-        ns.position.set(0, topY - 0.04, side * a);
-        ns.rotation.x = side * TILT;
-        this.outerShellGroup.add(ns);
-      });
-    }
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(plateW, 0.1, plateW), grooveMat);
+      plate.position.set(cx + dx * BRICK * 0.1, topY - 0.03, cz + dz * BRICK * 0.1);
+      plate.rotation.z = -dx * TILT;
+      plate.rotation.x = dz * TILT;
+      this.outerShellGroup.add(plate);
+    });
 
     // ---- 3. 49 席：托座 / 质数环 / 莲花 ----
     this.events.forEach((ev) => {
@@ -454,16 +520,18 @@ export class AltarScene {
   }
 
   /**
-   * 十二座青玉经卷壁碑 —— 嵌在阴锥的内壁上。
+   * 十二座青玉经卷壁碑 —— 贴在最外圈砖柱的**朝外面**上。
    *
-   * 阴锥是七层外圈砖围出来的递收空腔。取第 6 层（半径 2.5 格 = 7.5 单位）
-   * 的内壁那一圈，周长 4 × 5 格 = 20 格 = 60 单位，12 座碑均分，间距 5 单位。
-   * 碑面朝内，站在空腔里一圈看得见 —— 不再是浮在外面转的卡片。
+   * 最外圈（max(|i|,|j|) = 3）共 24 根柱，隔一根取一座，正好 12 座，绕坛一圈。
+   * 每座碑的高度取它那根柱子的台面高程，碑面朝外。
+   * （结构改成 49 根实心砖柱之后已经没有内腔了，碑改挂外侧；若以后恢复空腔再搬回去。）
    */
   private buildInnerStelaeRing() {
-    const ringRadius = 2.5 * CELL; // 第 6 层内壁半径
-    const wallY = layerTop(6) - BRICK / 2; // 内壁那一砖的中高
-    const count = SEASON1_POEMS.length;
+    const outer = this.events
+      .filter((ev) => Math.max(Math.abs(ev.grid_x), Math.abs(ev.grid_z)) === 3)
+      .sort((a, b) => a.seat_id - b.seat_id);
+
+    const picks = outer.filter((_, i) => i % 2 === 0).slice(0, SEASON1_POEMS.length);
 
     const slabMat = new THREE.MeshStandardMaterial({
       color: 0x0f172a,
@@ -483,20 +551,22 @@ export class AltarScene {
     });
 
     const stelaH = BRICK * 0.9;
-    const stelaW = BRICK * 2.6;
+    const stelaW = BRICK * 2.4;
 
-    const perimeter = 8 * ringRadius;
-
-    for (let i = 0; i < count; i++) {
+    picks.forEach((ev, i) => {
       const poem = SEASON1_POEMS[i % SEASON1_POEMS.length];
-      const p = pointOnSquareRing(ringRadius, (i + 0.5) * (perimeter / count));
 
-      // 碑面朝坛心
-      const nx = -Math.sign(p.x) * (Math.abs(p.x) >= Math.abs(p.z) ? 1 : 0);
-      const nz = -Math.sign(p.z) * (Math.abs(p.z) > Math.abs(p.x) ? 1 : 0);
+      let nx = 0;
+      let nz = 0;
+      if (Math.abs(ev.grid_x) === 3) nx = Math.sign(ev.grid_x);
+      else nz = Math.sign(ev.grid_z);
+
+      const cx = ev.grid_x * CELL + nx * (CELL / 2 + 0.08);
+      const cz = ev.grid_z * CELL + nz * (CELL / 2 + 0.08);
+      const cy = ev.elevation + stelaH / 2 - BRICK * 0.1;
 
       const stelaGroup = new THREE.Group();
-      stelaGroup.position.set(p.x, wallY, p.z);
+      stelaGroup.position.set(cx, cy, cz);
       stelaGroup.rotation.y = Math.atan2(nx, nz);
 
       const slab = new THREE.Mesh(new THREE.BoxGeometry(stelaW, stelaH, 0.1), slabMat);
@@ -517,7 +587,7 @@ export class AltarScene {
       stelaGroup.add(sprite);
 
       this.hollowInteriorGroup.add(stelaGroup);
-    }
+    });
   }
 
   private createInteriorStelaSprite(poem: typeof SEASON1_POEMS[0]): THREE.Sprite {
@@ -952,6 +1022,153 @@ export class AltarScene {
     }
   }
 
+  /** 台面的位置与倾角 —— 视觉台面和物理碰撞体共用同一套数值 */
+  private terraceTransform(ev: SpiralEvent) {
+    const idx = ev.seat_id - 1;
+    const next = this.events[idx + 1];
+    const dx = next ? Math.sign(next.grid_x - ev.grid_x) : 0;
+    const dz = next ? Math.sign(next.grid_z - ev.grid_z) : 0;
+
+    return {
+      cx: ev.grid_x * CELL + dx * BRICK * 0.1,
+      cy: ev.elevation - 0.03,
+      cz: ev.grid_z * CELL + dz * BRICK * 0.1,
+      rx: dz * SPIRAL_SLOPE,
+      rz: -dx * SPIRAL_SLOPE
+    };
+  }
+
+  /**
+   * 接 Rapier3D：水到底流不流得通，由物理引擎自己算，不由我们算角度。
+   *
+   * 给 49 席台面各建一块倾斜碰撞体（与视觉同一套位置/倾角），
+   * 在塔顶天井持续投水滴刚体，让重力把它们一路推下去。
+   */
+  private async initRapierPhysics() {
+    try {
+      await RAPIER.init();
+      const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+      this.physicsWorld = world;
+
+      // 1. 49 席台面碰撞体
+      this.events.forEach((ev) => {
+        const t = this.terraceTransform(ev);
+        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(t.rx, 0, t.rz, 'XYZ'));
+        world.createCollider(
+          RAPIER.ColliderDesc.cuboid(CELL / 2, 0.08, CELL / 2)
+            .setTranslation(t.cx, t.cy, t.cz)
+            .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+            .setFriction(0.01)
+            .setRestitution(0.02)
+        );
+      });
+
+      // 2. 台基（回收渠所在平面）
+      world.createCollider(
+        RAPIER.ColliderDesc.cuboid(PLINTH_HALF, 0.4, PLINTH_HALF)
+          .setTranslation(0, -0.4, 0)
+          .setFriction(0.04)
+          .setRestitution(0.02)
+      );
+
+      // 3. 水滴刚体池
+      const dropGeo = new THREE.SphereGeometry(0.22, 10, 10);
+      const dropMat = new THREE.MeshStandardMaterial({
+        color: 0x7dd3fc,
+        emissive: 0x0284c7,
+        emissiveIntensity: 1.0,
+        roughness: 0.05,
+        metalness: 0.6,
+        transparent: true,
+        opacity: 0.92
+      });
+
+      for (let i = 0; i < 40; i++) {
+        const mesh = new THREE.Mesh(dropGeo, dropMat);
+        mesh.visible = false;
+        this.physicsDropletsGroup.add(mesh);
+
+        const body = world.createRigidBody(
+          RAPIER.RigidBodyDesc.dynamic()
+            .setTranslation(0, -100, 0)
+            .setLinearDamping(0.02)
+            .setAngularDamping(0.4)
+        );
+        world.createCollider(
+          RAPIER.ColliderDesc.ball(0.22).setMass(0.3).setFriction(0.01).setRestitution(0.02),
+          body
+        );
+        this.droplets.push({ body, mesh });
+      }
+
+      this.physicsReady = true;
+    } catch (err) {
+      console.warn('Rapier 物理初始化失败，退回手工动画：', err);
+    }
+  }
+
+  /** 每帧推进物理世界，并把"水流到第几席"读出来 */
+  private updatePhysics(dt: number) {
+    if (!this.physicsReady || !this.physicsWorld) return;
+
+    const world = this.physicsWorld;
+    const STEP = 1 / 60;
+
+    this.physicsAccumulator += dt;
+    let steps = 0;
+    while (this.physicsAccumulator >= STEP && steps < 5) {
+      world.step();
+      this.physicsAccumulator -= STEP;
+      steps++;
+    }
+
+    // 塔顶天井持续投水
+    this.spawnTimer += dt;
+    if (this.spawnTimer > 0.35) {
+      this.spawnTimer = 0;
+      const top = this.events[0];
+      const d = this.droplets[this.dropletCursor];
+      this.dropletCursor = (this.dropletCursor + 1) % this.droplets.length;
+      d.body.setTranslation(
+        { x: top.grid_x * CELL, y: top.elevation + 2.0, z: top.grid_z * CELL },
+        true
+      );
+      d.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      d.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      d.mesh.visible = true;
+    }
+
+    // 同步网格 + 统计最远流到第几席
+    this.droplets.forEach(({ body, mesh }) => {
+      const p = body.translation();
+      mesh.position.set(p.x, p.y, p.z);
+      if (p.y < -20) mesh.visible = false;
+
+      let bestId = 0;
+      let bestD = Number.POSITIVE_INFINITY;
+      this.events.forEach((ev) => {
+        const dx = p.x - ev.grid_x * CELL;
+        const dz = p.z - ev.grid_z * CELL;
+        const d = dx * dx + dz * dz;
+        if (d < bestD) {
+          bestD = d;
+          bestId = ev.seat_id;
+        }
+      });
+
+      if (bestId > 0 && bestD < (CELL * 0.7) ** 2 && bestId > this.maxSeatReached) {
+        this.maxSeatReached = bestId;
+      }
+    });
+
+    if (this.waterProgressEl) {
+      const pct = Math.round((this.maxSeatReached / 49) * 100);
+      this.waterProgressEl.textContent =
+        `Rapier 物理验证：水流已到第 ${this.maxSeatReached} / 49 席（${pct}%）`;
+      this.waterProgressEl.style.color = this.maxSeatReached >= 49 ? '#4ade80' : '#7dd3fc';
+    }
+  }
+
   private buildStarships() {
     this.events.forEach((ev) => {
       if (ev.seat_status === 'reserved' || ev.seat_id === 49) {
@@ -1013,6 +1230,9 @@ export class AltarScene {
   };
 
   private onPointerDown = (event: MouseEvent) => {
+    // 用户一按鼠标，立刻放弃自动机位过渡，别跟人抢镜头
+    this.isCameraTransitioning = false;
+
     const rect = this.container.getBoundingClientRect();
     this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -1178,6 +1398,8 @@ export class AltarScene {
   private animate = () => {
     this.animationFrameId = requestAnimationFrame(this.animate);
     const elapsedTime = this.clock.getElapsedTime();
+    const dt = Math.min(0.05, elapsedTime - this.lastElapsed);
+    this.lastElapsed = elapsedTime;
 
     // 1. Smooth Camera Transition
     if (this.isCameraTransitioning) {
@@ -1258,7 +1480,10 @@ export class AltarScene {
     // 9. 水利机关：翻斗蓄水—越阈翻转—配重水梯提水—复位
     this.updateWaterworks(elapsedTime);
 
-    // 10. Auto patrol
+    // 10. 物理引擎：水滴由 Rapier 自己算，我们不插手
+    this.updatePhysics(dt);
+
+    // 11. Auto patrol
     if (this.isAutoPatrol) {
       this.currentProgress += 0.05;
       if (this.currentProgress > 49.5) {
@@ -1282,6 +1507,9 @@ export class AltarScene {
     }
     window.removeEventListener('resize', this.onWindowResize);
     this.container.removeEventListener('pointerdown', this.onPointerDown);
+    if (this.numbersPanelEl?.parentElement) {
+      this.numbersPanelEl.parentElement.removeChild(this.numbersPanelEl);
+    }
     this.renderer.dispose();
     if (this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);

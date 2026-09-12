@@ -1,5 +1,10 @@
 import { SpiralEvent } from '../types/altar';
-import { LAYERS, layerSeatCount, layerTop, pointOnSquareRing } from './altarGeometry';
+import {
+  SEATS_PER_LEVEL,
+  seatElevation,
+  seatLevel,
+  ulamCoords
+} from './altarGeometry';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -20,41 +25,30 @@ function isPrimeNumber(n: number): boolean {
 }
 
 /**
- * 49 席的平面坐标。
+ * 49 席的平面坐标：7×7 方形螺旋，等距。
  *
- * 第 n 层（1 = 顶 … 7 = 底）暴露带上有 2n − 1 席，沿该层的方环中心线均分：
- *     1、3、5、7、9、11、13  →  共 49
- * 环中心线半宽 a = (2n − 1) / 4 格，周长 = 8a = 2(2n − 1) 格，
- * 于是 2n − 1 席的间距恒为 2 格（= 4 块砖）。
- * 从南边中点起逆时针排，所以席位是"绕圈下沉"的：水从顶上第 1 席一路旋到第 49 席。
+ * 第 1 席在正中，然后按方形螺旋绕出去。方形螺旋每走一步正好 1 格，
+ * 所以**从头到尾、任意相邻两席之间的距离恒等于 1 格**。
+ * 高度按「每 7 席一级、每级低 1 砖」，水从第 1 席一路被重力推到第 49 席。
  */
-function generateSeats(): Array<{ n: number; x: number; z: number }> {
-  const seats: Array<{ n: number; x: number; z: number }> = [];
+const SEAT_PLAN = ulamCoords(SEATS_PER_LEVEL * 7).map((p, idx) => {
+  const seatId = idx + 1;
+  const level = seatLevel(seatId);
+  return { level, x: p.x, z: p.z };
+});
 
-  for (let n = 1; n <= LAYERS; n++) {
-    const count = layerSeatCount(n);
-
-    if (n === 1) {
-      seats.push({ n, x: 0, z: 0 }); // 顶席落在正中（天井口）
-      continue;
-    }
-
-    const a = (2 * n - 1) / 4;
-    const P = 8 * a;
-    const spacing = P / count;
-
-    for (let k = 0; k < count; k++) {
-      const p = pointOnSquareRing(a, (k + 0.5) * spacing);
-      seats.push({ n, x: p.x, z: p.z });
-    }
-  }
-
-  return seats;
+/**
+ * 49 个音 = 4 组键子 × 12 键 + 1 = 49。
+ *
+ * 从**中央 C（MIDI 60）往下数**，每席降一个半音：
+ *   第 1 席 C4 → 第 49 席 C0（MIDI 12），正好 4 个八度零 1 个半音。
+ * 水一路顺螺旋下沉，音就一路往下掉 —— 位置即音高，不是配乐。
+ */
+export const SEAT_ROOT_MIDI = 60;
+export function seatMidi(seatId: number): number {
+  return SEAT_ROOT_MIDI - (seatId - 1);
 }
 
-const SEAT_PLAN = generateSeats();
-
-const LAYER_BASE_NOTES = [72, 69, 65, 62, 57, 53, 48];
 const FLOWER_TYPES: Array<SpiralEvent['flower_type']> = [
   'peony', 'lotus', 'plum', 'orchid', 'bamboo', 'chrysanthemum', 'pine'
 ];
@@ -82,19 +76,18 @@ const OPEN_SEAT_NAMES = [
 
 export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = SEAT_PLAN.map((seat, idx) => {
   const seatId = idx + 1;
-  const n = seat.n; // 台层级号 1..7
+  const n = seat.level; // 台阶级号 1..7
   const isFinale = seatId === 49;
   const isPrime = isPrimeNumber(seatId);
 
-  const elevation = layerTop(n);
+  const elevation = seatElevation(seatId);
   const arrivalBeat = idx * 1.5;
   const arrivalSeconds = Number((arrivalBeat * 0.75).toFixed(2));
 
-  const baseMidi = LAYER_BASE_NOTES[n - 1];
-  const pentatonicOffsets = [0, 2, 4, 7, 9, 12, 14];
-  const midiNote = baseMidi + pentatonicOffsets[idx % pentatonicOffsets.length];
+  // 49 音 = 4 组 × 12 键 + 1：中央 C 往下，每席降一个半音
+  const midiNote = seatMidi(seatId);
 
-  const zodiacSector = (idx % 12) + 1;
+  const zodiacSector = ((seatId - 1) % 12) + 1;
   const isReserved = seatId <= 8;
   const reservedInfo = INITIAL_RESERVED_SEATS[seatId];
   const displayName = isReserved
@@ -126,7 +119,7 @@ export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = SEAT_PLAN.map((seat, idx) =>
     midi_note_name: getMidiNoteName(midiNote),
     midi_velocity: isFinale ? 100 : (isPrime ? 92 : (70 + (seatId % 18))),
     midi_duration_beats: isFinale ? 4.0 : 1.5,
-    harmony_event: isFinale ? 'cadence_finale_major' : (isPrime ? 'prime_overtone_chime' : 'pentatonic_flow'),
+    harmony_event: isFinale ? 'cadence_finale' : (isPrime ? 'prime_overtone_chime' : 'chromatic_descent'),
     flower_type: FLOWER_TYPES[idx % FLOWER_TYPES.length],
     flower_color: isPrime ? '#38bdf8' : FLOWER_COLORS[idx % FLOWER_COLORS.length],
     light_preset: isPrime ? 'cyan_prime_ray' : LIGHT_PRESETS[idx % LIGHT_PRESETS.length],

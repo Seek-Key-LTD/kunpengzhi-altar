@@ -81,3 +81,70 @@ export function pointOnSquareRing(a: number, s: number): { x: number; z: number 
   t -= side;
   return { x: -a + t, z: a }; // 南边 左半
 }
+
+// ── 席位：7×7 方形螺旋，等距 ─────────────────────────────────────────
+//
+// 49 席铺在 7×7 的整数格上，按**方形螺旋序**编号：第 1 席在正中，
+// 然后一路绕出去。方形螺旋每走一步正好 1 格，
+// 所以「从头到尾、任意相邻两席之间的距离」恒等于 1 格 —— 这才是间距相等。
+//
+// 49 = 7 级 × 每级 7 席。沿螺旋连续 7 步算一级，每级比上一级低 1 砖，
+// 于是水从第 1 席一路被重力推着绕到第 49 席。
+
+/** 7×7 方形螺旋坐标（1 在正中，每步 1 格） */
+export function ulamCoords(total: number): Array<{ x: number; z: number }> {
+  const coords: Array<{ x: number; z: number }> = [{ x: 0, z: 0 }];
+  let x = 0;
+  let z = 0;
+  let step = 1;
+
+  while (coords.length < total) {
+    for (let i = 0; i < step && coords.length < total; i++) { x += 1; coords.push({ x, z }); }
+    for (let i = 0; i < step && coords.length < total; i++) { z += 1; coords.push({ x, z }); }
+    step += 1;
+    for (let i = 0; i < step && coords.length < total; i++) { x -= 1; coords.push({ x, z }); }
+    for (let i = 0; i < step && coords.length < total; i++) { z -= 1; coords.push({ x, z }); }
+    step += 1;
+  }
+
+  return coords.slice(0, total);
+}
+
+/** 每级台阶几席（49 = 7 × 7） */
+export const SEATS_PER_LEVEL = 7;
+
+/**
+ * 每级台阶的累计席号上界。
+ *
+ * 方形螺旋的四圈分别是 1、8、16、24 席（第 1 席 + 三圈）。
+ * 切成 7 级、每级都是螺旋上连续的一段，只能这样切：
+ *   1 ｜ 4 4 ｜ 8 8 ｜ 12 12
+ * 于是**每一圈都横跨两级**，同一圈沿螺旋走半圈就下沉一截 —— 这就是"下垂的弧度"。
+ */
+export const LEVEL_BOUNDS = [1, 5, 9, 17, 25, 37, 49];
+
+/** 席号（1..49）→ 台阶级号（1 = 顶 … 7 = 底） */
+export function seatLevel(seatId: number): number {
+  for (let i = 0; i < LEVEL_BOUNDS.length; i++) {
+    if (seatId <= LEVEL_BOUNDS[i]) return i + 1;
+  }
+  return LEVEL_BOUNDS.length;
+}
+
+/**
+ * 每席沿螺旋下沉的量。
+ *
+ * 关键：台面不是"每级一个平台"，而是**一条连续下降的螺旋坡**。
+ * 第 1 席最高（塔顶），第 49 席最低（贴台基），中间 48 步均分，
+ * 所以任意相邻两席之间的落差完全相等 —— 水一路被重力推着走，
+ * 不存在"走到台边撞上一个上坡"的死点。
+ */
+export const DROP_PER_SEAT = (PYRAMID_TOP - BRICK) / (SEATS_PER_LEVEL * 7 - 1);
+
+/** 席号 → 该席台面高程（连续螺旋坡） */
+export function seatElevation(seatId: number): number {
+  return PYRAMID_TOP - (seatId - 1) * DROP_PER_SEAT;
+}
+
+/** 台面沿螺旋方向的坡度（弧度）—— 物理台面与视觉台面用同一个值 */
+export const SPIRAL_SLOPE = Math.atan(DROP_PER_SEAT / CELL);
