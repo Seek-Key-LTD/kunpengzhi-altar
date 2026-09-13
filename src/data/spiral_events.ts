@@ -40,13 +40,17 @@ const SEAT_PLAN = ulamCoords(SEATS_PER_LEVEL * 7).map((p, idx) => {
 /**
  * 49 个音 = 4 组键子 × 12 键 + 1 = 49。
  *
- * 从**中央 C（MIDI 60）往下数**，每席降一个半音：
- *   第 1 席 C4 → 第 49 席 C0（MIDI 12），正好 4 个八度零 1 个半音。
- * 水一路顺螺旋下沉，音就一路往下掉 —— 位置即音高，不是配乐。
+ * 音域底座：**从中央 C 往下一组键子起，向上四个八度**——
+ *   第 49 席 C3（MIDI 48）→ 第 1 席 C7（MIDI 96），共 49 个半音。
+ *   （48 = 中央 C 60 − 12；96 − 48 = 48 个半音 = 12 × 4，加起点共 49）
+ *
+ * 方向：水顺螺旋往下沉，音就往下掉 —— **第 1 席最高（塔顶 C7），第 49 席最低（塔基 C3）**。
+ * 位置即音高，不是配乐。
  */
-export const SEAT_ROOT_MIDI = 60;
+export const SEAT_TOP_MIDI = 96; // C7 —— 第 1 席
+export const SEAT_BOTTOM_MIDI = 48; // C3 —— 第 49 席
 export function seatMidi(seatId: number): number {
-  return SEAT_ROOT_MIDI - (seatId - 1);
+  return SEAT_TOP_MIDI - (seatId - 1);
 }
 
 const FLOWER_TYPES: Array<SpiralEvent['flower_type']> = [
