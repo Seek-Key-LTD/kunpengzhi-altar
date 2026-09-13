@@ -27,6 +27,8 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || 'HYT-cfZTP_jq6Xd9g3tpFMwxopOyIrf8LZpmGAI3' }}
+          # 必须由仓库 secret 提供。曾在此处内嵌明文 token 作为兜底值，
+          # 已移除 —— 兜底会让「secret 缺失」静默退化成「用泄露的凭据上线」。
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           npx wrangler pages deploy dist --project-name=kunpengzhi-altar --branch=main --commit-dirty=true
