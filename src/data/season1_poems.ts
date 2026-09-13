@@ -131,7 +131,7 @@ export const SEASON1_POEMS: SeasonPoem[] = [
     closing: {
       title: '茶史五绝赋 · 散场大赋',
       form: '汉大赋（司马相如体 · 1280言）',
-      author: '徐厚重',
+      author: '锁侠',
       text: [
         '【序】茶者，人在草木间也。草头双十，人木八十八，合一百零八之数。',
         '【滇南】傣王故郡府，云南新茶都。怀寮引缅越，接藏连黔蜀。',
