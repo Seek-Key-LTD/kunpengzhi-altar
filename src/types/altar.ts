@@ -41,4 +41,19 @@ export interface StarPaperSubmission {
 }
 
 export type CameraMode = 'orbit' | 'patrol' | 'yin' | 'interior' | 'outer_lanterns' | 'topdown' | 'fountain' | 'cinematic';
+
+/**
+ * 身份 —— 自由度是被记录换来的。
+ * guest：3 条固定 routine，禁手动，行为不进账
+ * authenticated：自由相机，行为落 SBT 进座次表
+ * 默认 guest。见 docs/身份与相机权限规范.md
+ */
+export type AltarRole = 'guest' | 'authenticated';
+
+/** 游客的三条固定 routine */
+export const GUEST_ROUTINES: CameraMode[] = ['cinematic', 'yin', 'patrol'];
+
+/** 每条 routine 的播放时长（秒） */
+export const GUEST_ROUTINE_SECONDS = 18;
+
 export type AltarCycleState = 'accumulating' | 'overturning' | 'cascading' | 'recycling' | 'resetting';

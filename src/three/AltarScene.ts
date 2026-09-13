@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { SpiralEvent, CameraMode } from '../types/altar';
+import { SpiralEvent, CameraMode, AltarRole, GUEST_ROUTINES, GUEST_ROUTINE_SECONDS } from '../types/altar';
 import { TEA_POEM_16_CHAPTERS } from '../data/tea_poem_16';
 import { SEASON1_POEMS } from '../data/season1_poems';
 import {
@@ -69,6 +69,13 @@ export class AltarScene {
   private events: SpiralEvent[] = [];
   private activeSeatId: number | null = 1;
   private cameraMode: CameraMode = 'orbit';
+  /** 身份：默认游客。未认证即游客，不是"默认给自由" */
+  private role: AltarRole = 'guest';
+  /** 游客 routine 播放状态 */
+  private guestRoutineIndex = 0;
+  private guestRoutineTimer = 0;
+  /** 上一帧的合法相机位（安全边界第 4 条：异常时拉回） */
+  private lastSafeCameraPos = new THREE.Vector3(48, 40, 58);
   private onSeatSelect?: (seatId: number) => void;
   private onLanternSelect?: (chapterIndex: number) => void;
   private onInteriorPoemSelect?: (seasonId: string) => void;
@@ -119,12 +126,16 @@ export class AltarScene {
     container.appendChild(this.renderer.domElement);
 
     // 4. Controls
+    // ⚠️ minDistance 曾降到 0.5 以便"贴着看"，但那正是穿模的直接来源。
+    //    安全边界见 docs/身份与相机权限规范.md §3.2。
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.minDistance = 0.5;
+    this.controls.minDistance = 0.8;
     this.controls.maxDistance = 220;
     this.controls.target.set(0, 6, 0);
+    // 默认角色是游客 —— 未认证即游客，不是"默认给自由"
+    this.applyRole();
 
     // 5. Structure Groups
     this.outerShellGroup = new THREE.Group();
@@ -1230,6 +1241,9 @@ export class AltarScene {
   };
 
   private onPointerDown = (event: MouseEvent) => {
+    // 游客只能看，不能碰
+    if (this.role === 'guest') return;
+
     // 用户一按鼠标，立刻放弃自动机位过渡，别跟人抢镜头
     this.isCameraTransitioning = false;
 
@@ -1358,6 +1372,36 @@ export class AltarScene {
     }
   }
 
+  /**
+   * 切换身份。**认证层调用这一句，祭坛只消费身份，不自己实现认证。**
+   * 见 docs/身份与相机权限规范.md §4。
+   */
+  public setRole(role: AltarRole) {
+    this.role = role;
+    this.applyRole();
+  }
+
+  public getRole(): AltarRole {
+    return this.role;
+  }
+
+  /** 按当前身份收紧或放开权限 */
+  private applyRole() {
+    const isGuest = this.role === 'guest';
+
+    // 游客：禁拖拽、禁缩放、禁平移；点击在 onPointerDown 里挡掉
+    this.controls.enabled = !isGuest;
+    this.controls.enableRotate = !isGuest;
+    this.controls.enableZoom = !isGuest;
+    this.controls.enablePan = !isGuest;
+
+    if (isGuest) {
+      this.guestRoutineIndex = 0;
+      this.guestRoutineTimer = 0;
+      this.setCameraMode(GUEST_ROUTINES[0]);
+    }
+  }
+
   public setCameraMode(mode: CameraMode) {
     this.cameraMode = mode;
     this.isCameraTransitioning = true;
@@ -1401,6 +1445,16 @@ export class AltarScene {
     const dt = Math.min(0.05, elapsedTime - this.lastElapsed);
     this.lastElapsed = elapsedTime;
 
+    // 0. 游客：三条 routine 循环自动播放，禁手动
+    if (this.role === 'guest') {
+      this.guestRoutineTimer += dt;
+      if (this.guestRoutineTimer >= GUEST_ROUTINE_SECONDS) {
+        this.guestRoutineTimer = 0;
+        this.guestRoutineIndex = (this.guestRoutineIndex + 1) % GUEST_ROUTINES.length;
+        this.setCameraMode(GUEST_ROUTINES[this.guestRoutineIndex]);
+      }
+    }
+
     // 1. Smooth Camera Transition
     if (this.isCameraTransitioning) {
       this.camera.position.lerp(this.targetCameraPos, 0.05);
@@ -1408,6 +1462,19 @@ export class AltarScene {
       if (this.camera.position.distanceTo(this.targetCameraPos) < 0.1) {
         this.isCameraTransitioning = false;
       }
+    }
+
+    // 1.5 安全边界（见 docs/身份与相机权限规范.md §3.2）
+    //     自由度高 = 出错面大；这几条不是限制自由，是防止自由变成故障。
+    const p = this.camera.position;
+    const finite = Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
+    const tooLow = p.y < 0.3;
+    const tooFar = p.length() > 120;
+    if (!finite || tooLow || tooFar) {
+      this.camera.position.copy(this.lastSafeCameraPos);
+      this.isCameraTransitioning = false;
+    } else {
+      this.lastSafeCameraPos.copy(p);
     }
 
     this.controls.update();
