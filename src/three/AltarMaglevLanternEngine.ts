@@ -48,19 +48,37 @@ export class AltarMaglevLanternEngine {
   // 地下长定子直线电机参数 (幽冥牵引所)
   readonly F_drive: number = 1200.0;     // 定子行波切向推力 (N)
   readonly gamma_air: number = 38.0;     // 低速空气粘滞阻尼 (N·s/m)
+  /**
+   * 角速度上限 (rad/s)。
+   *
+   * 原实现无上限：F_drive=1200 远大于粘滞阻力 → 终态 omega = F/(γR) = 1.344 rad/s
+   * （≈4.7s/圈、切向 31 m/s），与"如幽灵般自行匀速旋转 / 周天巡礼"完全相悖。
+   * 这里按 LIM 电流限幅物理地钳位，使浮环保持**缓慢巡礼**（默认 2π/120 ≈ 2 分钟一圈）。
+   */
+  readonly maxOmega: number;
+  /** 周天巡礼击发的最小间隔 (s)：压掉 idle 时的音墙 */
+  readonly strumMinInterval: number = 30.0;
 
   public state: MaglevLanternState;
   public onAcousticStrum?: AcousticStrumCallback;
 
   // 触发防重锁
   private lastTriggeredBay: number = -1;
+  /** 内部时钟：用于节流与冷却判定 */
+  private simTime: number = 0.0;
+  /** 地脉脉冲防重锁：同一次冲击只击发一次 */
+  private seismicLatch: boolean = false;
+  /** 最近一次击发时刻 (s) */
+  private lastStrumTime: number = -Infinity;
 
   constructor(options?: {
     radius?: number;
     initialTheta?: number;
     initialOmega?: number;
+    maxOmega?: number;
   }) {
     this.R = options?.radius ?? 24.0;
+    this.maxOmega = options?.maxOmega ?? (2 * Math.PI) / 120.0; // 默认 2 分钟/圈
     this.I_rot = this.totalMass * this.R * this.R; // 5.76e6 kg·m²
 
     // 默认角速度：约 16 分钟巡礼一整周 (2π / 960s ≈ 0.006545 rad/s)
@@ -87,6 +105,7 @@ export class AltarMaglevLanternEngine {
    */
   public update(dt: number, seismicPulse: number = 0.0): void {
     const s = this.state;
+    this.simTime += dt;
 
     // 1. 垂直磁通钉扎动力学 (受地脉次声波与神簧撞击扰动)
     const deltaZ = s.z - this.baseLevitationHeight;
@@ -105,6 +124,8 @@ export class AltarMaglevLanternEngine {
 
     const alpha = (T_drive - T_drag) / this.I_rot;
     s.omega += alpha * dt;
+    // LIM 电流限幅：钳住角速度，保持"幽灵般缓慢巡礼"，杜绝 4.7s/圈失控
+    if (s.omega > this.maxOmega) s.omega = this.maxOmega;
     s.theta = (s.theta + s.omega * dt) % (2 * Math.PI);
     if (s.theta < 0) s.theta += 2 * Math.PI;
 
@@ -121,26 +142,38 @@ export class AltarMaglevLanternEngine {
     }
 
     // 5. 柯本 1959 Martin D-18E 冷冻声学共鸣击发检测
-    // 当领航 1 号船跨越开间界限，且恰逢北坡水梯撞簧地脉脉冲时，击发凄厉扫弦
+    // ── 5a. 地脉击发（RFC §4.2 "地脉联动 → 拨片击发"）：北坡水梯撞簧脉冲**独立**触发，
+    //     不再被"跨开间"gate 挡住；同一次脉冲只击发一次（seismicLatch 防重）。
+    if (seismicPulse > 0.4) {
+      if (!this.seismicLatch) {
+        this.seismicLatch = true;
+        this.fireStrum('DROP_EB', Math.min(1.0, 0.6 + seismicPulse * 0.4));
+      }
+    } else if (seismicPulse < 0.2) {
+      this.seismicLatch = false;
+    }
+
+    // ── 5b. 周天巡礼击发：仅在跨到"领航位"（每 4 开间）时考虑，且受最小间隔节流。
+    //     原实现"每跨开间即响"，终速下 ~2.7 次/s → 音墙；这里收敛为 ≥ strumMinInterval 秒一次。
     if (s.currentBay !== this.lastTriggeredBay) {
       this.lastTriggeredBay = s.currentBay;
-      
-      // 每过 4 个开间（即一个完整茶灯屏风巡礼至观礼正位）或受强地脉脉冲冲击时
       const isLeadPosition = s.currentBay % 4 === 0;
-      if (isLeadPosition || seismicPulse > 0.4) {
-        s.isAcousticStrumTriggered = true;
-        if (this.onAcousticStrum) {
-          // 第 16 面压轴旗舰 (chapter 15)：天地银行一万贯兑换券，触发点钞机飞速过钞声
-          let chord: 'DROP_EB' | 'SEVENTH_SUS4' | 'BHE_BILL_COUNTER' = isLeadPosition ? 'DROP_EB' : 'SEVENTH_SUS4';
-          if (s.currentChapter === 15 && isLeadPosition) {
-            chord = 'BHE_BILL_COUNTER';
-          }
-          const intensity = Math.min(1.0, 0.6 + seismicPulse * 0.4);
-          this.onAcousticStrum(chord, s.currentBay, s.currentChapter, intensity);
-        }
-      } else {
-        s.isAcousticStrumTriggered = false;
+      if (isLeadPosition && this.simTime - this.lastStrumTime >= this.strumMinInterval) {
+        // 第 16 面压轴旗舰 (chapter 15)：天地银行一万贯兑换券 → 点钞机飞速过钞声
+        const chord: 'DROP_EB' | 'SEVENTH_SUS4' | 'BHE_BILL_COUNTER' =
+          s.currentChapter === 15 ? 'BHE_BILL_COUNTER' : 'DROP_EB';
+        this.fireStrum(chord, 0.7);
       }
+    }
+  }
+
+  /** 统一击发出口：置瞬态标志并回调（供地脉击发与周天巡礼共用）。 */
+  private fireStrum(chord: 'DROP_EB' | 'SEVENTH_SUS4' | 'BHE_BILL_COUNTER', intensity: number): void {
+    const s = this.state;
+    s.isAcousticStrumTriggered = true;
+    this.lastStrumTime = this.simTime;
+    if (this.onAcousticStrum) {
+      this.onAcousticStrum(chord, s.currentBay, s.currentChapter, intensity);
     }
   }
 

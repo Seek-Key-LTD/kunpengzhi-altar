@@ -36,6 +36,15 @@ export class AltarWaterLiftEngine {
   readonly strokeLimit: number; // 半行程极限 (m)
   readonly CdAp: number;        // 索内通量节流常数
   readonly gammaAir: number;    // 微小气阻 (N·s/m)
+  /**
+   * 神簧反冲速度 (m/s)。
+   *
+   * RFC-007 §3.2「非线性神簧接触力」/ §4「索内动量交换反冲项 F_recoil」的生效形式：
+   * 顶/底死点时把系统推回中点方向。原实现丢了这一项，于是双体振子跑到顶死点被
+   * Duffing 神簧与重力顶住后**卡死**（只相变 1 次，永不复位），违背「振子」本义。
+   * 这里按文档补回反冲，使死点相变成为周期事件。
+   */
+  readonly recoilSpeed: number;
 
   public state: WaterLadderState;
   public onPhaseTransition?: WaterLiftPhaseCallback;
@@ -48,6 +57,7 @@ export class AltarWaterLiftEngine {
     height?: number;
     bucketMass?: number;
     initialWater?: number;
+    recoilSpeed?: number;
   }) {
     this.H = options?.height ?? 7.0;
     this.m0 = options?.bucketMass ?? 5.0;
@@ -58,6 +68,7 @@ export class AltarWaterLiftEngine {
     this.strokeLimit = this.H / 2.0; // 3.5m
     this.CdAp = 0.00045;
     this.gammaAir = 0.05;
+    this.recoilSpeed = options?.recoilSpeed ?? 3.4; // 整定到 RFC §6：半周期 T/2 ≈ 2.00s
 
     const initWater = options?.initialWater ?? 10.0;
     const initialZ = 0.05; // 引入微扰打破死点随遇平衡
@@ -163,6 +174,9 @@ export class AltarWaterLiftEngine {
         this.topTriggeredA = true;
         this.topTriggeredB = false;
 
+        // 神簧反冲（RFC §3.2/§4）：顶死点 → 朝中点（-z）注入反向速度脉冲
+        s.v = -this.recoilSpeed;
+
         if (this.onPhaseTransition) {
           this.onPhaseTransition('A', skimmed, 'HUANG_ZHONG');
         }
@@ -177,6 +191,9 @@ export class AltarWaterLiftEngine {
         s.lastSkimmed = skimmed;
         this.topTriggeredB = true;
         this.topTriggeredA = false;
+
+        // 神簧反冲（RFC §3.2/§4）：底死点 → 朝中点（+z）注入反向速度脉冲
+        s.v = this.recoilSpeed;
 
         if (this.onPhaseTransition) {
           this.onPhaseTransition('B', skimmed, 'LIN_ZHONG');

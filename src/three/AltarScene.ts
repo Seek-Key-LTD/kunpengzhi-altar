@@ -142,7 +142,9 @@ export class AltarScene {
   /** 北坡双桶撞簧 → 走马灯的地脉震颤 [0,1]：由 waterLift.onPhaseTransition 注入、逐帧衰减 */
   private waterLiftSeismic = 0;
   private maglevAnnounced = false;
-  private maglevStrumAnnounced = false;
+  /** QA 节奏日志上限：相变/击发各打前 8 条以证明「周期发生」，之后静默避免刷屏 */
+  private waterLiftPhaseLogCount = 0;
+  private maglevStrumLogCount = 0;
   private currentProgress = 1;
   private isAutoPatrol = false;
 
@@ -226,8 +228,8 @@ export class AltarScene {
     // RFC-008 声学接线：走马灯声学击发统一走既有 triggerFountainPulse()，不新造音频 API
     this.maglev.onAcousticStrum = (chord, bay, chapter) => {
       altarAudio.triggerFountainPulse();
-      if (!this.maglevStrumAnnounced || this.waterLiftSeismic > 0.4) {
-        this.maglevStrumAnnounced = true;
+      if (this.maglevStrumLogCount < 8) {
+        this.maglevStrumLogCount++;
         console.log(`[走马灯] 声学击发 chord=${chord} bay=${bay} chapter=${chapter}`);
       }
     };
@@ -712,10 +714,13 @@ export class AltarScene {
       // RFC-007 → RFC-008 联动：双桶撞死点即给外环走马灯一次地脉冲击（0..1），
       // 由 animate 第 9b 段逐帧衰减后喂给 maglev.update(dt, seismic)。
       this.waterLiftSeismic = THREE.MathUtils.clamp(massSkimmed, 0, 1);
-      console.log(
-        `[水梯] 死点相变 high=${highBucket} skim=${massSkimmed.toFixed(3)}kg ` +
-          `tone=${tone} z=${this.waterLift.state.z.toFixed(3)}`
-      );
+      if (this.waterLiftPhaseLogCount < 8) {
+        this.waterLiftPhaseLogCount++;
+        console.log(
+          `[水梯] 死点相变 #${this.waterLiftPhaseLogCount} high=${highBucket} ` +
+            `skim=${massSkimmed.toFixed(3)}kg tone=${tone} z=${this.waterLift.state.z.toFixed(3)}`
+        );
+      }
     };
   }
 
