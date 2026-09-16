@@ -121,6 +121,42 @@ class AltarAudioEngine {
     this.padSynth?.triggerAttackRelease(['D2', 'A2', 'E3'], '2n', now);
     this.waterNoise?.triggerAttack(now);
   }
+
+  /**
+   * 拆掉这一轮仪式的全部乐器。
+   *
+   * AltarScene.destroy() 会调用它：Tone.js 的 AudioNode 不会因为对象被 GC
+   * 而自动断开，热更新十几轮之后就是一堆还连着 destination 的悬挂节点。
+   * 拆完之后 isInitialized 归 false，下次 init() 会重新造一套。
+   */
+  public dispose() {
+    if (!this.isInitialized) return;
+
+    [this.bellSynth, this.plucker, this.padSynth, this.waterNoise].forEach((synth) => {
+      try {
+        synth?.dispose();
+      } catch (err) {
+        console.warn('音频节点释放失败：', err);
+      }
+    });
+
+    try {
+      this.delay?.dispose();
+      this.lowpass?.dispose();
+      this.reverb?.dispose();
+    } catch (err) {
+      console.warn('音频效果链释放失败：', err);
+    }
+
+    this.bellSynth = null;
+    this.plucker = null;
+    this.padSynth = null;
+    this.waterNoise = null;
+    this.reverb = null;
+    this.delay = null;
+    this.lowpass = null;
+    this.isInitialized = false;
+  }
 }
 
 export const altarAudio = new AltarAudioEngine();

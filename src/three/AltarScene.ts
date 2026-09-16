@@ -16,6 +16,12 @@ import {
   SPIRAL_SLOPE
 } from '../data/altarGeometry';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { ImperialSealObject } from './relic/ImperialSealObject';
+import { SealStampDecal } from './relic/SealStampDecal';
+import { SealCameraRig } from './relic/SealCameraRig';
+import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
+import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
+import { altarAudio } from '../audio/altarAudio';
 
 export class AltarScene {
   private container: HTMLElement;
@@ -71,6 +77,12 @@ export class AltarScene {
 
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
+
+  // 玉玺子系统（器物：不占格、不发音、不入座次表）
+  private relic: ImperialSealObject | null = null;
+  private relicDecal: SealStampDecal | null = null;
+  private relicRig: SealCameraRig | null = null;
+  private onRelicSelect?: (relicId: string) => void;
 
   // State
   private events: SpiralEvent[] = [];
@@ -172,6 +184,9 @@ export class AltarScene {
     this.buildWujiFountain();
     this.buildStarships();
     this.buildSurroundingAtmosphere();
+
+    // 6b. 传国玉玺：悬浮玺台（器物，与 49 席完全隔离）
+    this.mountRelic();
 
     // 7. Event listeners
     window.addEventListener('resize', this.onWindowResize);
@@ -1264,6 +1279,15 @@ export class AltarScene {
         return;
       }
     }
+
+    // 4. 玉玺拾取骨架（器物不是席位：不进 49 席、不发音、不入座次表）
+    if (this.relic) {
+      const relicHits = this.raycaster.intersectObjects(this.relic.pickables(), true);
+      if (relicHits.length > 0) {
+        this.relic.handlePick();
+        this.onRelicSelect?.('imperial_seal');
+      }
+    }
   };
 
   public setActiveSeat(seatId: number) {
@@ -1571,21 +1595,231 @@ export class AltarScene {
       }
     }
 
+    // 10. 玉玺：自转 + 呼吸 + 形态状态机（器物，不占席、不发音、不入座次表）
+    if (this.relic) {
+      this.relic.update(dt, elapsedTime);
+      this.relicDecal?.update(dt);
+      this.relicRig?.update(dt);
+    }
+
     this.renderer.render(this.scene, this.camera);
   };
 
+  // ── 传国玉玺（T03 接线，只此一段，不碰祭坛其余部分）────────────────
+
+  /**
+   * 挂载玉玺：悬浮于坛心正上方 PYRAMID_TOP + 2.2（= SEAL_HOVER_Y = 12.7）处。
+   * 当前是 30 分钟自动播放、默认 guest，所以先保证它**自动可见、自动展示**：
+   * 缓慢自转 + 呼吸浮动 + 自带柔光。交互留给导演/认证路由去开。
+   */
+  public mountRelic(): void {
+    if (this.relic) return;
+
+    const decal = new SealStampDecal();
+    this.scene.add(decal.object3D);
+    this.relicDecal = decal;
+
+    const seal: ImperialSealObject = new ImperialSealObject({
+      // 拓印触地：朱砂印痕落在坛体西侧台基（PYRAMID_HALF 之外，不被中空方锥遮挡）
+      onStamp: () =>
+        decal.stamp(
+          new THREE.Vector3(SEAL_STAMP.home.x, SEAL_STAMP.home.y, SEAL_STAMP.home.z),
+          seal.getEra()
+        )
+    });
+    seal.object3D.position.set(0, SEAL_HOVER_Y, 0);
+    this.scene.add(seal.object3D);
+    this.relic = seal;
+
+    this.relicRig = new SealCameraRig({
+      camera: this.camera,
+      controlsTarget: this.controls.target
+    });
+  }
+
+  /** 玉玺形态：normal（合） / exploded（拆解） / stamping（拓印） */
+  public setSealMode(mode: SealMode): void {
+    this.relic?.setMode(mode);
+    this.relicRig?.focusMode(mode);
+  }
+
+  /** 断代层过滤：秦 → 汉新 → 魏晋十六国 → 辽金 */
+  public setSealEra(era: SealEra): void {
+    this.relic?.setEra(era);
+  }
+
+  /** 推近到悬浮玺台（导演/认证路由用） */
+  public focusRelic(): void {
+    this.relicRig?.focus('overview');
+  }
+
+  /** 拾取回调登记（骨架：不改动 role/guest 判定） */
+  public setOnRelicSelect(callback?: (relicId: string) => void): void {
+    this.onRelicSelect = callback;
+  }
+
+  /** 玉玺运行时状态（无席位语义，可安全上报） */
+  public getRelicState(): ImperialSealState | null {
+    return this.relic?.getState() ?? null;
+  }
+
+  private disposeRelic(): void {
+    if (this.relic) {
+      this.scene.remove(this.relic.object3D);
+      this.relic.dispose();
+      this.relic = null;
+    }
+    if (this.relicDecal) {
+      this.scene.remove(this.relicDecal.object3D);
+      this.relicDecal.dispose();
+      this.relicDecal = null;
+    }
+    this.relicRig?.dispose();
+    this.relicRig = null;
+    this.onRelicSelect = undefined;
+  }
+
+  /**
+   * 彻底释放 —— 按资源类别逐项回收。
+   *
+   * 以前这里只 dispose(renderer)，于是每次热更新都泄漏一整份场景：
+   * 60+ 个 geometry、几十个 material、28 张 CanvasTexture、一个 Rapier
+   * Wasm 世界、以及一个 WebGL context。React.StrictMode 挂载两遍，
+   * 十来次之后浏览器 context 配额打满，就是白屏。现在全部回收。
+   */
   public destroy() {
+    // 0. 玉玺子系统先撤（它的 geometry/material/texture 由第 6 步统一遍历回收）
+    this.disposeRelic();
+
+    // 1. rAF
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
     }
+
+    // 2. 事件监听
     window.removeEventListener('resize', this.onWindowResize);
     this.container.removeEventListener('pointerdown', this.onPointerDown);
-    if (this.numbersPanelEl?.parentElement) {
-      this.numbersPanelEl.parentElement.removeChild(this.numbersPanelEl);
+
+    // 3. 工程 HUD 的 DOM（数表/物理读数只属于验收，不属于公共仪式）
+    [this.numbersPanelEl, this.waterProgressEl].forEach((el) => {
+      if (el?.parentElement) el.parentElement.removeChild(el);
+    });
+    this.numbersPanelEl = null;
+    this.waterProgressEl = null;
+
+    // 4. Rapier：Wasm 侧内存不受 GC 管，必须显式 free()，否则每轮泄漏一个世界
+    if (this.physicsWorld) {
+      this.physicsWorld.free();
+      this.physicsWorld = null;
     }
+    this.physicsReady = false;
+    this.droplets = [];
+
+    // 5. 控制器（内部也挂着 DOM 监听）
+    this.controls.dispose();
+
+    // 6. 场景全量回收：geometry / material / 全部贴图（28 张 CanvasTexture 在此）
+    this.disposeSceneResources();
+
+    // 7. 索引表与回调断开，别把整棵场景图挂在闭包上
+    this.seatPads.clear();
+    this.seatLotusMeshes.clear();
+    this.starshipMeshes.clear();
+    this.lanternPanels.clear();
+    this.interiorStelae.clear();
+    this.waterSpiralPath = [];
+    this.ladderBuckets = [];
+    this.ladderDrops = [];
+    this.bucketPivot = null;
+    this.bucketWater = null;
+    this.riverSurface = null;
+    this.waterParticles = null;
+    this.fountainParticles = null;
+    this.ambientLight = null;
+    this.sunLight = null;
+    this.rimLight = null;
+    this.apexLight = null;
+    this.wujiLight = null;
+    this.onSeatSelect = undefined;
+    this.onLanternSelect = undefined;
+    this.onInteriorPoemSelect = undefined;
+
+    // 8. 渲染器：dispose 之后必须 forceContextLoss()，
+    //    否则 WebGL context 只是被标记为可丢弃，配额不会立刻回来。
+    this.renderer.setRenderTarget(null);
     this.renderer.dispose();
+    this.renderer.forceContextLoss();
     if (this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
     }
+
+    // 9. Tone.js：altarAudio 是这一轮仪式造的乐器，随祭坛一起拆，
+    //    下次入坛由 App 的 begin() 重新 init()。拆不干净就是一堆悬挂的 AudioNode。
+    try {
+      altarAudio.dispose();
+    } catch (err) {
+      console.warn('音频资源释放失败（不影响场景释放）：', err);
+    }
+  }
+
+  /**
+   * 遍历场景，按类别回收：
+   *   · geometry（共享几何用 Set 去重，不会重复 dispose）
+   *   · material，以及 material 上挂着的**每一张**贴图（CanvasTexture 在这里）
+   *   · 光源阴影贴图（独立 RenderTarget，dispose(material) 不会带走）
+   *   · 场景级 background / environment 贴图
+   */
+  private disposeSceneResources(): void {
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    const textures = new Set<THREE.Texture>();
+
+    const collectMaterial = (material: THREE.Material) => {
+      materials.add(material);
+      // 贴图挂在材质实例的自有属性上（map / normalMap / alphaMap / sheenColorMap …）
+      const record = material as unknown as Record<string, unknown>;
+      Object.keys(record).forEach((key) => {
+        const value = record[key];
+        if (value && typeof value === 'object' && (value as THREE.Texture).isTexture) {
+          textures.add(value as THREE.Texture);
+        }
+      });
+      // ShaderMaterial 的贴图藏在 uniforms 里
+      const uniforms = (material as THREE.ShaderMaterial).uniforms;
+      if (uniforms) {
+        Object.values(uniforms).forEach((uniform) => {
+          const value = uniform?.value as THREE.Texture | undefined;
+          if (value && value.isTexture) textures.add(value);
+        });
+      }
+    };
+
+    this.scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.geometry) geometries.add(mesh.geometry);
+
+      const material = (obj as unknown as { material?: THREE.Material | THREE.Material[] }).material;
+      if (Array.isArray(material)) material.forEach(collectMaterial);
+      else if (material) collectMaterial(material);
+
+      const light = obj as THREE.Light;
+      if (light.isLight && light.shadow) {
+        light.shadow.map?.dispose();
+      }
+    });
+
+    [this.scene.background, this.scene.environment].forEach((slot) => {
+      if (slot && (slot as THREE.Texture).isTexture) textures.add(slot as THREE.Texture);
+    });
+
+    geometries.forEach((geometry) => geometry.dispose());
+    materials.forEach((material) => material.dispose());
+    textures.forEach((texture) => texture.dispose());
+
+    this.scene.clear();
+    this.scene.background = null;
+    this.scene.environment = null;
+    this.scene.fog = null;
   }
 }
