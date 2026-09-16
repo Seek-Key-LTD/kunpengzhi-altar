@@ -7,6 +7,7 @@ import {
   AltarCapabilities,
   GUEST_ROUTINES,
   GUEST_ROUTINE_SECONDS,
+  GUEST_ORBIT,
   ROLE_CAPABILITIES,
   CAMERA_SAFETY_BY_ROLE,
   CAMERA_DISTANCE_BY_ROLE
@@ -110,6 +111,8 @@ export class AltarScene {
   /** 游客 routine 播放状态 */
   private guestRoutineIndex = 0;
   private guestRoutineTimer = 0;
+  /** 游客连续环绕的累加相位（弧度）—— 公共页唯一的镜头运动 */
+  private guestOrbitAngle = Math.PI / 4;
   /** 上一帧的合法相机位（安全边界第 4 条：异常时拉回） */
   private lastSafeCameraPos = new THREE.Vector3(48, 40, 58);
   private onSeatSelect?: (seatId: number) => void;
@@ -1355,6 +1358,10 @@ export class AltarScene {
     this.ritualMode = true;
     this.ritualLitSeats = Math.max(0, Math.min(49, litSeats));
     this.isAutoPatrol = false;
+    // 游客 routine 的残留倒计时归零：进坛后不再有任何机位硬切。
+    // 公共页唯一的镜头运动是 animate() 第 0 段的连续环绕（不受 ritualMode 影响）。
+    this.guestRoutineTimer = 0;
+    this.guestRoutineIndex = 0;
     this.controls.enabled = false;
     this.scene.background = new THREE.Color(0x000000);
     const isDark = phase === 'abyss' || phase === 'silence';
@@ -1477,7 +1484,10 @@ export class AltarScene {
     if (isGuest) {
       this.guestRoutineIndex = 0;
       this.guestRoutineTimer = 0;
-      this.setCameraMode(GUEST_ROUTINES[0]);
+      // 游客机位 = 一段连续慢速环绕。起始相位取东南对角（与相机初值 (48,40,58)
+      // 大致同向），并立即落到轨道上，避免首帧跳变。
+      this.guestOrbitAngle = Math.PI / 4;
+      this.applyGuestOrbit();
     } else {
       // 导演/认证自己掌机，游客 routine 不许抢镜头
       this.isAutoPatrol = false;
@@ -1514,6 +1524,11 @@ export class AltarScene {
     } else if (mode === 'orbit') {
       this.targetCameraPos.set(48, 40, 58);
       this.targetControlsTarget.set(0, 6, 0);
+    } else if (mode === 'patrol') {
+      // 水道巡礼：基线机位 —— 坛体东南上方的外部视角，绝不入壳。
+      // 逐席的真实目标由 setActiveSeat() 在该模式下刷新（见其上 patrol 分支）。
+      this.targetCameraPos.set(46, 24, 46);
+      this.targetControlsTarget.set(0, 5, 0);
     } else if (mode === 'relic') {
       // 玉玺机位：数值的唯一真源在玉玺 rig（sealSpec.SEAL_CAMERA_POSES），
       // 这里不复制一份常量，避免两边漂移。rig 未挂载时退回直算。
@@ -1526,6 +1541,24 @@ export class AltarScene {
         this.targetControlsTarget.set(0, SEAL_HOVER_Y, 0);
       }
     }
+  }
+
+  /**
+   * 把游客相机推到环绕轨道上（逐帧调用）。
+   *
+   * 直接写 camera.position + controls.target，并把 isCameraTransitioning 置 false ——
+   * 保证永远是**连续**的慢速运动，绝不会 lerp 跳变到某个新目标。半径 57 远大于
+   * 坛体半宽，相机永远在壳外翱翔，绝不入壳。
+   */
+  private applyGuestOrbit(): void {
+    const a = this.guestOrbitAngle;
+    this.camera.position.set(
+      Math.sin(a) * GUEST_ORBIT.radius,
+      GUEST_ORBIT.height,
+      Math.cos(a) * GUEST_ORBIT.radius
+    );
+    this.controls.target.set(0, GUEST_ORBIT.lookAtY, 0);
+    this.isCameraTransitioning = false;
   }
 
   public setAutoPatrol(patrol: boolean) {
@@ -1542,14 +1575,24 @@ export class AltarScene {
     const dt = Math.min(0.05, elapsedTime - this.lastElapsed);
     this.lastElapsed = elapsedTime;
 
-    // 0. 游客：三条 routine 循环自动播放，禁手动
-    if (this.role === 'guest') {
+    // 0. 游客机位 = 一段连续的慢速外部环绕（公共页唯一的镜头运动）。
+    //    (a) 旧的 routine 循环（cinematic/yin/patrol 每 18s 硬切）已废止：
+    //        这里仅保留「建立镜头」的计时器，并**收紧为仪式期间停用**
+    //        （`&& !this.ritualMode`），避免残留倒计时进坛后突然再切一次机位。
+    if (this.role === 'guest' && !this.ritualMode) {
       this.guestRoutineTimer += dt;
       if (this.guestRoutineTimer >= GUEST_ROUTINE_SECONDS) {
         this.guestRoutineTimer = 0;
         this.guestRoutineIndex = (this.guestRoutineIndex + 1) % GUEST_ROUTINES.length;
         this.setCameraMode(GUEST_ROUTINES[this.guestRoutineIndex]);
       }
+    }
+
+    //    (b) 连续环绕：逐帧平滑推进，绝不 jump、绝不入壳；进坛后（naming 等幕次）
+    //        由它继续接管镜头。约 5 分钟转一圈。
+    if (this.role === 'guest') {
+      this.guestOrbitAngle += GUEST_ORBIT.angularSpeed * dt;
+      this.applyGuestOrbit();
     }
 
     // 1. Smooth Camera Transition

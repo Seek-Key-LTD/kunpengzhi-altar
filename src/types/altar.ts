@@ -145,10 +145,40 @@ export const CAMERA_DISTANCE_BY_ROLE: Record<AltarRole, { min: number; max: numb
   director: { min: 0.25, max: 400 }
 };
 
-/** 游客的三条固定 routine */
-export const GUEST_ROUTINES: CameraMode[] = ['cinematic', 'yin', 'patrol'];
+/**
+ * 游客的 routine。
+ *
+ * ⚠️ 曾经的 `['cinematic','yin','patrol']` 每 18 秒硬切一次，两处致命：
+ *   1. `'yin'` 把镜头送进中空方锥的下层空腔（目标 (0,1.8,2.5)）—— 公共页出现
+ *      「摄像机钻进立方体」的物理穿模；且 y=1.8 高于 guest 的 minY=0.3，安全边界
+ *      兜不住它。空腔视角是**导演专属**（看青玉碑用），已从游客档移除。
+ *   2. `'patrol'` 在 setCameraMode 里没有对应分支 → 目标不更新，是个静默什么都不干
+ *      的死模式，已从游客档移除（并为 setCameraMode('patrol') 补上真实目标）。
+ *
+ * 现在只剩一个「建立镜头」；公共页真正的镜头运动是 GUEST_ORBIT 那段连续环绕
+ * （见 AltarScene.animate 第 0 段）—— 不再有任何机位硬切。
+ */
+export const GUEST_ROUTINES: CameraMode[] = ['cinematic'];
 
 /** 每条 routine 的播放时长（秒） */
 export const GUEST_ROUTINE_SECONDS = 18;
+
+/**
+ * 游客环绕机位 —— 公共页**唯一**的镜头运动。
+ *
+ * 一段连续的慢速外部环绕：逐帧平滑推进，绝不 lerp 跳变到新目标、绝不入壳
+ * （半径 57 远大于坛体半宽，相机始终在壳外）。进坛后（naming 等幕次）由它继续
+ * 接管镜头，不再调用 setCameraMode 切换。
+ */
+export const GUEST_ORBIT = {
+  /** 环绕半径（坛心正投影距离；取值区间 55~60） */
+  radius: 57,
+  /** 环绕高度（取值区间 26~40） */
+  height: 33,
+  /** 角速度（弧度/秒）：2π / 300 —— 约 5 分钟转一圈 */
+  angularSpeed: (Math.PI * 2) / 300,
+  /** 注视点高度（坛心略偏上） */
+  lookAtY: 6
+} as const;
 
 export type AltarCycleState = 'accumulating' | 'overturning' | 'cascading' | 'recycling' | 'resetting';
