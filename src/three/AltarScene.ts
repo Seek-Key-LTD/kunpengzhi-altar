@@ -84,6 +84,9 @@ export class AltarScene {
   private relicRig: SealCameraRig | null = null;
   private onRelicSelect?: (relicId: string) => void;
 
+  /** 已销毁标记：拦住异步初始化在 destroy() 之后继续造资源 */
+  private destroyed = false;
+
   // State
   private events: SpiralEvent[] = [];
   private activeSeatId: number | null = 1;
@@ -1041,6 +1044,12 @@ export class AltarScene {
   private async initRapierPhysics() {
     try {
       await RAPIER.init();
+
+      // ⚠️ RAPIER.init() 是异步的：StrictMode 双挂载下，等它 resolve 时
+      //    这一轮祭坛可能已经被 destroy() 拆掉了。此时再造 world，
+      //    就造出一个再也没人 free() 的孤儿世界 —— 必须拦在这。
+      if (this.destroyed) return;
+
       const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
       this.physicsWorld = world;
 
@@ -1688,7 +1697,11 @@ export class AltarScene {
    * 十来次之后浏览器 context 配额打满，就是白屏。现在全部回收。
    */
   public destroy() {
-    // 0. 玉玺子系统先撤（它的 geometry/material/texture 由第 6 步统一遍历回收）
+    // 0. 立销毁标记 + 先撤玉玺子系统
+    //    标记必须先立：异步的 Rapier 初始化 resolve 回来时看到它就自己退场，
+    //    否则会造出一个再也没人 free() 的孤儿 world。
+    //    玉玺的 geometry/material/texture 由第 6 步统一遍历回收。
+    this.destroyed = true;
     this.disposeRelic();
 
     // 1. rAF
@@ -1710,9 +1723,15 @@ export class AltarScene {
 
     // 4. Rapier：Wasm 侧内存不受 GC 管，必须显式 free()，否则每轮泄漏一个世界
     if (this.physicsWorld) {
-      this.physicsWorld.free();
+      try {
+        this.physicsWorld.free();
+      } catch (err) {
+        console.warn('Rapier world 释放失败（不影响其余资源回收）：', err);
+      }
       this.physicsWorld = null;
     }
+    // 置空 + 落闸双保险：updatePhysics() 开头就是
+    // `if (!this.physicsReady || !this.physicsWorld) return;`，free 之后不会再 step。
     this.physicsReady = false;
     this.droplets = [];
 
