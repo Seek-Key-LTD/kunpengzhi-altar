@@ -195,8 +195,9 @@ export class AltarScene {
     this.initLighting();
     this.buildPlinthAndRiver();
     this.buildCubePyramidAndSeats();
-    this.buildInnerStelaeRing();
-    this.buildOuter16TeaLanterns();
+    // 诗词展示层后置：先验收阳 Cube、阴腔与蝎子楔水路，避免牌子遮蔽结构。
+    // this.buildInnerStelaeRing();
+    // this.buildOuter16TeaLanterns();
     this.buildWujiFountain();
     this.buildStarships();
     this.buildSurroundingAtmosphere();
@@ -632,42 +633,9 @@ export class AltarScene {
       group.add(portal);
     });
 
-    // 每一段洞壁只留一句：是走进祭坛以后才读到的诗，不抢外部 7×7 的结构叙事。
-    axis.forEach((event, index) => {
-      const poem = SEASON1_POEMS[index % SEASON1_POEMS.length];
-      const side = index % 2 === 0 ? 1 : -1;
-      const panel = this.createRabbitPoemPanel(`${poem.seasonId}  ${poem.opening.text[0]}`);
-      panel.position.set(event!.grid_x * CELL, tunnelY, side * (BRICK / 2 - 0.075));
-      panel.rotation.y = side > 0 ? Math.PI : 0;
-      group.add(panel);
-    });
+    // Rabbit Hole 的诗句同样后置；此时只保留可验收的空腔与管路。
 
     this.hollowInteriorGroup.add(group);
-  }
-
-  private createRabbitPoemPanel(text: string): THREE.Mesh {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 180;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = 'rgba(5, 15, 29, 0.94)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#c89032';
-    ctx.lineWidth = 5;
-    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-    ctx.fillStyle = '#f6dfaa';
-    ctx.font = '34px "Noto Serif SC", serif';
-    ctx.textAlign = 'center';
-    const clipped = text.length > 28 ? `${text.slice(0, 27)}…` : text;
-    ctx.fillText(clipped, canvas.width / 2, 108);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    const panel = new THREE.Mesh(
-      new THREE.PlaneGeometry(CELL * 0.82, 0.46),
-      new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide })
-    );
-    panel.userData = { type: 'rabbit_hole_poem' };
-    return panel;
   }
 
   /**
@@ -677,7 +645,8 @@ export class AltarScene {
    * 每座碑的高度取它那根柱子的台面高程，碑面朝外。
    * （结构改成 49 根实心砖柱之后已经没有内腔了，碑改挂外侧；若以后恢复空腔再搬回去。）
    */
-  private buildInnerStelaeRing() {
+  /** 后置展示层：结构验收通过后才由显式调用启用。 */
+  public buildInnerStelaeRing() {
     const outer = this.events
       .filter((ev) => Math.max(Math.abs(ev.grid_x), Math.abs(ev.grid_z)) === 3)
       .sort((a, b) => a.seat_id - b.seat_id);
@@ -784,7 +753,8 @@ export class AltarScene {
     return sprite;
   }
 
-  private buildOuter16TeaLanterns() {
+  /** 后置展示层：结构验收通过后才由显式调用启用。 */
+  public buildOuter16TeaLanterns() {
     // 16-Faceted Rotating Lantern Pavilion (十六面转经走马大茶灯回廊)
     const lanternRadius = 23.5;
     const lanternHeight = 4.6;
