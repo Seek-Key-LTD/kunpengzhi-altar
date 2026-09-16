@@ -1,12 +1,21 @@
 import React from 'react';
 import { X, Shield, Droplets, BookOpen, AlertCircle, Sparkles } from 'lucide-react';
+import type { SealEraLayer } from '../types/relic';
 
 interface ComplianceModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * 玉玺断代的史事注脚。
+   *
+   * ⚠️ 展示层不得自动承载史学论断 —— 这一段**只在被主动唤出时**才渲染
+   * （director 点「注脚」按钮），公共画面里永远不会自己冒出来。
+   * 不传则不渲染，公共入口的合规弹窗与原来一字不差。
+   */
+  relicEra?: SealEraLayer | null;
 }
 
-export const ComplianceModal: React.FC<ComplianceModalProps> = ({ isOpen, onClose }) => {
+export const ComplianceModal: React.FC<ComplianceModalProps> = ({ isOpen, onClose, relicEra }) => {
   if (!isOpen) return null;
 
   return (
@@ -93,6 +102,30 @@ export const ComplianceModal: React.FC<ComplianceModalProps> = ({ isOpen, onClos
               测试网见证仅作为数字凭证，不具备法币或主网资产价值。
             </p>
           </div>
+          {relicEra && (
+            <div className="bg-emerald-950/30 p-4 rounded-xl border border-emerald-500/30 space-y-2">
+              <h3 className="text-sm font-bold text-emerald-300 flex items-center space-x-1.5 font-serif">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <span>五、 传国玉玺 · 断代注脚（{relicEra.dynasty}）</span>
+              </h3>
+              <p className="text-slate-400">
+                · 书体：<span className="font-mono text-emerald-300">{relicEra.script}</span>
+                ｜ 刻法：<span className="font-mono text-emerald-300">{relicEra.technique}</span>
+                {relicEra.text && (
+                  <>
+                    <br />· 刻痕正文：
+                    <span className="font-serif text-emerald-200">「{relicEra.text}」</span>
+                  </>
+                )}
+                <br />· {relicEra.note}
+              </p>
+              <p className="text-emerald-100/70 text-[11px] leading-relaxed border-t border-emerald-500/20 pt-2">
+                本段为节目世界观内的器物叙事，属创作与讲解用途，
+                <strong>不构成任何考古、鉴定或史学定论</strong>；
+                由导演主动唤出，不自动进入公共展示画面。
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

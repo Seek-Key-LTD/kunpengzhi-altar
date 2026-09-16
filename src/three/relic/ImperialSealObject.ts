@@ -320,6 +320,9 @@ export class ImperialSealObject {
   private stampFired = false;
   private stampCount = 0;
   private autoSpin = true;
+  private selected = false;
+  /** 手动拆解进度覆盖值（null = 交给 mode 自动过渡） */
+  private explodedOverride: number | null = null;
   private transmissionEnabled: boolean = SEAL_TRANSMISSION_PRESET.enabled;
   private glbLoaded = false;
   private dracoLoader: DRACOLoader | null = null;
@@ -700,11 +703,34 @@ export class ImperialSealObject {
   public setMode(mode: SealMode): void {
     if (this.mode === mode) return;
     this.mode = mode;
+    // 一旦由 UI 明确切形态，就交回自动过渡，清掉手动进度覆盖
+    this.explodedOverride = null;
     if (mode === 'stamping') {
       this.stampProgress = 0;
       this.stampFired = false;
     }
     this.onModeChange?.(mode);
+  }
+
+  /**
+   * 导演手动拖拆解进度（0 合 → 1 全拆）。
+   * 拖到 0 视为"合"，拖离 0 视为"拆"，让状态机读数与 UI 一致。
+   */
+  public setExplodedProgress(progress: number): void {
+    const clamped = Math.min(1, Math.max(0, progress));
+    this.explodedOverride = clamped;
+    this.explodedProgress = clamped;
+    if (clamped > 0 && this.mode !== 'exploded') this.setMode('exploded');
+    else if (clamped === 0 && this.mode === 'exploded') this.setMode('normal');
+  }
+
+  /** 选中高亮：只提亮供奉光，不换材质、不改几何（可被反复调用） */
+  public setSelected(selected: boolean): void {
+    this.selected = selected;
+  }
+
+  public isSelected(): boolean {
+    return this.selected;
   }
 
   public getMode(): SealMode {
@@ -777,14 +803,16 @@ export class ImperialSealObject {
   }
 
   /**
-   * 拾取骨架：normal → exploded → stamping → normal。
-   * 注意：这里只切形态，**不发音、不落座次** —— 玉玺不是席位。
+   * 拾取骨架：**只做选中**（高亮），**不改形态**。
+   *
+   * ⚠️ 早期版本这里会 normal → exploded → stamping 循环切形态，
+   *    但圣物形态不能被一次误触改掉 —— 形态变更一律走 UI（SealPanel）。
+   *    所以现在这里只置选中态，返回当前形态供调用方读。
+   *    推近机位由祭坛的 focusRelic() 负责，器物自己不碰相机。
    */
   public handlePick(): SealMode {
-    const next: SealMode =
-      this.mode === 'normal' ? 'exploded' : this.mode === 'exploded' ? 'stamping' : 'normal';
-    this.setMode(next);
-    return next;
+    this.selected = true;
+    return this.mode;
   }
 
   /** 当前三角面数（只数可见网格），用于卡 150K 预算 */
@@ -821,6 +849,7 @@ export class ImperialSealObject {
       lod: this.lod,
       transmission_enabled: this.transmissionEnabled,
       glb_loaded: this.glbLoaded,
+      selected: this.selected,
       visible: this.root.visible
     };
   }
@@ -849,12 +878,17 @@ export class ImperialSealObject {
     this.root.position.y = SEAL_HOVER_Y + breath - drop;
 
     // 3. 拆解进度（拆解 1.8s 走完，返回同理）
-    const targetExploded = this.mode === 'exploded' ? 1 : 0;
-    const explodeStep = delta / SEAL_EXPLODE.duration;
-    if (this.explodedProgress < targetExploded) {
-      this.explodedProgress = Math.min(targetExploded, this.explodedProgress + explodeStep);
-    } else if (this.explodedProgress > targetExploded) {
-      this.explodedProgress = Math.max(targetExploded, this.explodedProgress - explodeStep);
+    if (this.explodedOverride !== null) {
+      // 手动覆盖：导演拖到哪就是哪
+      this.explodedProgress = this.explodedOverride;
+    } else {
+      const targetExploded = this.mode === 'exploded' ? 1 : 0;
+      const explodeStep = delta / SEAL_EXPLODE.duration;
+      if (this.explodedProgress < targetExploded) {
+        this.explodedProgress = Math.min(targetExploded, this.explodedProgress + explodeStep);
+      } else if (this.explodedProgress > targetExploded) {
+        this.explodedProgress = Math.max(targetExploded, this.explodedProgress - explodeStep);
+      }
     }
     this.applyExploded(this.explodedProgress);
 
@@ -873,9 +907,11 @@ export class ImperialSealObject {
       }
     }
 
-    // 5. 柔光随呼吸轻微起伏，别闪
+    // 5. 柔光随呼吸轻微起伏，别闪；选中时提亮一档（唯一的选中反馈）
     if (this.sealLight) {
-      this.sealLight.intensity = SEAL_LIGHT.intensity * (0.9 + Math.sin(elapsed * 0.8) * 0.1);
+      const breathLight = 0.9 + Math.sin(elapsed * 0.8) * 0.1;
+      this.sealLight.intensity =
+        SEAL_LIGHT.intensity * breathLight * (this.selected ? 1.6 : 1);
     }
   }
 

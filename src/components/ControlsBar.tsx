@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, ChevronLeft, ChevronRight, Eye, RefreshCw, Compass, ArrowUpCircle, BookOpen, ScrollText } from 'lucide-react';
+import { Play, Pause, ChevronLeft, ChevronRight, Eye, RefreshCw, Compass, ArrowUpCircle, BookOpen, ScrollText, Gem } from 'lucide-react';
 import { CameraMode } from '../types/altar';
 
 interface ControlsBarProps {
@@ -31,6 +31,10 @@ export const ControlsBar: React.FC<ControlsBarProps> = ({
     { id: 'patrol', label: '水道巡礼', icon: <Eye className="w-3.5 h-3.5" /> },
     { id: 'topdown', label: '俯视九宫', icon: <ArrowUpCircle className="w-3.5 h-3.5" /> },
     { id: 'fountain', label: '泉眼无极', icon: <RefreshCw className="w-3.5 h-3.5" /> },
+    // 玉玺机位。**只加按钮**：本组件的 props 全是席位语义
+    // （currentSeatId / totalSeats / onSelectSeat），
+    // 玉玺滑块塞进来会污染器物层，所以拆解进度一律交给 SealPanel。
+    { id: 'relic', label: '玉玺', icon: <Gem className="w-3.5 h-3.5" /> },
   ];
 
   return (

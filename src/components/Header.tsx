@@ -4,7 +4,12 @@ import { Volume2, VolumeX, ShieldAlert, Sparkles, Droplets, BookOpen, ScrollText
 interface HeaderProps {
   isMuted: boolean;
   onToggleMute: () => void;
-  onOpenSubmit: () => void;
+  /**
+   * 递交星笺入口。
+   * 星笺提交需要后端（StarPaperModal 本轮不复活），所以这个 prop 改成可选：
+   * **不传就不渲染那个按钮** —— 与其放一个点了没反应的死按钮，不如不放。
+   */
+  onOpenSubmit?: () => void;
   onOpenCompliance: () => void;
   onOpenTeaLanterns: () => void;
   onOpenInteriorPoems: () => void;
@@ -68,13 +73,15 @@ export const Header: React.FC<HeaderProps> = ({
           <span>中空地宫诗词</span>
         </button>
 
-        <button
-          onClick={onOpenSubmit}
-          className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-600/80 to-amber-500/80 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-medium text-xs tracking-wide shadow-md shadow-amber-500/20 transition-all active:scale-95"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>递交星笺</span>
-        </button>
+        {onOpenSubmit && (
+          <button
+            onClick={onOpenSubmit}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-600/80 to-amber-500/80 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-medium text-xs tracking-wide shadow-md shadow-amber-500/20 transition-all active:scale-95"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>递交星笺</span>
+          </button>
+        )}
 
         <button
           onClick={onOpenCompliance}

@@ -4,7 +4,11 @@ import { Music, Radio, Flower2, Rocket, Clock, Layers, Sparkles, AlertCircle } f
 
 interface SeatDetailPanelProps {
   event: SpiralEvent;
-  onOpenSubmit: (seatId: number) => void;
+  /**
+   * 更新星笺入口。星笺写库需要后端（StarPaperModal 本轮不复活），
+   * 故改为可选：**不传就不渲染那个按钮**，不放点了没反应的死按钮。
+   */
+  onOpenSubmit?: (seatId: number) => void;
   onPlaySound: () => void;
 }
 
@@ -136,7 +140,7 @@ export const SeatDetailPanel: React.FC<SeatDetailPanelProps> = ({
             <Music className="w-3.5 h-3.5" />
             <span>试听发声</span>
           </button>
-          {!isReserved && (
+          {!isReserved && onOpenSubmit && (
             <button
               onClick={() => onOpenSubmit(event.seat_id)}
               className="flex-1 py-2 px-3 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-slate-950 text-xs font-bold transition-all shadow-md shadow-amber-500/20"

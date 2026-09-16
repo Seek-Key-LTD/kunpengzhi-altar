@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { SpiralEvent, CameraMode, AltarRole, GUEST_ROUTINES, GUEST_ROUTINE_SECONDS } from '../types/altar';
+import {
+  SpiralEvent,
+  CameraMode,
+  AltarRole,
+  AltarCapabilities,
+  GUEST_ROUTINES,
+  GUEST_ROUTINE_SECONDS,
+  ROLE_CAPABILITIES,
+  CAMERA_SAFETY_BY_ROLE,
+  CAMERA_DISTANCE_BY_ROLE
+} from '../types/altar';
 import { TEA_POEM_16_CHAPTERS } from '../data/tea_poem_16';
 import { SEASON1_POEMS } from '../data/season1_poems';
 import {
@@ -93,6 +103,10 @@ export class AltarScene {
   private cameraMode: CameraMode = 'orbit';
   /** 身份：默认游客。未认证即游客，不是"默认给自由" */
   private role: AltarRole = 'guest';
+  /** 当前身份的能力表 —— 权限判定一律查它，不直接判等角色 */
+  private capabilities: AltarCapabilities = ROLE_CAPABILITIES.guest;
+  /** 当前身份的相机安全边界（游客档与原硬编码同值） */
+  private cameraSafety = CAMERA_SAFETY_BY_ROLE.guest;
   /** 游客 routine 播放状态 */
   private guestRoutineIndex = 0;
   private guestRoutineTimer = 0;
@@ -1234,8 +1248,11 @@ export class AltarScene {
   };
 
   private onPointerDown = (event: MouseEvent) => {
-    // 游客只能看，不能碰
-    if (this.role === 'guest') return;
+    // 能力门控（取代原来的 guest 二值门控）：
+    // 游客一条能力都没有 ⟹ 首行 return，公共入口行为与原来逐字一致；
+    // 认证/导演放行，下面四段再按各自的能力细分。
+    const caps = this.capabilities;
+    if (!caps.freeCamera) return;
 
     // 用户一按鼠标，立刻放弃自动机位过渡，别跟人抢镜头
     this.isCameraTransitioning = false;
@@ -1247,54 +1264,64 @@ export class AltarScene {
     this.raycaster.setFromCamera(this.mouse, this.camera);
     
     // 1. Check Outer Tea Lanterns
-    const lanterns = Array.from(this.lanternPanels.values());
-    const lanternHits = this.raycaster.intersectObjects(lanterns);
-    if (lanternHits.length > 0) {
-      const hit = lanternHits[0].object;
-      const chIdx = hit.userData?.chapterIndex;
-      if (chIdx) {
-        this.focusTeaLantern(chIdx);
-        if (this.onLanternSelect) {
-          this.onLanternSelect(chIdx);
+    if (caps.pickLanterns) {
+      const lanterns = Array.from(this.lanternPanels.values());
+      const lanternHits = this.raycaster.intersectObjects(lanterns);
+      if (lanternHits.length > 0) {
+        const hit = lanternHits[0].object;
+        const chIdx = hit.userData?.chapterIndex;
+        if (chIdx) {
+          this.focusTeaLantern(chIdx);
+          if (this.onLanternSelect) {
+            this.onLanternSelect(chIdx);
+          }
+          return;
         }
-        return;
       }
     }
 
     // 2. Check Interior Stelae
-    const stelae = Array.from(this.interiorStelae.values());
-    const stelaHits = this.raycaster.intersectObjects(stelae);
-    if (stelaHits.length > 0) {
-      const hit = stelaHits[0].object;
-      const sId = hit.userData?.seasonId;
-      if (sId) {
-        this.focusInteriorPoem(sId);
-        if (this.onInteriorPoemSelect) {
-          this.onInteriorPoemSelect(sId);
+    if (caps.pickStelae) {
+      const stelae = Array.from(this.interiorStelae.values());
+      const stelaHits = this.raycaster.intersectObjects(stelae);
+      if (stelaHits.length > 0) {
+        const hit = stelaHits[0].object;
+        const sId = hit.userData?.seasonId;
+        if (sId) {
+          this.focusInteriorPoem(sId);
+          if (this.onInteriorPoemSelect) {
+            this.onInteriorPoemSelect(sId);
+          }
+          return;
         }
-        return;
       }
     }
 
-    // 3. Check Seat Pads
-    const pads = Array.from(this.seatPads.values());
-    const seatHits = this.raycaster.intersectObjects(pads);
-    if (seatHits.length > 0) {
-      const hit = seatHits[0].object;
-      const seatId = hit.userData?.seatId;
-      if (seatId && this.onSeatSelect) {
-        this.onSeatSelect(seatId);
-        this.setActiveSeat(seatId);
-        return;
+    // 3. Check Seat Pads（只读：只聚焦与回调，不写座次表）
+    if (caps.pickSeats) {
+      const pads = Array.from(this.seatPads.values());
+      const seatHits = this.raycaster.intersectObjects(pads);
+      if (seatHits.length > 0) {
+        const hit = seatHits[0].object;
+        const seatId = hit.userData?.seatId;
+        if (seatId && this.onSeatSelect) {
+          this.onSeatSelect(seatId);
+          this.setActiveSeat(seatId);
+          return;
+        }
       }
     }
 
-    // 4. 玉玺拾取骨架（器物不是席位：不进 49 席、不发音、不入座次表）
-    if (this.relic) {
-      const relicHits = this.raycaster.intersectObjects(this.relic.pickables(), true);
-      if (relicHits.length > 0) {
-        this.relic.handlePick();
-        this.onRelicSelect?.('imperial_seal');
+    // 4. 玉玺拾取（器物不是席位：不进 49 席、不发音、不入座次表）
+    //    ⚠️ 命中后**只做选中**（高亮 + 推近），**不改形态**。
+    //      形态变更一律走 UI（SealPanel）—— 圣物形态不能被一次误触改掉。
+    if (caps.sealStamp || caps.sealExploded) {
+      if (this.relic) {
+        const relicHits = this.raycaster.intersectObjects(this.relic.pickables(), true);
+        if (relicHits.length > 0) {
+          this.selectRelic();
+          this.onRelicSelect?.('imperial_seal');
+        }
       }
     }
   };
@@ -1424,21 +1451,41 @@ export class AltarScene {
     return this.role;
   }
 
-  /** 按当前身份收紧或放开权限 */
+  /**
+   * 按当前身份落能力表。
+   *
+   * 原来是 `isGuest` 二值，现在改成查 ROLE_CAPABILITIES：
+   * 权限判定的唯一真源在 types/altar.ts 那张表里，这里只负责落到
+   * controls / 相机边界 / 自动巡礼上。
+   */
   private applyRole() {
     const isGuest = this.role === 'guest';
+    const caps = ROLE_CAPABILITIES[this.role];
+    this.capabilities = caps;
+    this.cameraSafety = CAMERA_SAFETY_BY_ROLE[this.role];
 
-    // 游客：禁拖拽、禁缩放、禁平移；点击在 onPointerDown 里挡掉
-    this.controls.enabled = !isGuest;
-    this.controls.enableRotate = !isGuest;
-    this.controls.enableZoom = !isGuest;
-    this.controls.enablePan = !isGuest;
+    this.controls.enabled = caps.freeCamera;
+    this.controls.enableRotate = caps.freeCamera;
+    this.controls.enableZoom = caps.freeCamera;
+    this.controls.enablePan = caps.freeCamera;
+
+    // 推拉范围也角色化：玉玺 macro 特写真正卡人的是 minDistance，不是安全边界
+    const distance = CAMERA_DISTANCE_BY_ROLE[this.role];
+    this.controls.minDistance = distance.min;
+    this.controls.maxDistance = distance.max;
 
     if (isGuest) {
       this.guestRoutineIndex = 0;
       this.guestRoutineTimer = 0;
       this.setCameraMode(GUEST_ROUTINES[0]);
+    } else {
+      // 导演/认证自己掌机，游客 routine 不许抢镜头
+      this.isAutoPatrol = false;
     }
+  }
+
+  public getCapabilities(): AltarCapabilities {
+    return this.capabilities;
   }
 
   public setCameraMode(mode: CameraMode) {
@@ -1467,6 +1514,17 @@ export class AltarScene {
     } else if (mode === 'orbit') {
       this.targetCameraPos.set(48, 40, 58);
       this.targetControlsTarget.set(0, 6, 0);
+    } else if (mode === 'relic') {
+      // 玉玺机位：数值的唯一真源在玉玺 rig（sealSpec.SEAL_CAMERA_POSES），
+      // 这里不复制一份常量，避免两边漂移。rig 未挂载时退回直算。
+      const pose = this.relicRig?.getPose('overview');
+      if (pose) {
+        this.targetCameraPos.copy(pose.position);
+        this.targetControlsTarget.copy(pose.target);
+      } else {
+        this.targetCameraPos.set(6.2, SEAL_HOVER_Y + 3.4, 8.6);
+        this.targetControlsTarget.set(0, SEAL_HOVER_Y, 0);
+      }
     }
   }
 
@@ -1505,10 +1563,12 @@ export class AltarScene {
 
     // 1.5 安全边界（见 docs/身份与相机权限规范.md §3.2）
     //     自由度高 = 出错面大；这几条不是限制自由，是防止自由变成故障。
+    //     阈值已角色化（CAMERA_SAFETY_BY_ROLE）：游客档 = 原硬编码 0.3 / 120，
+    //     一个数字都没动；导演档放宽，否则燕尾槽 macro 特写会被误判拉回。
     const p = this.camera.position;
     const finite = Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
-    const tooLow = p.y < 0.3;
-    const tooFar = p.length() > 120;
+    const tooLow = p.y < this.cameraSafety.minY;
+    const tooFar = p.length() > this.cameraSafety.maxRadius;
     if (!finite || tooLow || tooFar) {
       this.camera.position.copy(this.lastSafeCameraPos);
       this.isCameraTransitioning = false;
@@ -1657,9 +1717,28 @@ export class AltarScene {
     this.relic?.setEra(era);
   }
 
-  /** 推近到悬浮玺台（导演/认证路由用） */
+  /** 推近到悬浮玺台（导演/认证路由或点选玉玺时用） */
   public focusRelic(): void {
     this.relicRig?.focus('overview');
+  }
+
+  /**
+   * 玉玺选中：**只高亮 + 推近，不改形态**。
+   * 形态变更（拆解/拓印/断代）一律走 UI，见 SealPanel ——
+   * 圣物形态不能被一次误触改掉，这是硬规矩。
+   */
+  public selectRelic(): void {
+    this.relic?.handlePick(); // 器物侧只置选中态，不改形态
+    this.focusRelic();
+  }
+
+  public clearRelicSelection(): void {
+    this.relic?.setSelected(false);
+  }
+
+  /** 导演手动拖拆解进度（0 合 → 1 全拆），会覆盖形态自动过渡 */
+  public setSealExploded(progress: number): void {
+    this.relic?.setExplodedProgress(progress);
   }
 
   /** 拾取回调登记（骨架：不改动 role/guest 判定） */

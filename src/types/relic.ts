@@ -66,6 +66,8 @@ export interface ImperialSealState {
   transmission_enabled: boolean;
   /** 是否已由 GLB 高精资产接管（false = 程序化占位几何） */
   glb_loaded: boolean;
+  /** 是否已被选中（选中只高亮，不改形态） */
+  selected: boolean;
   /** 是否可见 */
   visible: boolean;
 }
