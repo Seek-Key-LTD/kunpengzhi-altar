@@ -36,6 +36,7 @@ import {
   SEAL_GLB_URL,
   SEAL_GOLD_CORNER_SIZE,
   SEAL_GOLD_MATERIAL,
+  SEAL_GLB_EXPLODE,
   SEAL_HEIGHT,
   SEAL_HOVER_Y,
   SEAL_JADE_MATERIAL,
@@ -297,6 +298,7 @@ export class ImperialSealObject {
   private readonly jadeMaterial: THREE.MeshPhysicalMaterial;
   private readonly goldMaterial: THREE.MeshPhysicalMaterial;
   private readonly socketMaterial: THREE.MeshPhysicalMaterial;
+  private readonly inscriptionMaterial: THREE.MeshPhysicalMaterial;
   private readonly jadeNormalMap: THREE.CanvasTexture;
 
   /** 可拆解部件 */
@@ -307,6 +309,16 @@ export class ImperialSealObject {
   private readonly dragongroup = new THREE.Group();
   private readonly eraLayers = new Map<SealEra, THREE.Group>();
   private sealLight: THREE.PointLight | null = null;
+
+  // ── GLB 接管后的部件引用（占位几何退场后由这几个接手）──────────────
+  /** GLB 里的金镶角 */
+  private glbCorner: THREE.Object3D | null = null;
+  /** GLB 里的五龙钮 */
+  private glbKnob: THREE.Object3D | null = null;
+  /** GLB 里按断代分组的刻痕网格（era_ 前缀） */
+  private readonly glbEraMeshes = new Map<SealEra, THREE.Object3D[]>();
+  /** 各 GLB 部件的原始位置（拆解位移都相对它算，可反复开关） */
+  private readonly glbBasePositions = new Map<THREE.Object3D, THREE.Vector3>();
 
   private readonly disposables: Disposable[] = [];
   private readonly pickTargets: THREE.Object3D[] = [];
@@ -352,6 +364,15 @@ export class ImperialSealObject {
 
     this.goldMaterial = this.track(new THREE.MeshPhysicalMaterial({ ...SEAL_GOLD_MATERIAL }));
     this.socketMaterial = this.track(new THREE.MeshPhysicalMaterial({ ...SEAL_SOCKET_MATERIAL }));
+    // 刻痕填墨：GLB 里的 era_ 刻痕网格走这一支，深墨绿、哑光，读作阴刻
+    this.inscriptionMaterial = this.track(
+      new THREE.MeshPhysicalMaterial({
+        color: 0x0a1a12,
+        roughness: 0.55,
+        metalness: 0.0,
+        sheen: 0.4
+      })
+    );
 
     this.root.name = 'imperial_seal';
     this.root.userData.relic_id = 'imperial_seal';
@@ -918,6 +939,7 @@ export class ImperialSealObject {
   // ── 内部：应用状态到几何 ──────────────────────────────────────────
 
   private applyExploded(p: number): void {
+    // ── 占位几何的拆解 ──────────────────────────────────────────────
     if (this.goldCornerGroup) {
       this.goldCornerGroup.position
         .copy(CORNER_BASE)
@@ -933,6 +955,25 @@ export class ImperialSealObject {
     if (this.knobGroup) {
       this.knobGroup.position.y = KNOB_CENTER_Y + SEAL_EXPLODE.knobLift * p;
     }
+
+    // ── GLB 真实资产的拆解 ───────────────────────────────────────────
+    // 燕尾槽是**竖直贯穿**的：金角只能沿槽向滑出，所以拆解位移以 +Y 为主，
+    // 只带一点外倾让人看出"拔"的方向；不是斜着硬拽 —— 那样就成穿模了。
+    const cornerBase = this.glbCorner
+      ? this.glbBasePositions.get(this.glbCorner)
+      : undefined;
+    if (this.glbCorner && cornerBase) {
+      this.glbCorner.position
+        .copy(cornerBase)
+        .addScaledVector(UP, SEAL_GLB_EXPLODE.cornerLift * p)
+        .addScaledVector(OUT_DIR, SEAL_GLB_EXPLODE.cornerTiltOut * p);
+    }
+    const knobBase = this.glbKnob ? this.glbBasePositions.get(this.glbKnob) : undefined;
+    if (this.glbKnob && knobBase) {
+      this.glbKnob.position
+        .copy(knobBase)
+        .addScaledVector(UP, SEAL_GLB_EXPLODE.knobLift * p);
+    }
   }
 
   private applyEra(era: SealEra): void {
@@ -942,11 +983,23 @@ export class ImperialSealObject {
     this.refreshLayerVisibility();
   }
 
-  /** 刻痕层可见性 = 当前断代 ∧ 当前 LOD 允许刻痕（两层条件，一处收口） */
+  /**
+   * 刻痕层可见性 = 当前断代 ∧ 当前 LOD 允许刻痕（两层条件，一处收口）。
+   *
+   * 占位几何与 GLB 两条路都走这里：占位是 eraLayers，GLB 是 glbEraMeshes。
+   * 注意秦刻是**原刻**，在 GLB 里已经布尔进玉体（jade_body），本就不参与开关 ——
+   * 历代只在它上面加刻，没人磨掉它，这是对的。汉新体现在金镶角，辽金体现在材质。
+   */
   private refreshLayerVisibility(): void {
     const showEngraving = this.lod === 'high';
     this.eraLayers.forEach((layer, key) => {
       layer.visible = showEngraving && key === this.era;
+    });
+    this.glbEraMeshes.forEach((meshes, key) => {
+      const visible = showEngraving && key === this.era;
+      meshes.forEach((mesh) => {
+        mesh.visible = visible;
+      });
     });
   }
 
@@ -955,6 +1008,7 @@ export class ImperialSealObject {
     const showDragons = lod === 'high';
 
     if (this.knobGroup) this.knobGroup.visible = showKnob;
+    if (this.glbKnob) this.glbKnob.visible = showKnob;
     this.dragongroup.visible = showDragons;
     // low 档连法线贴图都省掉，少一次采样
     this.jadeMaterial.normalMap = lod === 'low' ? null : this.jadeNormalMap;
@@ -1008,8 +1062,13 @@ export class ImperialSealObject {
           if (!mesh.isMesh) return;
           mesh.castShadow = true;
           mesh.receiveShadow = true;
-          const name = mesh.name.toLowerCase();
-          mesh.material = name.includes('gold') || name.includes('jin') ? this.goldMaterial : this.jadeMaterial;
+          // ⚠️ 判定只认 'gold'。**不能**再加 'jin'：
+          //    「魏晋」的拼音 weijin 里就有 jin，会把玺肩刻痕误判成黄金。
+          mesh.material = mesh.name.includes('gold')
+            ? this.goldMaterial
+            : mesh.name.startsWith('era_') || mesh.name.includes('inscription')
+              ? this.inscriptionMaterial
+              : this.jadeMaterial;
         });
       }
 
@@ -1021,6 +1080,9 @@ export class ImperialSealObject {
       model.userData.relic_id = 'imperial_seal';
       this.root.add(model);
       this.glbLoaded = true;
+
+      // 登记各部件：拆解位移、LOD、断代过滤都要用到它们
+      this.registerGlbParts(model);
 
       // 接管后把当前状态重新压一遍
       this.applyEra(this.era);
@@ -1045,6 +1107,44 @@ export class ImperialSealObject {
 
   public isGlbLoaded(): boolean {
     return this.glbLoaded;
+  }
+
+  /**
+   * 登记 GLB 里的各部件。
+   *
+   * 命名约定（由 nuc 上的 Blender 脚本保证）：
+   *   jade_body      玉体（秦刻已布尔进去，与玉同体）
+   *   gold_corner    金镶角 —— 拆解时沿燕尾槽向（+Y）**竖直拔出**
+   *   dragon_knob    五龙钮 —— 拆解时整体抬升，low LOD 整组隐藏
+   *   era_wei_a/b    魏晋加刻 —— 按断代层开关
+   * 认不出名字也不报错：部件为空就退化成"整体不拆"，不会崩。
+   */
+  private registerGlbParts(model: THREE.Object3D): void {
+    model.traverse((obj) => {
+      const name = obj.name.toLowerCase();
+      if (name.includes('gold')) {
+        this.glbCorner = obj;
+        this.glbBasePositions.set(obj, obj.position.clone());
+      } else if (name.includes('knob')) {
+        this.glbKnob = obj;
+        this.glbBasePositions.set(obj, obj.position.clone());
+      }
+      // 断代层：era_ 前缀 —— 刻意避开 'jin'，免得和"含 jin 即金"打架
+      const eraKey: SealEra | null = name.startsWith('era_qin')
+        ? 'qin'
+        : name.startsWith('era_xin')
+          ? 'xin'
+          : name.startsWith('era_wei')
+            ? 'weijin'
+            : name.startsWith('era_liao')
+              ? 'liaojin'
+              : null;
+      if (eraKey) {
+        const list = this.glbEraMeshes.get(eraKey) ?? [];
+        list.push(obj);
+        this.glbEraMeshes.set(eraKey, list);
+      }
+    });
   }
 
   /** 占位几何退场（GLB 接管时调用） */

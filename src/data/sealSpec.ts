@@ -106,6 +106,22 @@ export const SEAL_EXPLODE = {
   duration: 1.8
 } as const;
 
+/**
+ * 真实 GLB 资产的拆解位移（与占位几何不同）。
+ *
+ * 真资产里的燕尾槽是**竖直贯穿**整条印台（这是倒勾的本义：横向拔不出来，
+ * 只能顺着槽拔），所以金角的拆解必须沿 +Y 滑出，行程要 ≥ 印台高 1.485，
+ * 否则拔不出槽口、穿模。
+ */
+export const SEAL_GLB_EXPLODE = {
+  /** 金角沿 +Y 滑出行程（须 ≥ SEAL_BODY_HEIGHT = 1.485） */
+  cornerLift: 1.75,
+  /** 滑出时带一点外倾，让人看出"拔"的方向而不是"飘" */
+  cornerTiltOut: 0.18,
+  /** 五龙钮整体抬升（先摘钮，再拔角，工序不能反） */
+  knobLift: 1.05
+} as const;
+
 /** 拓印（Stamping）下压参数 */
 export const SEAL_STAMP = {
   /** 下压行程（世界单位） */

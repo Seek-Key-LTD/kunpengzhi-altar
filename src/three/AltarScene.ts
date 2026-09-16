@@ -1700,6 +1700,14 @@ export class AltarScene {
     this.scene.add(seal.object3D);
     this.relic = seal;
 
+    // 用真实资产接管程序化占位几何（public/models/imperial_seal.glb）。
+    // 文件缺失/解析失败一律安全退回占位，不会把玉玺弄丢，也不会中断场景。
+    void seal.loadSealFromGLB().then((ok) => {
+      if (ok) {
+        console.info('[玉玺] 高精 GLB 已接管，三角面 =', seal.countTriangles());
+      }
+    });
+
     this.relicRig = new SealCameraRig({
       camera: this.camera,
       controlsTarget: this.controls.target
