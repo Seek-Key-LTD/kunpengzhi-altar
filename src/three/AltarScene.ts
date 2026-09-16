@@ -79,7 +79,14 @@ export class AltarScene {
   // Interactive Objects & Meshes
   private waterSpiralPath: THREE.Vector3[] = [];
   private waterParticles: THREE.Points | null = null;
+  private waterLine: THREE.Line | null = null;
+  /** 阴龙：不占席、不承载文字，只把 49 个半音向上卷成可见的气流。 */
+  private soundSpiralPath: THREE.Vector3[] = [];
+  private soundLine: THREE.Line | null = null;
+  private soundParticles: THREE.Points | null = null;
   private fountainParticles: THREE.Points | null = null;
+  /** #00 是吸光体，永远不是第 50 席。 */
+  private wujiAbsorber: THREE.Mesh | null = null;
   private seatPads: Map<number, THREE.Mesh> = new Map();
   private seatLotusMeshes: Map<number, THREE.Group> = new Map();
   private starshipMeshes: Map<number, THREE.Group> = new Map();
@@ -752,6 +759,22 @@ export class AltarScene {
   }
 
   private buildWujiFountain() {
+    // #00：只接受末段的一束冷顶光。它没有 seatId、没有音高，也不进入拾取列表。
+    const absorber = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.72, 0.82, 0.18, 48),
+      new THREE.MeshStandardMaterial({
+        color: 0x000000,
+        roughness: 0.95,
+        metalness: 0.1,
+        emissive: 0x000000,
+        emissiveIntensity: 0
+      })
+    );
+    absorber.position.set(0, PYRAMID_TOP + 0.14, 0);
+    absorber.userData = { ritual_anchor: 'wuji', claimable: false, tokenizable: false };
+    this.scene.add(absorber);
+    this.wujiAbsorber = absorber;
+
     const beamGeo = new THREE.CylinderGeometry(0.3, 1.2, 20, 16, 1, true);
     const beamMat = new THREE.MeshBasicMaterial({
       color: 0x67e8f9,
@@ -808,7 +831,9 @@ export class AltarScene {
       opacity: 0.85
     });
     const waterLine = new THREE.Line(lineGeo, lineMat);
+    waterLine.geometry.setDrawRange(0, 0);
     this.outerShellGroup.add(waterLine);
+    this.waterLine = waterLine;
 
     const particleCount = 280;
     const particleGeo = new THREE.BufferGeometry();
@@ -837,6 +862,46 @@ export class AltarScene {
 
     this.waterParticles = new THREE.Points(particleGeo, particleMat);
     this.outerShellGroup.add(this.waterParticles);
+
+    // 阴龙不复制水路。它绕过 #00，由小半径起步、按对数展开，
+    // 高度以 r² 抛物面抬升；第 n 点对应 C2.transpose(n)。
+    const soundPoints: THREE.Vector3[] = [];
+    for (let i = 0; i < 49; i++) {
+      const t = i / 48;
+      const angle = -Math.PI / 2 + t * Math.PI * 6;
+      const radius = 1.25 * Math.exp(t * 2.05);
+      const y = PYRAMID_TOP + 0.45 + radius * radius * 0.11;
+      soundPoints.push(new THREE.Vector3(Math.cos(angle) * radius, y, Math.sin(angle) * radius));
+    }
+    this.soundSpiralPath = soundPoints;
+    const soundGeo = new THREE.BufferGeometry().setFromPoints(soundPoints);
+    const soundMat = new THREE.LineBasicMaterial({
+      color: 0xc4b5fd,
+      transparent: true,
+      opacity: 0.48,
+      blending: THREE.AdditiveBlending
+    });
+    const soundLine = new THREE.Line(soundGeo, soundMat);
+    soundLine.geometry.setDrawRange(0, 0);
+    soundLine.visible = false;
+    this.scene.add(soundLine);
+    this.soundLine = soundLine;
+
+    const soundParticleGeo = new THREE.BufferGeometry();
+    const soundParticlePositions = new Float32Array(96 * 3);
+    soundParticleGeo.setAttribute('position', new THREE.BufferAttribute(soundParticlePositions, 3));
+    const soundParticleMat = new THREE.PointsMaterial({
+      color: 0xe9d5ff,
+      size: 0.16,
+      transparent: true,
+      opacity: 0.72,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const soundParticles = new THREE.Points(soundParticleGeo, soundParticleMat);
+    soundParticles.visible = false;
+    this.scene.add(soundParticles);
+    this.soundParticles = soundParticles;
   }
 
   /**
@@ -1383,6 +1448,23 @@ export class AltarScene {
     this.lanternsGroup.visible = phase === 'lanterns' || phase === 'extinguishing';
     this.lanternRotationSpeed = phase === 'lanterns' ? 0.00055 : 0;
     if (this.waterParticles) this.waterParticles.visible = phase === 'naming' || phase === 'lanterns';
+    const dualDragonVisible = phase === 'naming' || phase === 'lanterns';
+    if (this.waterLine) {
+      this.waterLine.visible = dualDragonVisible;
+      this.waterLine.geometry.setDrawRange(
+        0,
+        Math.round(this.waterLine.geometry.attributes.position.count * (this.ritualLitSeats / 49))
+      );
+    }
+    if (this.soundLine) {
+      this.soundLine.visible = dualDragonVisible;
+      this.soundLine.geometry.setDrawRange(0, this.ritualLitSeats);
+    }
+    if (this.soundParticles) this.soundParticles.visible = dualDragonVisible;
+    if (this.wujiAbsorber) this.wujiAbsorber.visible = phase !== 'abyss';
+    // 玉玺属于导演台的器物层；公共仪式中不能让它与 #00 争中心。
+    if (this.relic) this.relic.object3D.visible = false;
+    if (this.relicDecal) this.relicDecal.object3D.visible = false;
 
     this.seatLotusMeshes.forEach((flower, id) => {
       flower.visible = id <= this.ritualLitSeats && !isDark;
@@ -1650,13 +1732,16 @@ export class AltarScene {
       posAttr.needsUpdate = true;
     }
 
-    // 6. Water particles flowing along strictly descending spiral
+    // 6. 阳龙：水只流到仪式已经唤醒的那一席，不预演未来。
     if (this.waterParticles && this.waterSpiralPath.length > 0) {
       const pAttr = this.waterParticles.geometry.attributes.position as THREE.BufferAttribute;
+      const pathLength = this.ritualMode
+        ? Math.max(1, this.ritualLitSeats)
+        : this.waterSpiralPath.length;
       for (let i = 0; i < pAttr.count; i++) {
-        const step = (elapsedTime * 6 + i * 0.25) % this.waterSpiralPath.length;
+        const step = (elapsedTime * 2.2 + i * 0.18) % pathLength;
         const idxA = Math.floor(step);
-        const idxB = (idxA + 1) % this.waterSpiralPath.length;
+        const idxB = Math.min(idxA + 1, pathLength - 1);
         const frac = step - idxA;
         const pA = this.waterSpiralPath[idxA];
         const pB = this.waterSpiralPath[idxB];
@@ -1667,6 +1752,22 @@ export class AltarScene {
           pA.y + (pB.y - pA.y) * frac + 0.08,
           pA.z + (pB.z - pA.z) * frac + Math.cos(elapsedTime * 4 + i) * 0.04
         );
+      }
+      pAttr.needsUpdate = true;
+    }
+
+    // 阴龙：相同的 49 个计数，但用上升的对数螺线显形。
+    if (this.soundParticles && this.soundSpiralPath.length > 0) {
+      const pAttr = this.soundParticles.geometry.attributes.position as THREE.BufferAttribute;
+      const pathLength = Math.max(1, this.ritualMode ? this.ritualLitSeats : this.soundSpiralPath.length);
+      for (let i = 0; i < pAttr.count; i++) {
+        const step = (elapsedTime * 1.1 + i * 0.12) % pathLength;
+        const idxA = Math.floor(step);
+        const idxB = Math.min(idxA + 1, pathLength - 1);
+        const fraction = step - idxA;
+        const a = this.soundSpiralPath[idxA];
+        const b = this.soundSpiralPath[idxB];
+        pAttr.setXYZ(i, a.x + (b.x - a.x) * fraction, a.y + (b.y - a.y) * fraction, a.z + (b.z - a.z) * fraction);
       }
       pAttr.needsUpdate = true;
     }
