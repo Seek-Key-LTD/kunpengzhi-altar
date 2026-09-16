@@ -1,0 +1,34 @@
+name: Sync GitHub Mirror
+
+# Gitea 是唯一写入口；GitHub 是只出不进的公开镜像。
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  mirror-main:
+    name: Mirror main to GitHub
+    runs-on: [raccoon]
+    steps:
+      - name: Checkout complete main history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require mirror credential
+        env:
+          GITHUB_MIRROR_TOKEN: ${{ secrets.GITHUB_MIRROR_TOKEN }}
+        run: |
+          test -n "$GITHUB_MIRROR_TOKEN" || {
+            echo 'Missing Actions secret: GITHUB_MIRROR_TOKEN' >&2
+            exit 1
+          }
+
+      - name: Fast-forward public mirror
+        env:
+          GITHUB_MIRROR_TOKEN: ${{ secrets.GITHUB_MIRROR_TOKEN }}
+        run: |
+          git remote add github-mirror "https://x-access-token:${GITHUB_MIRROR_TOKEN}@github.com/Seek-Key-LTD/kunpengzhi-altar.git"
+          git push github-mirror HEAD:refs/heads/main
