@@ -1646,6 +1646,44 @@ export class AltarScene {
     });
   }
 
+  /**
+   * 非剧本公共入口：一帧即呈现完整祭坛。
+   * 不复用 setRitualState('lanterns', …)，因为后者仍是“按幕次演出”的语义。
+   */
+  public presentImmediately() {
+    this.ritualMode = false;
+    this.ritualLitSeats = 49;
+    this.isAutoPatrol = false;
+    this.scene.background = new THREE.Color(0x000000);
+    this.scene.fog = new THREE.FogExp2(0x000000, 0.006);
+
+    if (this.ambientLight) this.ambientLight.intensity = 0.18;
+    if (this.sunLight) this.sunLight.intensity = 1.35;
+    if (this.rimLight) this.rimLight.intensity = 0.82;
+    if (this.apexLight) this.apexLight.intensity = 0.62;
+    if (this.wujiLight) this.wujiLight.intensity = 0;
+
+    this.outerShellGroup.visible = true;
+    this.hollowInteriorGroup.visible = true;
+    this.waterworksGroup.visible = true;
+    this.physicsDropletsGroup.visible = true;
+    this.fountainGroup.visible = true;
+    this.lanternsGroup.visible = true;
+    this.lanternRotationSpeed = 0;
+    if (this.waterParticles) this.waterParticles.visible = true;
+    if (this.waterLine) {
+      this.waterLine.visible = true;
+      this.waterLine.geometry.setDrawRange(0, this.waterLine.geometry.attributes.position.count);
+    }
+    if (this.soundLine) {
+      this.soundLine.visible = true;
+      this.soundLine.geometry.setDrawRange(0, this.soundLine.geometry.attributes.position.count);
+    }
+    if (this.soundParticles) this.soundParticles.visible = true;
+    if (this.wujiAbsorber) this.wujiAbsorber.visible = true;
+    this.seatLotusMeshes.forEach((flower) => { flower.visible = true; });
+  }
+
   public focusTeaLantern(chapterIndex: number) {
     this.cameraMode = 'outer_lanterns';
     const angle = ((chapterIndex - 1) / 16) * Math.PI * 2;
