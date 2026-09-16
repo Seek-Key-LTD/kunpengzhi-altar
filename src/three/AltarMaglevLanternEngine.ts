@@ -24,7 +24,7 @@ export interface MaglevLanternState {
 }
 
 export type AcousticStrumCallback = (
-  chord: 'DROP_EB' | 'SEVENTH_SUS4',
+  chord: 'DROP_EB' | 'SEVENTH_SUS4' | 'BHE_BILL_COUNTER',
   bay: number,
   chapter: number,
   intensity: number
@@ -130,7 +130,11 @@ export class AltarMaglevLanternEngine {
       if (isLeadPosition || seismicPulse > 0.4) {
         s.isAcousticStrumTriggered = true;
         if (this.onAcousticStrum) {
-          const chord = isLeadPosition ? 'DROP_EB' : 'SEVENTH_SUS4';
+          // 第 16 面压轴旗舰 (chapter 15)：天地银行一万贯兑换券，触发点钞机飞速过钞声
+          let chord: 'DROP_EB' | 'SEVENTH_SUS4' | 'BHE_BILL_COUNTER' = isLeadPosition ? 'DROP_EB' : 'SEVENTH_SUS4';
+          if (s.currentChapter === 15 && isLeadPosition) {
+            chord = 'BHE_BILL_COUNTER';
+          }
           const intensity = Math.min(1.0, 0.6 + seismicPulse * 0.4);
           this.onAcousticStrum(chord, s.currentBay, s.currentChapter, intensity);
         }
