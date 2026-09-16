@@ -16,12 +16,10 @@ import { SEASON1_POEMS } from '../data/season1_poems';
 import {
   BRICK,
   CELL,
-  LAYERS,
   PYRAMID_HALF,
   PYRAMID_TOP,
   PLINTH_HALF,
   PLINTH_THICKNESS,
-  RIVER_HALF_LENGTH,
   SCORPION_BORE_RADIUS,
   SCORPION_CASING_RADIUS,
   scorpionWaterElevation,
@@ -35,6 +33,16 @@ import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
+import { AltarWaterLiftEngine } from './AltarWaterLiftEngine';
+
+// ── RFC-007 双体水梯 → 场景的映射常数 ──────────────────────────────
+// 引擎世界：H=7.0、桶行程 z∈[-3.5,3.5]。这里把 7 单位行程映射成 6 个世界单位
+// （= 2 个 CELL），整机占位远小于 3 CELL，立在北坡台基上，不遮 49 席与坛心玉玺。
+const WATER_LIFT_Z = -(PYRAMID_HALF + 1.7); // 北坡：坛体北面之外、台基之上
+const WATER_LIFT_BASE_Y = 2.4;              // 引擎 y=0 对应的世界高度（桶心）
+const WATER_LIFT_SCALE = 6.0 / 7.0;         // 7 单位 → 6 世界单位
+const WATER_LIFT_PULLEY_Y = 9.6;            // 顶端定滑轮高度
+const WATER_LIFT_SEP = 1.6;                 // 双桶左右分列（±x）
 
 export class AltarScene {
   private container: HTMLElement;
@@ -52,12 +60,17 @@ export class AltarScene {
   private fountainGroup: THREE.Group;
   private waterworksGroup: THREE.Group;
 
-  // 水利机关：主翻斗 + 配重水梯
-  private bucketPivot: THREE.Group | null = null;
-  private bucketWater: THREE.Mesh | null = null;
-  private ladderBuckets: THREE.Group[] = [];
-  private ladderDrops: THREE.Mesh[] = [];
-  private riverSurface: THREE.Mesh | null = null;
+  // 水利机关：RFC-007 双体水梯（中空神索 · 双体变质量阿特伍德振子）
+  private waterLift = new AltarWaterLiftEngine({ height: 7.0, bucketMass: 5.0, initialWater: 10.0 });
+  private waterLiftGroup: THREE.Group | null = null;
+  private waterLiftBucketA: THREE.Group | null = null;
+  private waterLiftBucketB: THREE.Group | null = null;
+  private waterLiftWaterA: THREE.Mesh | null = null;
+  private waterLiftWaterB: THREE.Mesh | null = null;
+  private waterLiftRopeA: THREE.Mesh | null = null;
+  private waterLiftRopeB: THREE.Mesh | null = null;
+  /** 首个物理接管帧只播报一次，避免每帧刷屏 */
+  private waterLiftAnnounced = false;
 
   private numbersPanelEl: HTMLDivElement | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
@@ -358,6 +371,8 @@ export class AltarScene {
 
     // ---- 2. 阴蝎子楔：水路不许出现在阳 Cube 的外露面 ----
     this.buildScorpionWaterway();
+    // RFC-007：北坡双桶天车（中空神索·阿特伍德振子）—— 引擎接管前先把可视装置立好
+    this.buildWaterLift();
 
     this.buildRiverAxis();
     this.buildRabbitHole();
@@ -543,6 +558,183 @@ export class AltarScene {
       joint.position.copy(from);
       joint.userData = { type: 'scorpion_joint', seatId: event.seat_id, exposedOnYangCube: false };
       this.waterworksGroup.add(joint);
+    }
+  }
+
+  /**
+   * RFC-007 双体水梯 —— 北坡双桶天车。
+   *
+   * 一台「中空神索 · 双体变质量阿特伍德振子」的可视化：
+   *   · 顶端定滑轮（Torus）—— 一索连两桶的支点；
+   *   · 敞口双桶 A/B（左右分列）—— 谁重谁沉，此消彼长（yA + yB = H 守恒）；
+   *   · 中空神索 —— 两条竖索自滑轮 rim 垂到桶沿，逐帧随行程伸缩；
+   *   · 底部神簧 —— 桶底两枚细螺旋，承接死点反冲。
+   *
+   * 立于北坡台基（z = -(PYRAMID_HALF + 1.7)），加进阴腔组 hollowInteriorGroup；
+   * 占位 ≤ 2 CELL，不遮 49 席、不碰坛心玉玺。引擎世界 H=7.0 → 6 世界单位。
+   */
+  private buildWaterLift(): void {
+    const group = new THREE.Group();
+    group.name = 'rfc007-water-lift';
+    group.position.set(0, 0, WATER_LIFT_Z);
+
+    // 沿用既有暗黑金石调色（与 buildScorpionWaterway 的 casing/water 同色系）
+    const bronzeMat = new THREE.MeshStandardMaterial({
+      color: 0x5c3216,
+      emissive: 0x251006,
+      emissiveIntensity: 0.34,
+      roughness: 0.29,
+      metalness: 0.84
+    });
+    const ropeMat = new THREE.MeshStandardMaterial({
+      color: 0x2a1a0e,
+      emissive: 0x150c05,
+      emissiveIntensity: 0.3,
+      roughness: 0.55,
+      metalness: 0.7
+    });
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0369a1,
+      emissiveIntensity: 1.1,
+      roughness: 0.04,
+      metalness: 0.62,
+      transparent: true,
+      opacity: 0.88
+    });
+
+    // 台座 + 两根立柱导轨
+    const base = new THREE.Mesh(new THREE.BoxGeometry(WATER_LIFT_SEP * 2 + 1.4, 0.28, 1.2), bronzeMat);
+    base.position.set(0, WATER_LIFT_BASE_Y - 1.15, 0);
+    base.castShadow = true;
+    base.receiveShadow = true;
+    group.add(base);
+
+    const railHeight = WATER_LIFT_PULLEY_Y - (WATER_LIFT_BASE_Y - 1.0);
+    [-1, 1].forEach((sx) => {
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, railHeight, 8), bronzeMat);
+      rail.position.set(sx * WATER_LIFT_SEP, WATER_LIFT_BASE_Y - 1.0 + railHeight / 2, 0);
+      group.add(rail);
+    });
+
+    // 顶端定滑轮（一索连两桶的支点）
+    const pulley = new THREE.Mesh(new THREE.TorusGeometry(WATER_LIFT_SEP, 0.16, 12, 40), bronzeMat);
+    pulley.position.set(0, WATER_LIFT_PULLEY_Y, 0);
+    group.add(pulley);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.5, 10), bronzeMat);
+    hub.rotation.x = Math.PI / 2;
+    hub.position.set(0, WATER_LIFT_PULLEY_Y, 0);
+    group.add(hub);
+
+    // 双桶（敞口圆柱）+ 桶内水柱
+    const makeBucket = (side: -1 | 1): { bucket: THREE.Group; water: THREE.Mesh } => {
+      const bucket = new THREE.Group();
+      bucket.position.set(side * WATER_LIFT_SEP, WATER_LIFT_BASE_Y, 0);
+
+      const wall = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.72, 0.58, 1.0, 14, 1, true),
+        new THREE.MeshStandardMaterial({
+          color: 0x5c3216,
+          emissive: 0x251006,
+          emissiveIntensity: 0.34,
+          roughness: 0.29,
+          metalness: 0.84,
+          side: THREE.DoubleSide
+        })
+      );
+      wall.castShadow = true;
+      bucket.add(wall);
+
+      const bottom = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.58, 0.08, 14), bronzeMat);
+      bottom.position.y = -0.5;
+      bucket.add(bottom);
+
+      // 水面：几何原点挪到底面，scale.y 即水位
+      const waterGeo = new THREE.CylinderGeometry(0.55, 0.5, 1.0, 14, 1, false);
+      waterGeo.translate(0, 0.5, 0);
+      const water = new THREE.Mesh(waterGeo, waterMat);
+      water.position.y = -0.46;
+      water.scale.y = 0.5;
+      bucket.add(water);
+
+      group.add(bucket);
+      return { bucket, water };
+    };
+
+    const a = makeBucket(-1);
+    const b = makeBucket(1);
+    this.waterLiftBucketA = a.bucket;
+    this.waterLiftBucketB = b.bucket;
+    this.waterLiftWaterA = a.water;
+    this.waterLiftWaterB = b.water;
+
+    // 中空神索：竖索，几何高度 1，逐帧 scale.y 伸缩
+    const ropeGeo = new THREE.CylinderGeometry(0.045, 0.045, 1, 6);
+    const ropeA = new THREE.Mesh(ropeGeo, ropeMat);
+    const ropeB = new THREE.Mesh(ropeGeo, ropeMat);
+    group.add(ropeA, ropeB);
+    this.waterLiftRopeA = ropeA;
+    this.waterLiftRopeB = ropeB;
+
+    // 底部神簧：桶底两枚细螺旋
+    [-1, 1].forEach((sx) => {
+      for (let k = 0; k < 4; k++) {
+        const coil = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.045, 6, 18), bronzeMat);
+        coil.position.set(sx * WATER_LIFT_SEP, WATER_LIFT_BASE_Y - 1.05 + k * 0.13, 0);
+        coil.rotation.x = Math.PI / 2;
+        group.add(coil);
+      }
+    });
+
+    this.hollowInteriorGroup.add(group);
+    this.waterLiftGroup = group;
+
+    // 相变接线：统一走既有 triggerFountainPulse()，不新造音频 API
+    this.waterLift.onPhaseTransition = (highBucket, massSkimmed, tone) => {
+      altarAudio.triggerFountainPulse();
+      console.log(
+        `[水梯] 死点相变 high=${highBucket} skim=${massSkimmed.toFixed(3)}kg ` +
+          `tone=${tone} z=${this.waterLift.state.z.toFixed(3)}`
+      );
+    };
+  }
+
+  /**
+   * 每帧把 RFC-007 引擎状态映射到 3D：
+   *   · 双桶标高由 yA / yB 驱动（yA + yB = H 守恒，此消彼长）；
+   *   · 桶内水面高度由 mA / mB 驱动；
+   *   · 中空神索随桶顶与滑轮之间的距离逐帧伸缩。
+   */
+  private syncWaterLiftVisual(): void {
+    if (!this.waterLiftGroup) return;
+    const { yA, yB, mA, mB } = this.waterLift.state;
+
+    const centerA = WATER_LIFT_BASE_Y + yA * WATER_LIFT_SCALE;
+    const centerB = WATER_LIFT_BASE_Y + yB * WATER_LIFT_SCALE;
+
+    if (this.waterLiftBucketA) this.waterLiftBucketA.position.y = centerA;
+    if (this.waterLiftBucketB) this.waterLiftBucketB.position.y = centerB;
+
+    // 水柱高度 ∝ 质量（参考满量 ~15kg，夹到 [0.02, 1]）
+    if (this.waterLiftWaterA) this.waterLiftWaterA.scale.y = THREE.MathUtils.clamp(mA / 15, 0.02, 1);
+    if (this.waterLiftWaterB) this.waterLiftWaterB.scale.y = THREE.MathUtils.clamp(mB / 15, 0.02, 1);
+
+    // 神索：竖索长度 = 滑轮高度 − 桶顶高度
+    const ropeLenA = Math.max(0.05, WATER_LIFT_PULLEY_Y - (centerA + 0.5));
+    const ropeLenB = Math.max(0.05, WATER_LIFT_PULLEY_Y - (centerB + 0.5));
+    if (this.waterLiftRopeA) {
+      this.waterLiftRopeA.scale.y = ropeLenA;
+      this.waterLiftRopeA.position.set(-WATER_LIFT_SEP, WATER_LIFT_PULLEY_Y - ropeLenA / 2, 0);
+    }
+    if (this.waterLiftRopeB) {
+      this.waterLiftRopeB.scale.y = ropeLenB;
+      this.waterLiftRopeB.position.set(WATER_LIFT_SEP, WATER_LIFT_PULLEY_Y - ropeLenB / 2, 0);
+    }
+
+    // 首个物理接管帧播报一次，便于 QA 验证
+    if (!this.waterLiftAnnounced) {
+      this.waterLiftAnnounced = true;
+      console.log(`[水梯] RFC-007 引擎接管 z=${this.waterLift.state.z.toFixed(3)}`);
     }
   }
 
@@ -1007,203 +1199,6 @@ export class AltarScene {
     soundParticles.visible = false;
     this.scene.add(soundParticles);
     this.soundParticles = soundParticles;
-  }
-
-  /**
-   * 主翻斗（立方体斗 · 偏心轴 · 越阈自翻）。
-   *
-   * 设计要点：
-   *   · 斗身是立方体、开口朝上 —— 与全坛"只用立方砖"的规矩一致；
-   *   · 轴穿在斗身中部偏南。斗里水位上升 → 重心上移越过轴心 → 自己翻，不需要外力；
-   *   · 不需要物理引擎：按时间驱动 rotation.x 与水面 scale.y 即可。
-   *
-   * 五态循环：蓄水 → 越阈 → 翻转倒水 → 排空回落 → 复位。
-   * 单斗只能"倒"不能"提"，所以提水交给北坡的配重水梯（见 buildWaterLadder）。
-   */
-  public buildTippingBucket() {
-    const size = CELL;
-    const wall = BRICK * 0.22;
-    const pivotZ = RIVER_HALF_LENGTH - 4.5; // 南端取水口
-
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7, metalness: 0.25 });
-    const bronzeMat = new THREE.MeshStandardMaterial({
-      color: 0xd97706,
-      roughness: 0.28,
-      metalness: 0.9,
-      emissive: 0x92400e,
-      emissiveIntensity: 0.35
-    });
-    const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
-      emissive: 0x0369a1,
-      emissiveIntensity: 0.9,
-      roughness: 0.05,
-      metalness: 0.8,
-      transparent: true,
-      opacity: 0.88
-    });
-
-    // 两根立方石墩 + 横轴
-    [-1, 1].forEach((side) => {
-      const pier = new THREE.Mesh(new THREE.BoxGeometry(BRICK, BRICK * 2.2, BRICK), stoneMat);
-      pier.position.set(side * (size / 2 + BRICK * 0.8), BRICK * 1.1, pivotZ);
-      pier.castShadow = true;
-      this.waterworksGroup.add(pier);
-    });
-
-    const axleY = BRICK * 2.2;
-    const axle = new THREE.Mesh(
-      new THREE.CylinderGeometry(BRICK * 0.12, BRICK * 0.12, size + BRICK * 2.4, 8),
-      bronzeMat
-    );
-    axle.rotation.z = Math.PI / 2;
-    axle.position.set(0, axleY, pivotZ);
-    this.waterworksGroup.add(axle);
-
-    // 斗（pivot group，绕 X 轴翻）
-    const pivot = new THREE.Group();
-    pivot.position.set(0, axleY, pivotZ);
-    pivot.rotation.x = 0.1;
-    this.bucketPivot = pivot;
-    this.waterworksGroup.add(pivot);
-
-    // 斗身：底 + 四壁（北壁矮一半，倒水时朝金字塔方向倾）
-    const bottom = new THREE.Mesh(new THREE.BoxGeometry(size, wall, size), bronzeMat);
-    bottom.position.y = -size / 2 + wall / 2;
-    pivot.add(bottom);
-
-    const walls: Array<[number, number, number, number]> = [
-      // [宽, 高, x, z]
-      [size, size, 0, -size / 2 + wall / 2], // 北壁（矮）
-      [size, size, 0, size / 2 - wall / 2], // 南壁
-      [wall, size, -size / 2 + wall / 2, 0], // 西壁
-      [wall, size, size / 2 - wall / 2, 0] // 东壁
-    ];
-    walls.forEach(([w, h, px, pz], i) => {
-      const hh = i === 0 ? h * 0.45 : h;
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, hh, i < 2 ? wall : size), bronzeMat);
-      m.position.set(px, -size / 2 + hh / 2, pz);
-      pivot.add(m);
-    });
-
-    // 斗内水面：几何原点挪到底面，scale.y 即水位
-    const waterGeo = new THREE.BoxGeometry(size - wall * 2, 1, size - wall * 2);
-    waterGeo.translate(0, 0.5, 0);
-    const water = new THREE.Mesh(waterGeo, waterMat);
-    water.position.set(0, -size / 2 + wall, 0);
-    water.scale.y = 0.01;
-    pivot.add(water);
-    this.bucketWater = water;
-  }
-
-  /**
-   * 配重水梯：北坡 7 个立方小斗，每级一个，错时翻转。
-   * 主翻斗倒下的水落到第 1 个小斗，它翻转把水递给第 2 个……逐级提到顶层分水口。
-   */
-  public buildWaterLadder() {
-    const z = -(PYRAMID_HALF + 1.8);
-    const size = BRICK * 0.8;
-
-    const bronzeMat = new THREE.MeshStandardMaterial({
-      color: 0xd97706,
-      roughness: 0.3,
-      metalness: 0.88,
-      emissive: 0x92400e,
-      emissiveIntensity: 0.3
-    });
-    const dropMat = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
-      emissive: 0x0369a1,
-      emissiveIntensity: 1.0,
-      roughness: 0.05,
-      metalness: 0.8,
-      transparent: true,
-      opacity: 0.9
-    });
-
-    // 立柱
-    const mast = new THREE.Mesh(
-      new THREE.BoxGeometry(BRICK * 0.3, PYRAMID_TOP, BRICK * 0.3),
-      bronzeMat
-    );
-    mast.position.set(0, PYRAMID_TOP / 2, z);
-    this.waterworksGroup.add(mast);
-
-    for (let k = 1; k <= LAYERS; k++) {
-      const y = (k / LAYERS) * PYRAMID_TOP - BRICK * 0.45;
-
-      const bucket = new THREE.Group();
-      bucket.position.set(BRICK * 0.9, y, z);
-      bucket.add(new THREE.Mesh(new THREE.BoxGeometry(size, size, size), bronzeMat));
-      this.waterworksGroup.add(bucket);
-      this.ladderBuckets.push(bucket);
-
-      const drop = new THREE.Mesh(new THREE.BoxGeometry(BRICK * 0.4, BRICK * 0.4, BRICK * 0.4), dropMat);
-      drop.position.set(BRICK * 0.9, y, z);
-      this.waterworksGroup.add(drop);
-      this.ladderDrops.push(drop);
-    }
-  }
-
-  /**
-   * 水利机关驱动：一个 12 秒的循环。
-   *   0.0–6.0s  蓄水（水面 0 → 1，重心上移）
-   *   6.0–7.2s  越阈翻转（−110°，ease-in，重力加速），同时倒水
-   *   7.2–8.4s  排空保持
-   *   8.4–12.0s 空斗回落复位
-   * 水梯小斗按 0.35s 逐级延迟跟进，水被一级级递到顶层。
-   */
-  public updateWaterworks(elapsed: number) {
-    const CYCLE = 12;
-    const FILL_END = 6;
-    const TIP_END = 7.2;
-    const HOLD_END = 8.4;
-    const t = elapsed % CYCLE;
-    const restAngle = 0.1;
-    const tipAngle = THREE.MathUtils.degToRad(-110);
-
-    if (this.bucketPivot && this.bucketWater) {
-      let angle = restAngle;
-      let fill = 0;
-
-      if (t < FILL_END) {
-        fill = t / FILL_END;
-      } else if (t < TIP_END) {
-        const p = (t - FILL_END) / (TIP_END - FILL_END);
-        angle = restAngle + (tipAngle - restAngle) * p * p; // ease-in
-        fill = Math.max(0, 1 - p * 1.4);
-      } else if (t < HOLD_END) {
-        angle = tipAngle;
-        fill = 0;
-      } else {
-        const p = (t - HOLD_END) / (CYCLE - HOLD_END);
-        angle = tipAngle + (restAngle - tipAngle) * (1 - (1 - p) * (1 - p));
-        fill = 0;
-      }
-
-      this.bucketPivot.rotation.x = angle;
-      this.bucketWater.scale.y = Math.max(0.01, fill * (CELL - BRICK * 0.44));
-    }
-
-    // 水梯：逐级延迟 0.35s 跟进
-    const ladderStart = TIP_END - 1.0;
-    this.ladderBuckets.forEach((bucket, i) => {
-      const p = THREE.MathUtils.clamp((t - ladderStart - i * 0.35) / 0.6, 0, 1);
-      bucket.rotation.x = -Math.PI * 0.42 * Math.sin(Math.PI * p);
-
-      const drop = this.ladderDrops[i];
-      if (drop) {
-        const yFrom = ((i + 1) / LAYERS) * PYRAMID_TOP - BRICK * 0.45;
-        const yTo = ((Math.min(i + 2, LAYERS)) / LAYERS) * PYRAMID_TOP - BRICK * 0.45;
-        drop.position.y = THREE.MathUtils.lerp(yFrom, yTo, p);
-        drop.visible = p > 0 && p < 1;
-      }
-    });
-
-    // 河面随循环微微起伏
-    if (this.riverSurface) {
-      this.riverSurface.position.y = -PLINTH_THICKNESS + 0.55 + Math.sin(elapsed * 1.2) * 0.04;
-    }
   }
 
   private buildStarships() {
@@ -1816,7 +1811,9 @@ export class AltarScene {
       }
     });
 
-    // 9. 水流只沿蝎子楔管芯更新；不再驱动任何外置翻斗、露天河或自由落体水滴。
+    // 9. RFC-007 双体水梯：引擎驱动，北坡机关由此获得动力学
+    this.waterLift.update(dt);
+    this.syncWaterLiftVisual();
 
     // 10. Auto patrol
     if (this.isAutoPatrol) {
@@ -1986,12 +1983,15 @@ export class AltarScene {
     this.starshipMeshes.clear();
     this.lanternPanels.clear();
     this.interiorStelae.clear();
+    // RFC-007 双体水梯：几何随整棵场景图在第 6 步回收，这里只断开引用
+    this.waterLiftGroup = null;
+    this.waterLiftBucketA = null;
+    this.waterLiftBucketB = null;
+    this.waterLiftWaterA = null;
+    this.waterLiftWaterB = null;
+    this.waterLiftRopeA = null;
+    this.waterLiftRopeB = null;
     this.waterSpiralPath = [];
-    this.ladderBuckets = [];
-    this.ladderDrops = [];
-    this.bucketPivot = null;
-    this.bucketWater = null;
-    this.riverSurface = null;
     this.waterParticles = null;
     this.fountainParticles = null;
     this.ambientLight = null;

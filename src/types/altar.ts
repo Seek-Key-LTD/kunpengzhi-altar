@@ -163,22 +163,4 @@ export const GUEST_ROUTINES: CameraMode[] = ['cinematic', 'rabbit_hole', 'patrol
 /** 每条 routine 的播放时长（秒） */
 export const GUEST_ROUTINE_SECONDS = 18;
 
-/**
- * 游客环绕机位 —— 公共页**唯一**的镜头运动。
- *
- * 一段连续的慢速外部环绕：逐帧平滑推进，绝不 lerp 跳变到新目标、绝不入壳
- * （半径 57 远大于坛体半宽，相机始终在壳外）。进坛后（naming 等幕次）由它继续
- * 接管镜头，不再调用 setCameraMode 切换。
- */
-export const GUEST_ORBIT = {
-  /** 环绕半径（坛心正投影距离；取值区间 55~60） */
-  radius: 57,
-  /** 环绕高度（取值区间 26~40） */
-  height: 33,
-  /** 角速度（弧度/秒）：2π / 300 —— 约 5 分钟转一圈 */
-  angularSpeed: (Math.PI * 2) / 300,
-  /** 注视点高度（坛心略偏上） */
-  lookAtY: 6
-} as const;
-
 export type AltarCycleState = 'accumulating' | 'overturning' | 'cascading' | 'recycling' | 'resetting';
