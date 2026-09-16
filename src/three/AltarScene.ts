@@ -7,7 +7,6 @@ import {
   AltarCapabilities,
   GUEST_ROUTINES,
   GUEST_ROUTINE_SECONDS,
-  GUEST_ORBIT,
   ROLE_CAPABILITIES,
   CAMERA_SAFETY_BY_ROLE,
   CAMERA_DISTANCE_BY_ROLE
@@ -24,7 +23,10 @@ import {
   PLINTH_THICKNESS,
   RIVER_WIDTH,
   RIVER_HALF_LENGTH,
-  SPIRAL_SLOPE
+  SPIRAL_SLOPE,
+  RIVER_AXIS_SEATS,
+  RIVER_GRAVITY_SEATS,
+  RABBIT_HOLE_SEATS
 } from '../data/altarGeometry';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { ImperialSealObject } from './relic/ImperialSealObject';
@@ -115,11 +117,14 @@ export class AltarScene {
   private capabilities: AltarCapabilities = ROLE_CAPABILITIES.guest;
   /** 当前身份的相机安全边界（游客档与原硬编码同值） */
   private cameraSafety = CAMERA_SAFETY_BY_ROLE.guest;
-  /** 游客 routine 播放状态 */
+  /** 游客 routine：只有点击/触摸才会启动，绝不后台自动巡游。 */
   private guestRoutineIndex = 0;
   private guestRoutineTimer = 0;
-  /** 游客连续环绕的累加相位（弧度）—— 公共页唯一的镜头运动 */
-  private guestOrbitAngle = Math.PI / 4;
+  private guestRoutinePlaying = false;
+  /** Rabbit Hole 不是一个切镜头标签；它是一段由入口 40 穿到出口 28 的实走镜头。 */
+  private rabbitHoleTourActive = false;
+  /** 认证者的 WASD/QE 飞行状态；访客永远不会写入它。 */
+  private pressedKeys = new Set<string>();
   /** 上一帧的合法相机位（安全边界第 4 条：异常时拉回） */
   private lastSafeCameraPos = new THREE.Vector3(48, 40, 58);
   private onSeatSelect?: (seatId: number) => void;
@@ -217,6 +222,9 @@ export class AltarScene {
 
     // 7. Event listeners
     window.addEventListener('resize', this.onWindowResize);
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', this.onWindowBlur);
     this.container.addEventListener('pointerdown', this.onPointerDown);
 
     // 8. Start loop
@@ -372,9 +380,9 @@ export class AltarScene {
    */
   private buildCubePyramidAndSeats() {
     const brickMat = new THREE.MeshStandardMaterial({
-      color: 0x131c2e,
-      roughness: 0.62,
-      metalness: 0.28
+      color: 0x263247,
+      roughness: 0.54,
+      metalness: 0.16
     });
 
     const grooveMat = new THREE.MeshStandardMaterial({
@@ -390,9 +398,13 @@ export class AltarScene {
     // ---- 1. 49 根砖柱：每席一根，从地面砌到该席的台面高程 ----
     const bricks: Array<{ x: number; y: number; z: number }> = [];
 
+    const rabbitHoleSeats = new Set<number>(RABBIT_HOLE_SEATS);
     this.events.forEach((ev) => {
       const levels = Math.max(1, Math.round(ev.elevation / BRICK));
       for (let i = 0; i < levels; i++) {
+        // 横轴 40→19→6→1→2→11→28：只抽第二层的同尺寸 Cube。
+        // 顶面仍然由上层 Cube 封住；入口/出口则在两端自然开口。
+        if (rabbitHoleSeats.has(ev.seat_id) && i === 1) continue;
         bricks.push({
           x: ev.grid_x * CELL,
           y: (i + 0.5) * BRICK,
@@ -414,27 +426,44 @@ export class AltarScene {
     blocks.instanceMatrix.needsUpdate = true;
     this.outerShellGroup.add(blocks);
 
-    // ---- 2. 每席柱顶的下垂水槽：顺螺旋方向朝下一席倾斜 ----
-    // 台面是一条连续下降的螺旋坡（相邻两席落差完全相等），所以水不会撞上上坡。
-    // 坡度用 SPIRAL_SLOPE —— 视觉台面和物理碰撞体用的是同一个值。
-    const TILT = SPIRAL_SLOPE;
-    const plateW = CELL;
+    // ---- 2. 每席 Cube 顶面的内嵌水槽 ----
+    // Cube 本体绝不倾斜、绝不留缝；只有槽底向下一席落 Δh，公共边的出口/入口同高。
+    const grooveWidth = CELL * 0.32;
+    const railMat = new THREE.MeshStandardMaterial({
+      color: 0x475569,
+      roughness: 0.42,
+      metalness: 0.65
+    });
 
     this.events.forEach((ev, idx) => {
-      const topY = ev.elevation;
-      const cx = ev.grid_x * CELL;
-      const cz = ev.grid_z * CELL;
-
       const next = this.events[idx + 1];
       const dx = next ? Math.sign(next.grid_x - ev.grid_x) : 0;
-      const dz = next ? Math.sign(next.grid_z - ev.grid_z) : 0;
+      const t = this.terraceTransform(ev);
+      const channel = new THREE.Group();
+      channel.position.set(t.cx, t.cy + 0.045, t.cz);
+      channel.rotation.set(t.rx, 0, t.rz);
 
-      const plate = new THREE.Mesh(new THREE.BoxGeometry(plateW, 0.1, plateW), grooveMat);
-      plate.position.set(cx + dx * BRICK * 0.1, topY - 0.03, cz + dz * BRICK * 0.1);
-      plate.rotation.z = -dx * TILT;
-      plate.rotation.x = dz * TILT;
-      this.outerShellGroup.add(plate);
+      const runsEastWest = dx !== 0;
+      const length = CELL * 0.96;
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(runsEastWest ? length : grooveWidth, 0.09, runsEastWest ? grooveWidth : length),
+        grooveMat
+      );
+      channel.add(plate);
+
+      // 两条低矮边墙把刚体水珠关在槽内；拐点仍由下一席的槽接管。
+      const railLong = new THREE.BoxGeometry(runsEastWest ? length : 0.1, 0.20, runsEastWest ? 0.10 : length);
+      [-1, 1].forEach((side) => {
+        const rail = new THREE.Mesh(railLong, railMat);
+        if (runsEastWest) rail.position.set(0, 0.12, side * (grooveWidth / 2 + 0.05));
+        else rail.position.set(side * (grooveWidth / 2 + 0.05), 0.12, 0);
+        channel.add(rail);
+      });
+      this.outerShellGroup.add(channel);
     });
+
+    this.buildRiverAxis();
+    this.buildRabbitHole();
 
     // ---- 3. 49 席：托座 / 质数环 / 莲花 ----
     this.events.forEach((ev) => {
@@ -538,6 +567,133 @@ export class AltarScene {
         }
       }
     }
+  }
+
+  /**
+   * Ulam 中轴水利线：46→23→8→1 是机械提升，不伪装成自然下坡；
+   * 1→4→15→34 才在坛面露出为重力明渠。
+   */
+  private buildRiverAxis() {
+    const bySeat = new Map(this.events.map((event) => [event.seat_id, event]));
+    const axis = RIVER_AXIS_SEATS.map((seatId) => bySeat.get(seatId)).filter((event): event is SpiralEvent => Boolean(event));
+    if (axis.length !== RIVER_AXIS_SEATS.length) {
+      throw new Error('Ulam 河轴缺席：46→23→8→1→4→15→34 必须完整存在');
+    }
+
+    const liftPoints = axis.slice(0, 4).map((event) => {
+      const point = this.getSeatWorldPos(event);
+      point.y += 0.32;
+      return point;
+    });
+    const liftCurve = new THREE.CatmullRomCurve3(liftPoints, false, 'centripetal');
+    const liftPipe = new THREE.Mesh(
+      new THREE.TubeGeometry(liftCurve, 48, 0.16, 10, false),
+      new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.34, metalness: 0.82 })
+    );
+    liftPipe.userData = { waterway: '46-23-8-1', mode: 'counterweight-lift' };
+    this.waterworksGroup.add(liftPipe);
+
+    const gravityPoints = RIVER_GRAVITY_SEATS.map((seatId) => {
+      const event = bySeat.get(seatId)!;
+      const point = this.getSeatWorldPos(event);
+      point.y += 0.16;
+      return point;
+    });
+    const gravityCurve = new THREE.CatmullRomCurve3(gravityPoints, false, 'centripetal');
+    const bed = new THREE.Mesh(
+      new THREE.TubeGeometry(gravityCurve, 36, CELL * 0.18, 10, false),
+      new THREE.MeshStandardMaterial({ color: 0x0f3d56, roughness: 0.12, metalness: 0.72 })
+    );
+    bed.userData = { waterway: '1-4-15-34', mode: 'gravity' };
+    this.waterworksGroup.add(bed);
+  }
+
+  /**
+   * 横轴 Rabbit Hole：40→19→6→1→2→11→28。
+   *
+   * 它不夺用顶面 7×7 的任何一个格位，而是从第二层等体 Cube 中抽出一条
+   * 3×3 的连续内腔。人进入入口 40 后以缩放视角在内腔穿行，出口为 28；
+   * 经文挂在洞壁，故只有入内才看见，绝不成为外立面的装饰卡片。
+   */
+  private buildRabbitHole() {
+    const bySeat = new Map(this.events.map((event) => [event.seat_id, event]));
+    const axis = RABBIT_HOLE_SEATS.map((seatId) => bySeat.get(seatId));
+    if (axis.some((event) => !event) || axis.some((event) => event!.grid_z !== 0)) {
+      throw new Error('Rabbit Hole 必须是横轴 40→19→6→1→2→11→28（z=0）');
+    }
+
+    const group = new THREE.Group();
+    group.name = 'rabbit-hole-40-19-6-1-2-11-28';
+    const tunnelY = BRICK * 1.5;
+    const tunnelLength = CELL * 7 - 0.12;
+
+    // BackSide 只在镜头缩小、进入洞内时显影；外部仍是一座严丝合缝的方坛。
+    const lining = new THREE.Mesh(
+      new THREE.BoxGeometry(tunnelLength, BRICK - 0.16, BRICK - 0.16),
+      new THREE.MeshStandardMaterial({
+        color: 0x071827,
+        emissive: 0x0b3150,
+        emissiveIntensity: 0.48,
+        roughness: 0.46,
+        metalness: 0.38,
+        side: THREE.BackSide
+      })
+    );
+    lining.position.set(0, tunnelY, 0);
+    lining.userData = { type: 'rabbit_hole_lining', axis: [...RABBIT_HOLE_SEATS] };
+    group.add(lining);
+
+    const portalMat = new THREE.MeshStandardMaterial({
+      color: 0xd6a54a,
+      emissive: 0x7c4b0e,
+      emissiveIntensity: 0.7,
+      roughness: 0.22,
+      metalness: 0.84
+    });
+    [-1, 1].forEach((side) => {
+      const portal = new THREE.Mesh(new THREE.TorusGeometry(BRICK * 0.37, 0.075, 10, 36), portalMat);
+      portal.rotation.y = Math.PI / 2;
+      portal.position.set(side * (CELL * 3 + 0.12), tunnelY, 0);
+      portal.userData = { type: side < 0 ? 'rabbit_hole_entrance_40' : 'rabbit_hole_exit_28' };
+      group.add(portal);
+    });
+
+    // 每一段洞壁只留一句：是走进祭坛以后才读到的诗，不抢外部 7×7 的结构叙事。
+    axis.forEach((event, index) => {
+      const poem = SEASON1_POEMS[index % SEASON1_POEMS.length];
+      const side = index % 2 === 0 ? 1 : -1;
+      const panel = this.createRabbitPoemPanel(`${poem.seasonId}  ${poem.opening.text[0]}`);
+      panel.position.set(event!.grid_x * CELL, tunnelY, side * (BRICK / 2 - 0.075));
+      panel.rotation.y = side > 0 ? Math.PI : 0;
+      group.add(panel);
+    });
+
+    this.hollowInteriorGroup.add(group);
+  }
+
+  private createRabbitPoemPanel(text: string): THREE.Mesh {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 180;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = 'rgba(5, 15, 29, 0.94)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#c89032';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+    ctx.fillStyle = '#f6dfaa';
+    ctx.font = '34px "Noto Serif SC", serif';
+    ctx.textAlign = 'center';
+    const clipped = text.length > 28 ? `${text.slice(0, 27)}…` : text;
+    ctx.fillText(clipped, canvas.width / 2, 108);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(CELL * 0.82, 0.46),
+      new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide })
+    );
+    panel.userData = { type: 'rabbit_hole_poem' };
+    return panel;
   }
 
   /**
@@ -1109,9 +1265,10 @@ export class AltarScene {
     const dz = next ? Math.sign(next.grid_z - ev.grid_z) : 0;
 
     return {
-      cx: ev.grid_x * CELL + dx * BRICK * 0.1,
+      // 槽心永远压在 Cube 中心；不能用偏移把相邻 Cube 的公共边拉开。
+      cx: ev.grid_x * CELL,
       cy: ev.elevation - 0.03,
-      cz: ev.grid_z * CELL + dz * BRICK * 0.1,
+      cz: ev.grid_z * CELL,
       rx: dz * SPIRAL_SLOPE,
       rz: -dx * SPIRAL_SLOPE
     };
@@ -1316,9 +1473,11 @@ export class AltarScene {
   };
 
   private onPointerDown = (event: MouseEvent) => {
-    // 能力门控（取代原来的 guest 二值门控）：
-    // 游客一条能力都没有 ⟹ 首行 return，公共入口行为与原来逐字一致；
-    // 认证/导演放行，下面四段再按各自的能力细分。
+    // 访客不是自动播放的被动摄像机：每次鼠标/触摸才唤起一条固定路线。
+    if (this.role === 'guest') {
+      this.activateGuestRoutine();
+      return;
+    }
     const caps = this.capabilities;
     if (!caps.freeCamera) return;
 
@@ -1394,6 +1553,20 @@ export class AltarScene {
     }
   };
 
+  private onKeyDown = (event: KeyboardEvent) => {
+    if (!this.capabilities.freeCamera) return;
+    const key = event.key.toLowerCase();
+    if (!['w', 'a', 's', 'd', 'q', 'e', 'shift'].includes(key)) return;
+    this.pressedKeys.add(key);
+    event.preventDefault();
+  };
+
+  private onKeyUp = (event: KeyboardEvent) => {
+    this.pressedKeys.delete(event.key.toLowerCase());
+  };
+
+  private onWindowBlur = () => this.pressedKeys.clear();
+
   public setActiveSeat(seatId: number) {
     this.activeSeatId = seatId;
     this.currentProgress = seatId;
@@ -1430,12 +1603,13 @@ export class AltarScene {
     this.controls.enabled = false;
     this.scene.background = new THREE.Color(0x000000);
     const isDark = phase === 'abyss' || phase === 'silence';
-    this.scene.fog = new THREE.FogExp2(0x000000, isDark ? 0.07 : 0.024);
+    // 公共仪式可以暗，不能灰。雾只承担远景吸收，不许把 7×7 Cube 的贴合边界糊掉。
+    this.scene.fog = new THREE.FogExp2(0x000000, isDark ? 0.07 : 0.006);
 
-    if (this.ambientLight) this.ambientLight.intensity = isDark ? 0 : 0.32;
-    if (this.sunLight) this.sunLight.intensity = isDark ? 0 : 0.72;
-    if (this.rimLight) this.rimLight.intensity = isDark ? 0 : 0.42;
-    if (this.apexLight) this.apexLight.intensity = isDark ? 0 : 0.38;
+    if (this.ambientLight) this.ambientLight.intensity = isDark ? 0 : 0.18;
+    if (this.sunLight) this.sunLight.intensity = isDark ? 0 : 1.35;
+    if (this.rimLight) this.rimLight.intensity = isDark ? 0 : 0.82;
+    if (this.apexLight) this.apexLight.intensity = isDark ? 0 : 0.62;
     if (this.wujiLight) this.wujiLight.intensity = phase === 'extinguishing' || phase === 'silence' ? 2.4 : 0;
 
     this.outerShellGroup.visible = phase !== 'abyss';
@@ -1566,12 +1740,9 @@ export class AltarScene {
     if (isGuest) {
       this.guestRoutineIndex = 0;
       this.guestRoutineTimer = 0;
-      // 游客机位 = 一段连续慢速环绕。起始相位取东南对角（与相机初值 (48,40,58)
-      // 大致同向），并立即落到轨道上，避免首帧跳变。
-      this.guestOrbitAngle = Math.PI / 4;
-      this.applyGuestOrbit();
+      this.guestRoutinePlaying = false;
     } else {
-      // 导演/认证自己掌机，游客 routine 不许抢镜头
+      // 导演/认证自己掌机，游客 routine 不许抢镜头。
       this.isAutoPatrol = false;
     }
   }
@@ -1584,7 +1755,11 @@ export class AltarScene {
     this.cameraMode = mode;
     this.isCameraTransitioning = true;
 
-    if (mode === 'yin') {
+    if (mode === 'rabbit_hole') {
+      // 从 40 号入口起步；真正的穿行由 updateRabbitHoleTour 连续完成，不能硬切进墙里。
+      this.targetCameraPos.set(-CELL * 3 - 2.2, BRICK * 1.5, 0);
+      this.targetControlsTarget.set(-CELL * 3, BRICK * 1.5, 0);
+    } else if (mode === 'yin') {
       // 入阴：进到中空方锥的下层空腔（5×5×3 单位），略抬头看北壁的青玉碑
       this.targetCameraPos.set(0, 1.8, 2.5);
       this.targetControlsTarget.set(0, 2.6, -7.5);
@@ -1625,21 +1800,52 @@ export class AltarScene {
     }
   }
 
+  /** 鼠标/触摸一次只唤起一条游客既定路线，播放完停在当前位置。 */
+  private activateGuestRoutine(): void {
+    const routine = GUEST_ROUTINES[this.guestRoutineIndex];
+    this.guestRoutineIndex = (this.guestRoutineIndex + 1) % GUEST_ROUTINES.length;
+    this.guestRoutineTimer = 0;
+    this.guestRoutinePlaying = true;
+    this.rabbitHoleTourActive = routine === 'rabbit_hole';
+    this.setCameraMode(routine);
+  }
+
   /**
-   * 把游客相机推到环绕轨道上（逐帧调用）。
-   *
-   * 直接写 camera.position + controls.target，并把 isCameraTransitioning 置 false ——
-   * 保证永远是**连续**的慢速运动，绝不会 lerp 跳变到某个新目标。半径 57 远大于
-   * 坛体半宽，相机永远在壳外翱翔，绝不入壳。
+   * 访客的缩放路线：40 口入、28 口出。相机沿洞心移动而非 teleport，
+   * 所以洞壁的诗句有阅读时间，也不会发生“镜头穿 Cube”的假象。
    */
-  private applyGuestOrbit(): void {
-    const a = this.guestOrbitAngle;
-    this.camera.position.set(
-      Math.sin(a) * GUEST_ORBIT.radius,
-      GUEST_ORBIT.height,
-      Math.cos(a) * GUEST_ORBIT.radius
-    );
-    this.controls.target.set(0, GUEST_ORBIT.lookAtY, 0);
+  private updateRabbitHoleTour(progress: number): void {
+    const startX = -CELL * 3 - 1.7;
+    const endX = CELL * 3 + 1.7;
+    const eased = THREE.MathUtils.smootherstep(progress, 0, 1);
+    const x = THREE.MathUtils.lerp(startX, endX, eased);
+    const y = BRICK * 1.5;
+    this.camera.position.set(x, y, 0);
+    this.controls.target.set(Math.min(x + 2.1, endX), y, 0);
+    this.isCameraTransitioning = false;
+  }
+
+  /** 认证者的鼠标看向 + WASD 平面飞行，Q/E 升降，Shift 加速。 */
+  private updateFreeFlight(dt: number): void {
+    if (!this.capabilities.freeCamera || this.pressedKeys.size === 0) return;
+    const forward = new THREE.Vector3();
+    this.camera.getWorldDirection(forward);
+    forward.y = 0;
+    if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
+    forward.normalize();
+    const right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize();
+    const delta = new THREE.Vector3();
+    if (this.pressedKeys.has('w')) delta.add(forward);
+    if (this.pressedKeys.has('s')) delta.sub(forward);
+    if (this.pressedKeys.has('d')) delta.add(right);
+    if (this.pressedKeys.has('a')) delta.sub(right);
+    if (this.pressedKeys.has('e')) delta.y += 1;
+    if (this.pressedKeys.has('q')) delta.y -= 1;
+    if (delta.lengthSq() === 0) return;
+    const speed = this.pressedKeys.has('shift') ? 24 : 8;
+    delta.normalize().multiplyScalar(speed * dt);
+    this.camera.position.add(delta);
+    this.controls.target.add(delta);
     this.isCameraTransitioning = false;
   }
 
@@ -1657,24 +1863,16 @@ export class AltarScene {
     const dt = Math.min(0.05, elapsedTime - this.lastElapsed);
     this.lastElapsed = elapsedTime;
 
-    // 0. 游客机位 = 一段连续的慢速外部环绕（公共页唯一的镜头运动）。
-    //    (a) 旧的 routine 循环（cinematic/yin/patrol 每 18s 硬切）已废止：
-    //        这里仅保留「建立镜头」的计时器，并**收紧为仪式期间停用**
-    //        （`&& !this.ritualMode`），避免残留倒计时进坛后突然再切一次机位。
-    if (this.role === 'guest' && !this.ritualMode) {
+    // 0. 游客路线只由 pointerdown 唤起，绝不在后台自顾自切换。
+    if (this.role === 'guest' && this.guestRoutinePlaying) {
       this.guestRoutineTimer += dt;
-      if (this.guestRoutineTimer >= GUEST_ROUTINE_SECONDS) {
-        this.guestRoutineTimer = 0;
-        this.guestRoutineIndex = (this.guestRoutineIndex + 1) % GUEST_ROUTINES.length;
-        this.setCameraMode(GUEST_ROUTINES[this.guestRoutineIndex]);
+      if (this.rabbitHoleTourActive) {
+        this.updateRabbitHoleTour(this.guestRoutineTimer / GUEST_ROUTINE_SECONDS);
       }
-    }
-
-    //    (b) 连续环绕：逐帧平滑推进，绝不 jump、绝不入壳；进坛后（naming 等幕次）
-    //        由它继续接管镜头。约 5 分钟转一圈。
-    if (this.role === 'guest') {
-      this.guestOrbitAngle += GUEST_ORBIT.angularSpeed * dt;
-      this.applyGuestOrbit();
+      if (this.guestRoutineTimer >= GUEST_ROUTINE_SECONDS) {
+        this.guestRoutinePlaying = false;
+        this.rabbitHoleTourActive = false;
+      }
     }
 
     // 1. Smooth Camera Transition
@@ -1702,6 +1900,7 @@ export class AltarScene {
     }
 
     this.controls.update();
+    this.updateFreeFlight(dt);
 
     // 2. Slow continuous rotation of outer 16 Tea Lanterns
     if (this.lanternsGroup) {
@@ -1943,6 +2142,9 @@ export class AltarScene {
 
     // 2. 事件监听
     window.removeEventListener('resize', this.onWindowResize);
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('blur', this.onWindowBlur);
     this.container.removeEventListener('pointerdown', this.onPointerDown);
 
     // 3. 工程 HUD 的 DOM（数表/物理读数只属于验收，不属于公共仪式）

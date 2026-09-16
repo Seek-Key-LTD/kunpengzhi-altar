@@ -9,18 +9,14 @@
 // 标称实心 7 层方锥 = 1²+2²+…+7² = 140 格；其中暴露带 49 格、内部 91 格（= 1²+…+6²）。
 //
 // ── 砌法 ────────────────────────────────────────────────────────────
-// 砖 = 半格（BRICK = 1.5），每层高 1 砖、每边内收 1 砖 ⟹ 坡度恒为 1:1 = 精确 45°。
-// 只砌每层最外面那一圈（暴露带），**中间 91 格全部空着** ⟹ 外壳是一座中空的
-// 七级方锥，内部是一座递收的空腔（阴），镜头可入。
-//
-// 第 n 层每边 2n 砖，外圈一圈砖数 = 8n − 4，正好是席位数 2n − 1 的 4 倍
-// （每席 = 4 块砖 = 1 格²）。
+// 一个格就是一个 Cube：横向、纵向、深度严格同边长。49 根柱的顶面恰好拼成
+// 7×7 无缝平面，不存在“席位之间漏一条黑缝”的第二种砖。
 
-export const BRICK = 1.5; // 立方砖边长 = 半格
-export const CELL = BRICK * 2; // 一格 = 2 砖 = 3.0
+export const BRICK = 3.0; // 全坛唯一基本能量 Cube 的边长
+export const CELL = BRICK; // 一席 = 一 Cube；相邻 Cube 面贴面
 export const LAYERS = 7; // 七层
 export const PYRAMID_HALF = (LAYERS * CELL) / 2; // 底座半宽 = 10.5
-export const PYRAMID_TOP = LAYERS * BRICK; // 总高 = 10.5（= 半底，故 45°）
+export const PYRAMID_TOP = LAYERS * BRICK; // 总高 = 21，七层 Cube
 
 export const PLINTH_HALF = 15; // 台基半宽
 export const PLINTH_THICKNESS = 1.2;
@@ -148,3 +144,14 @@ export function seatElevation(seatId: number): number {
 
 /** 台面沿螺旋方向的坡度（弧度）—— 物理台面与视觉台面用同一个值 */
 export const SPIRAL_SLOPE = Math.atan(DROP_PER_SEAT / CELL);
+
+/**
+ * 穿坛河的七个方位：不是随手画出的中轴线，而是 Ulam 方阵的 x = 0 轴。
+ * 46→23→8→1 为暗渠提升段；1→4→15→34 为坛面重力明渠。
+ */
+export const RIVER_AXIS_SEATS = [46, 23, 8, 1, 4, 15, 34] as const;
+export const RIVER_LIFT_SEATS = [46, 23, 8, 1] as const;
+export const RIVER_GRAVITY_SEATS = [1, 4, 15, 34] as const;
+
+/** 横向兔子洞：缩尺访客从 40 进、穿过 1、从 28 出。 */
+export const RABBIT_HOLE_SEATS = [40, 19, 6, 1, 2, 11, 28] as const;

@@ -49,13 +49,14 @@ export type CameraMode =
   | 'topdown'
   | 'fountain'
   | 'cinematic'
+  | 'rabbit_hole'
   | 'relic';
 
 /**
  * 身份 —— 自由度是被记录换来的。
  *
- * guest：3 条固定 routine，禁手动，行为不进账（公共入口，零改动）
- * authenticated：自由相机 + 席位/茶灯/石经**只读**点击 + **拓印**写权限
+ * guest：3 条固定 routine，须由点击/触摸唤起，行为不进账
+ * authenticated：鼠标观察 + WASD 自由飞行；席位/茶灯/石经**只读**点击 + **拓印**写权限
  * director：上述全部 + 玉玺**拆解与断代**（讲解权）
  *
  * 默认 guest。未认证即游客，不是"默认给自由"。见 docs/身份与相机权限规范.md
@@ -155,10 +156,9 @@ export const CAMERA_DISTANCE_BY_ROLE: Record<AltarRole, { min: number; max: numb
  *   2. `'patrol'` 在 setCameraMode 里没有对应分支 → 目标不更新，是个静默什么都不干
  *      的死模式，已从游客档移除（并为 setCameraMode('patrol') 补上真实目标）。
  *
- * 现在只剩一个「建立镜头」；公共页真正的镜头运动是 GUEST_ORBIT 那段连续环绕
- * （见 AltarScene.animate 第 0 段）—— 不再有任何机位硬切。
+ * 三条路线均由访客的鼠标或触摸主动唤起；播放一次后停住，绝不后台替人巡游。
  */
-export const GUEST_ROUTINES: CameraMode[] = ['cinematic'];
+export const GUEST_ROUTINES: CameraMode[] = ['cinematic', 'rabbit_hole', 'patrol'];
 
 /** 每条 routine 的播放时长（秒） */
 export const GUEST_ROUTINE_SECONDS = 18;
