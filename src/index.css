@@ -27,21 +27,106 @@ body {
 .ritual-root { position: relative; background: #000; }
 .ritual-canvas { position: absolute; inset: 0; }
 
-.ritual-enter,
 .ritual-return {
   position: absolute;
   left: 50%;
+  bottom: 7vh;
+  transform: translateX(-32%);
   border: 0;
   color: rgba(221, 239, 245, 0.62);
   background: transparent;
   font: 400 14px/1.2 "Noto Serif SC", "Songti SC", serif;
   letter-spacing: 0.7em;
   cursor: pointer;
+  opacity: 0.18;
   transition: color 1.2s ease, opacity 1.2s ease;
 }
-.ritual-enter { bottom: 9vh; transform: translateX(-32%); }
-.ritual-return { bottom: 7vh; transform: translateX(-32%); opacity: 0.18; }
-.ritual-enter:hover, .ritual-return:hover { color: rgba(224, 249, 255, 0.96); }
+.ritual-return:hover { color: rgba(224, 249, 255, 0.96); }
+
+/* ── Public landing entry layer ─────────────────────────────────────────
+   Covers the canvas so the ritual cannot be touched before entry. All type
+   sizes are clamp()+vw driven; no fixed px font sizes. */
+.ritual-landing {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6vh 8vw;
+  background: radial-gradient(
+    circle at 50% 42%,
+    rgba(18, 40, 58, 0.85) 0%,
+    rgba(5, 7, 13, 0.97) 58%,
+    #000 100%
+  );
+  cursor: default;
+  opacity: 1;
+  transition: opacity 1.2s ease;
+}
+.ritual-landing.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ritual-landing__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(22px, 4vh, 52px);
+  text-align: center;
+}
+
+.ritual-landing__title {
+  margin: 0;
+  color: rgba(226, 244, 250, 0.92);
+  font: 400 clamp(20px, 3.4vw, 44px)/1.5 "Noto Serif SC", "Songti SC", serif;
+  letter-spacing: 0.34em;
+  text-shadow: 0 0 28px rgba(145, 215, 235, 0.32);
+  animation: ritual-landing-in 2.4s ease both;
+}
+
+.ritual-landing__enter {
+  border: 0;
+  padding: 0.2em 0;
+  color: rgba(221, 239, 245, 0.72);
+  background: transparent;
+  font: 400 clamp(18px, 2.6vw, 34px)/1.4 "Noto Serif SC", "Songti SC", serif;
+  letter-spacing: 0.6em;
+  cursor: pointer;
+  transition: color 1s ease, text-shadow 1s ease;
+}
+.ritual-landing__enter:hover,
+.ritual-landing__enter:focus-visible {
+  color: rgba(232, 252, 255, 0.98);
+  text-shadow: 0 0 26px rgba(145, 215, 235, 0.5);
+  outline: none;
+}
+
+.ritual-landing__hint {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(20px, 6vh, 64px);
+  width: min(88vw, 720px);
+  transform: translateX(-50%);
+  margin: 0;
+  text-align: center;
+  color: rgba(200, 224, 232, 0.42);
+  font: 400 clamp(11px, 1.1vw, 14px)/1.7 "Noto Serif SC", "Songti SC", serif;
+  letter-spacing: 0.16em;
+}
+
+@keyframes ritual-landing-in {
+  from { opacity: 0; filter: blur(6px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ritual-landing { transition: none; }
+  .ritual-landing__title { animation: none; }
+  .ritual-landing__enter { transition: color 0.2s ease; }
+}
 
 .ritual-caption {
   position: absolute;

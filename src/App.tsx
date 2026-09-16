@@ -3,6 +3,7 @@ import { AltarScene } from './three/AltarScene';
 import { INITIAL_SPIRAL_EVENTS } from './data/spiral_events';
 import { altarAudio } from './audio/altarAudio';
 import { TEA_POEM_16_CHAPTERS } from './data/tea_poem_16';
+import { RitualLanding } from './components/RitualLanding';
 
 type RitualPhase = 'abyss' | 'naming' | 'lanterns' | 'extinguishing' | 'silence';
 
@@ -32,6 +33,7 @@ export const App: React.FC = () => {
   const startedAtRef = useRef<number | null>(null);
   const lastSeatRef = useRef<number | null>(null);
   const [started, setStarted] = useState(false);
+  const [landingVisible, setLandingVisible] = useState(true);
   const [frame, setFrame] = useState(() => frameAt(0));
 
   useEffect(() => {
@@ -77,7 +79,9 @@ export const App: React.FC = () => {
   return (
     <main className="ritual-root">
       <div ref={containerRef} className="ritual-canvas" aria-hidden="true" />
-      {!started && <button className="ritual-enter" onClick={begin} aria-label="进入祭坛">入坛</button>}
+      {landingVisible && (
+        <RitualLanding onEnter={begin} onExited={() => setLandingVisible(false)} />
+      )}
       {started && frame.phase === 'lanterns' && <p className="ritual-caption">{poem?.leftColumn[0]}</p>}
       {started && frame.phase === 'silence' && <button className="ritual-return" onClick={() => window.location.reload()}>复位</button>}
     </main>
