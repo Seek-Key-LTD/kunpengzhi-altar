@@ -17,6 +17,51 @@ body {
   -webkit-user-select: none;
 }
 
+.ritual-root,
+.ritual-canvas {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.ritual-root { position: relative; background: #000; }
+.ritual-canvas { position: absolute; inset: 0; }
+
+.ritual-enter,
+.ritual-return {
+  position: absolute;
+  left: 50%;
+  border: 0;
+  color: rgba(221, 239, 245, 0.62);
+  background: transparent;
+  font: 400 14px/1.2 "Noto Serif SC", "Songti SC", serif;
+  letter-spacing: 0.7em;
+  cursor: pointer;
+  transition: color 1.2s ease, opacity 1.2s ease;
+}
+.ritual-enter { bottom: 9vh; transform: translateX(-32%); }
+.ritual-return { bottom: 7vh; transform: translateX(-32%); opacity: 0.18; }
+.ritual-enter:hover, .ritual-return:hover { color: rgba(224, 249, 255, 0.96); }
+
+.ritual-caption {
+  position: absolute;
+  left: 50%; bottom: 12vh;
+  width: min(76vw, 780px);
+  transform: translateX(-50%);
+  margin: 0;
+  text-align: center;
+  color: rgba(233, 245, 245, 0.78);
+  font: 400 clamp(15px, 1.5vw, 22px)/1.8 "Noto Serif SC", "Songti SC", serif;
+  letter-spacing: 0.2em;
+  text-shadow: 0 0 22px rgba(145, 215, 235, 0.35);
+  animation: ritual-caption-in 2s ease both;
+}
+
+@keyframes ritual-caption-in {
+  from { opacity: 0; filter: blur(5px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
 /* Custom sleek scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;

@@ -40,17 +40,14 @@ const SEAT_PLAN = ulamCoords(SEATS_PER_LEVEL * 7).map((p, idx) => {
 /**
  * 49 个音 = 4 组键子 × 12 键 + 1 = 49。
  *
- * 音域底座：**从中央 C 往下一组键子起，向上四个八度**——
- *   第 49 席 C3（MIDI 48）→ 第 1 席 C7（MIDI 96），共 49 个半音。
- *   （48 = 中央 C 60 − 12；96 − 48 = 48 个半音 = 12 × 4，加起点共 49）
- *
- * 方向：水顺螺旋往下沉，音就往下掉 —— **第 1 席最高（塔顶 C7），第 49 席最低（塔基 C3）**。
+ * 音域底座：第 1 席 C2（MIDI 36）→ 第 49 席 C6（MIDI 84），
+ * 恰好 48 个半音；水向外、向下，名字与音高则逐级上升。
  * 位置即音高，不是配乐。
  */
-export const SEAT_TOP_MIDI = 96; // C7 —— 第 1 席
-export const SEAT_BOTTOM_MIDI = 48; // C3 —— 第 49 席
+export const SEAT_BOTTOM_MIDI = 36; // C2 —— 第 1 席
+export const SEAT_TOP_MIDI = 84; // C6 —— 第 49 席
 export function seatMidi(seatId: number): number {
-  return SEAT_TOP_MIDI - (seatId - 1);
+  return SEAT_BOTTOM_MIDI + (seatId - 1);
 }
 
 const FLOWER_TYPES: Array<SpiralEvent['flower_type']> = [
@@ -88,7 +85,7 @@ export const INITIAL_SPIRAL_EVENTS: SpiralEvent[] = SEAT_PLAN.map((seat, idx) =>
   const arrivalBeat = idx * 1.5;
   const arrivalSeconds = Number((arrivalBeat * 0.75).toFixed(2));
 
-  // 49 音 = 4 组 × 12 键 + 1：中央 C 往下，每席降一个半音
+  // 49 音 = 4 组 × 12 键 + 1：从 C2 起，每席升一个半音
   const midiNote = seatMidi(seatId);
 
   const zodiacSector = ((seatId - 1) % 12) + 1;

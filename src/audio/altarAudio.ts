@@ -12,6 +12,7 @@ class AltarAudioEngine {
   private waterNoise: Tone.NoiseSynth | null = null;
   private reverb: Tone.Reverb | null = null;
   private delay: Tone.FeedbackDelay | null = null;
+  private lowpass: Tone.Filter | null = null;
 
   public async init() {
     if (this.isInitialized) return;
@@ -20,17 +21,19 @@ class AltarAudioEngine {
     
     // Ambient spatial reverb
     this.reverb = new Tone.Reverb({
-      decay: 5,
-      preDelay: 0.1,
+      decay: 6.5,
+      preDelay: 0.08,
       wet: 0.45
     }).toDestination();
     await this.reverb.generate();
+
+    this.lowpass = new Tone.Filter(120, 'lowpass').connect(this.reverb);
 
     this.delay = new Tone.FeedbackDelay({
       delayTime: '8n.',
       feedback: 0.25,
       wet: 0.2
-    }).connect(this.reverb);
+    }).connect(this.lowpass);
 
     // High crystalline chime / bell synth
     this.bellSynth = new Tone.PolySynth(Tone.FMSynth, {
@@ -80,7 +83,9 @@ class AltarAudioEngine {
   public triggerSeatEvent(event: SpiralEvent) {
     if (!this.isInitialized || this.isMuted) return;
 
-    const noteName = event.midi_note_name;
+    // C2 起逐半音上升：第 49 席回到 C6。不要从展示数据反推，
+    // 这里直接保留十二平均律的物理定义。
+    const noteName = Tone.Frequency('C2').transpose(event.seat_id - 1).toNote();
     const isFinale = event.is_finale;
     const now = Tone.now();
 

@@ -51,6 +51,13 @@ export class AltarScene {
   private maxSeatReached = 1;
   private waterProgressEl: HTMLDivElement | null = null;
   private numbersPanelEl: HTMLDivElement | null = null;
+  private ambientLight: THREE.AmbientLight | null = null;
+  private sunLight: THREE.DirectionalLight | null = null;
+  private rimLight: THREE.DirectionalLight | null = null;
+  private apexLight: THREE.PointLight | null = null;
+  private wujiLight: THREE.SpotLight | null = null;
+  private ritualMode = false;
+  private ritualLitSeats = 0;
   
   // Interactive Objects & Meshes
   private waterSpiralPath: THREE.Vector3[] = [];
@@ -176,61 +183,13 @@ export class AltarScene {
     // 9. 物理引擎（异步）—— 起来之后由它接管水的运动
     void this.initRapierPhysics();
 
-    // 10. 数表与物理读数（贴在容器上，不走 React）
-    this.buildOverlayReadouts();
-  }
-
-  /**
-   * 把这座坛子用到的几个数直接标在界面上。
-   *
-   *   140 = 1²+2²+…+7²          实心七级方锥的总格数
-   *    49 = 7² = 1+3+5+…+13      朝天暴露的格数 = 49 席
-   *    91 = 1²+…+6² = 140−49     内部（阴）的格数 = 364 ÷ 4
-   *    49 = 4×12+1               49 个音：四组键子 + 一个（中央 C 往下数）
-   *   364 = 4×91
-   */
-  private buildOverlayReadouts() {
-    const wrap = document.createElement('div');
-    wrap.style.cssText =
-      'position:fixed;left:16px;top:170px;z-index:50;pointer-events:none;' +
-      'font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;' +
-      'line-height:1.65;color:#94a3b8;background:rgba(2,6,23,.85);' +
-      'border:1px solid rgba(51,65,85,.8);border-radius:10px;padding:10px 12px;' +
-      'backdrop-filter:blur(6px);max-width:260px;';
-
-    const rows = [
-      ['140', '= 1²+2²+…+7²', '实心七级方锥的总格数'],
-      ['49', '= 7² = 1+3+5+7+9+11+13', '朝天暴露的格数 = 49 席'],
-      ['91', '= 1²+…+6² = 140 − 49', '内部（阴）的格数'],
-      ['364', '= 4 × 91', ''],
-      ['49', '= 4 组键子 × 12 + 1', '中央 C 往下数，四组零一个半音']
-    ];
-
-    rows.forEach(([num, expr, note]) => {
-      const line = document.createElement('div');
-      line.innerHTML =
-        `<span style="color:#fbbf24;font-weight:700">${num}</span>` +
-        `<span style="color:#64748b"> ${expr}</span>` +
-        (note ? `<div style="color:#475569;padding-left:10px">${note}</div>` : '');
-      wrap.appendChild(line);
-    });
-
-    const prog = document.createElement('div');
-    prog.style.cssText =
-      'margin-top:8px;padding-top:8px;border-top:1px solid rgba(51,65,85,.8);' +
-      'color:#7dd3fc;font-weight:600;';
-    prog.textContent = 'Rapier 物理验证：启动中…';
-    wrap.appendChild(prog);
-
-    // 挂在 document.body 上，避免被 Canvas 容器的 overflow / stacking 遮住
-    document.body.appendChild(wrap);
-    this.numbersPanelEl = wrap;
-    this.waterProgressEl = prog;
+    // 数表与物理读数只属于工程验收，不属于公共仪式；默认不挂 HUD。
   }
 
   private initLighting() {
     const ambientLight = new THREE.AmbientLight(0x1e293b, 1.4);
     this.scene.add(ambientLight);
+    this.ambientLight = ambientLight;
 
     const sunLight = new THREE.DirectionalLight(0xffecd2, 2.6);
     sunLight.position.set(35, 55, 25);
@@ -238,14 +197,23 @@ export class AltarScene {
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
     this.scene.add(sunLight);
+    this.sunLight = sunLight;
 
     const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.6);
     rimLight.position.set(-35, 12, -35);
     this.scene.add(rimLight);
+    this.rimLight = rimLight;
 
     const apexLight = new THREE.PointLight(0xfbbf24, 3.2, 70, 1.2);
     apexLight.position.set(0, PYRAMID_TOP + 4, 0);
     this.scene.add(apexLight);
+    this.apexLight = apexLight;
+
+    const wujiLight = new THREE.SpotLight(0xbfe8ff, 0, 45, 0.12, 0.65, 1.4);
+    wujiLight.position.set(0, 42, 0);
+    wujiLight.target.position.set(0, PYRAMID_TOP, 0);
+    this.scene.add(wujiLight, wujiLight.target);
+    this.wujiLight = wujiLight;
 
     // 阴锥内腔照明（空腔是封闭的，光必须留在里面）
     const yinLightA = new THREE.PointLight(0x38bdf8, 3.0, 26, 1.2);
@@ -1121,6 +1089,7 @@ export class AltarScene {
   /** 每帧推进物理世界，并把"水流到第几席"读出来 */
   private updatePhysics(dt: number) {
     if (!this.physicsReady || !this.physicsWorld) return;
+    if (this.ritualMode && this.waterParticles?.visible !== true) return;
 
     const world = this.physicsWorld;
     const STEP = 1 / 60;
@@ -1315,6 +1284,43 @@ export class AltarScene {
         this.isCameraTransitioning = true;
       }
     }
+  }
+
+  /** 公共入口的导演状态：让水、光、声遵从同一条三十分钟时间轴。 */
+  public setRitualState(
+    phase: 'abyss' | 'naming' | 'lanterns' | 'extinguishing' | 'silence',
+    litSeats: number,
+    activeSeatId: number | null
+  ) {
+    this.ritualMode = true;
+    this.ritualLitSeats = Math.max(0, Math.min(49, litSeats));
+    this.isAutoPatrol = false;
+    this.controls.enabled = false;
+    this.scene.background = new THREE.Color(0x000000);
+    const isDark = phase === 'abyss' || phase === 'silence';
+    this.scene.fog = new THREE.FogExp2(0x000000, isDark ? 0.07 : 0.024);
+
+    if (this.ambientLight) this.ambientLight.intensity = isDark ? 0 : 0.32;
+    if (this.sunLight) this.sunLight.intensity = isDark ? 0 : 0.72;
+    if (this.rimLight) this.rimLight.intensity = isDark ? 0 : 0.42;
+    if (this.apexLight) this.apexLight.intensity = isDark ? 0 : 0.38;
+    if (this.wujiLight) this.wujiLight.intensity = phase === 'extinguishing' || phase === 'silence' ? 2.4 : 0;
+
+    this.outerShellGroup.visible = phase !== 'abyss';
+    this.hollowInteriorGroup.visible = phase !== 'abyss';
+    this.waterworksGroup.visible = !isDark;
+    this.physicsDropletsGroup.visible = !isDark;
+    this.fountainGroup.visible = !isDark;
+    this.primeLinesGroup.visible = false;
+    this.starshipMeshes.forEach((ship) => { ship.visible = false; });
+    this.lanternsGroup.visible = phase === 'lanterns' || phase === 'extinguishing';
+    this.lanternRotationSpeed = phase === 'lanterns' ? 0.00055 : 0;
+    if (this.waterParticles) this.waterParticles.visible = phase === 'naming' || phase === 'lanterns';
+
+    this.seatLotusMeshes.forEach((flower, id) => {
+      flower.visible = id <= this.ritualLitSeats && !isDark;
+      flower.scale.setScalar(id === activeSeatId ? 1.12 : 0.7);
+    });
   }
 
   public focusTeaLantern(chapterIndex: number) {
@@ -1544,11 +1550,11 @@ export class AltarScene {
       }
     });
 
-    // 9. 水利机关：翻斗蓄水—越阈翻转—配重水梯提水—复位
-    this.updateWaterworks(elapsedTime);
-
-    // 10. 物理引擎：水滴由 Rapier 自己算，我们不插手
-    this.updatePhysics(dt);
+    // 9. 水利机关：公共仪式的黑场与静默不允许后台水声继续说话。
+    if (!this.ritualMode || this.waterParticles?.visible) {
+      this.updateWaterworks(elapsedTime);
+      this.updatePhysics(dt);
+    }
 
     // 11. Auto patrol
     if (this.isAutoPatrol) {
