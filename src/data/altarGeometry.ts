@@ -85,7 +85,8 @@ export function pointOnSquareRing(a: number, s: number): { x: number; z: number 
 // 所以「从头到尾、任意相邻两席之间的距离」恒等于 1 格 —— 这才是间距相等。
 //
 // 49 = 7 级 × 每级 7 席。沿螺旋连续 7 步算一级，每级比上一级低 1 砖，
-// 于是水从第 1 席一路被重力推着绕到第 49 席。
+// 水从第 1 席一路绕到第 49 席；注意它走的是嵌入 Cube 阴腔的蝎子楔，
+// 而不是阳 Cube 的外露顶面。
 
 /** 7×7 方形螺旋坐标（1 在正中，每步 1 格） */
 export function ulamCoords(total: number): Array<{ x: number; z: number }> {
@@ -130,10 +131,8 @@ export function seatLevel(seatId: number): number {
 /**
  * 每席沿螺旋下沉的量。
  *
- * 关键：台面不是"每级一个平台"，而是**一条连续下降的螺旋坡**。
- * 第 1 席最高（塔顶），第 49 席最低（贴台基），中间 48 步均分，
- * 所以任意相邻两席之间的落差完全相等 —— 水一路被重力推着走，
- * 不存在"走到台边撞上一个上坡"的死点。
+ * 第 1 席最高（塔顶），第 49 席最低（贴台基），中间 48 步均分。
+ * 高程属于**内部水路**，不是把阳 Cube 外表面削成斜坡。
  */
 export const DROP_PER_SEAT = (PYRAMID_TOP - BRICK) / (SEATS_PER_LEVEL * 7 - 1);
 
@@ -143,7 +142,20 @@ export function seatElevation(seatId: number): number {
 }
 
 /** 台面沿螺旋方向的坡度（弧度）—— 物理台面与视觉台面用同一个值 */
-export const SPIRAL_SLOPE = Math.atan(DROP_PER_SEAT / CELL);
+/**
+ * 阴蝎子楔：嵌入每个阳 Cube 的连续水工内件。
+ *
+ * 外壳仍是完整等边 Cube；楔的光滑腹面、两侧收水壁和尾针接口都藏在阴腔中。
+ * 每一席的管芯中心固定在顶层 Cube 内部，不得越过任何外露面。
+ */
+export const SCORPION_BORE_RADIUS = BRICK * 0.075;
+export const SCORPION_CASING_RADIUS = BRICK * 0.13;
+export const SCORPION_EMBED_DEPTH = BRICK * 0.56;
+
+/** 席位 n 的蝎子楔水芯高程；严格随 n 增大而下降。 */
+export function scorpionWaterElevation(seatId: number): number {
+  return seatElevation(seatId) - SCORPION_EMBED_DEPTH;
+}
 
 /**
  * 穿坛河的七个方位：不是随手画出的中轴线，而是 Ulam 方阵的 x = 0 轴。

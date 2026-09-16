@@ -21,14 +21,14 @@ import {
   PYRAMID_TOP,
   PLINTH_HALF,
   PLINTH_THICKNESS,
-  RIVER_WIDTH,
   RIVER_HALF_LENGTH,
-  SPIRAL_SLOPE,
+  SCORPION_BORE_RADIUS,
+  SCORPION_CASING_RADIUS,
+  scorpionWaterElevation,
   RIVER_AXIS_SEATS,
   RIVER_GRAVITY_SEATS,
   RABBIT_HOLE_SEATS
 } from '../data/altarGeometry';
-import RAPIER from '@dimforge/rapier3d-compat';
 import { ImperialSealObject } from './relic/ImperialSealObject';
 import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
@@ -51,7 +51,6 @@ export class AltarScene {
   private primeLinesGroup: THREE.Group;
   private fountainGroup: THREE.Group;
   private waterworksGroup: THREE.Group;
-  private physicsDropletsGroup: THREE.Group;
 
   // 水利机关：主翻斗 + 配重水梯
   private bucketPivot: THREE.Group | null = null;
@@ -60,15 +59,6 @@ export class AltarScene {
   private ladderDrops: THREE.Mesh[] = [];
   private riverSurface: THREE.Mesh | null = null;
 
-  // 物理引擎（Rapier3D）—— 水到底流不流得通，由引擎说了算，不由我们算角度
-  private physicsWorld: RAPIER.World | null = null;
-  private physicsReady = false;
-  private physicsAccumulator = 0;
-  private droplets: Array<{ body: RAPIER.RigidBody; mesh: THREE.Mesh }> = [];
-  private dropletCursor = 0;
-  private spawnTimer = 0;
-  private maxSeatReached = 1;
-  private waterProgressEl: HTMLDivElement | null = null;
   private numbersPanelEl: HTMLDivElement | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
   private sunLight: THREE.DirectionalLight | null = null;
@@ -104,8 +94,6 @@ export class AltarScene {
   private relicRig: SealCameraRig | null = null;
   private onRelicSelect?: (relicId: string) => void;
 
-  /** 已销毁标记：拦住异步初始化在 destroy() 之后继续造资源 */
-  private destroyed = false;
 
   // State
   private events: SpiralEvent[] = [];
@@ -195,7 +183,6 @@ export class AltarScene {
     this.primeLinesGroup = new THREE.Group();
     this.fountainGroup = new THREE.Group();
     this.waterworksGroup = new THREE.Group();
-    this.physicsDropletsGroup = new THREE.Group();
 
     this.scene.add(this.outerShellGroup);
     this.scene.add(this.hollowInteriorGroup);
@@ -203,7 +190,6 @@ export class AltarScene {
     this.scene.add(this.primeLinesGroup);
     this.scene.add(this.fountainGroup);
     this.scene.add(this.waterworksGroup);
-    this.scene.add(this.physicsDropletsGroup);
 
     // 6. Build All Complex Layers
     this.initLighting();
@@ -211,8 +197,6 @@ export class AltarScene {
     this.buildCubePyramidAndSeats();
     this.buildInnerStelaeRing();
     this.buildOuter16TeaLanterns();
-    this.buildTippingBucket();
-    this.buildWaterLadder();
     this.buildWujiFountain();
     this.buildStarships();
     this.buildSurroundingAtmosphere();
@@ -229,9 +213,6 @@ export class AltarScene {
 
     // 8. Start loop
     this.animate();
-
-    // 9. 物理引擎（异步）—— 起来之后由它接管水的运动
-    void this.initRapierPhysics();
 
     // 数表与物理读数只属于工程验收，不属于公共仪式；默认不挂 HUD。
   }
@@ -276,9 +257,7 @@ export class AltarScene {
   }
 
   /**
-   * 台基 + 河。
-   * 台基东西两半，中间留出河道；河从南（+Z）到北（−Z）贯通，南北各伸出台基 3 单位。
-   * 河是水的来源与归宿：南端取水（主翻斗），北端回水（第七级水槽的出水汇入）。
+   * 台基。水路收进 Cube 阴腔后，台基不再留一条露天河道。
    */
   private buildPlinthAndRiver() {
     const stoneMat = new THREE.MeshStandardMaterial({
@@ -294,55 +273,15 @@ export class AltarScene {
       emissiveIntensity: 0.35
     });
 
-    const riverHalf = RIVER_WIDTH / 2;
-    const bankWidth = PLINTH_HALF - riverHalf;
     const plinthDepth = PLINTH_HALF * 2;
-
-    // 东西两半台基（中间即河道）
-    [-1, 1].forEach((side) => {
-      const bank = new THREE.Mesh(
-        new THREE.BoxGeometry(bankWidth, PLINTH_THICKNESS, plinthDepth),
-        stoneMat
-      );
-      bank.position.set(side * (riverHalf + bankWidth / 2), -PLINTH_THICKNESS / 2, 0);
-      bank.receiveShadow = true;
-      bank.castShadow = true;
-      this.outerShellGroup.add(bank);
-
-      // 河岸压边（铜）
-      const curb = new THREE.Mesh(
-        new THREE.BoxGeometry(BRICK * 0.25, PLINTH_THICKNESS * 0.2, plinthDepth),
-        bronzeMat
-      );
-      curb.position.set(side * riverHalf, 0.05, 0);
-      this.outerShellGroup.add(curb);
-    });
-
-    // 河底
-    const bed = new THREE.Mesh(
-      new THREE.BoxGeometry(RIVER_WIDTH, 0.3, RIVER_HALF_LENGTH * 2),
+    const plinth = new THREE.Mesh(
+      new THREE.BoxGeometry(PLINTH_HALF * 2, PLINTH_THICKNESS, plinthDepth),
       stoneMat
     );
-    bed.position.set(0, -PLINTH_THICKNESS + 0.15, 0);
-    bed.receiveShadow = true;
-    this.outerShellGroup.add(bed);
-
-    // 水面（南→北连续水体）
-    const surface = new THREE.Mesh(
-      new THREE.BoxGeometry(RIVER_WIDTH * 0.94, 0.08, RIVER_HALF_LENGTH * 2),
-      new THREE.MeshStandardMaterial({
-        color: 0x0284c7,
-        emissive: 0x0369a1,
-        emissiveIntensity: 0.75,
-        roughness: 0.05,
-        metalness: 0.9,
-        transparent: true,
-        opacity: 0.9
-      })
-    );
-    surface.position.set(0, -PLINTH_THICKNESS + 0.55, 0);
-    this.riverSurface = surface;
-    this.outerShellGroup.add(surface);
+    plinth.position.y = -PLINTH_THICKNESS / 2;
+    plinth.receiveShadow = true;
+    plinth.castShadow = true;
+    this.outerShellGroup.add(plinth);
 
     // 坛基线：金字塔脚下的铜线
     const footLine = new THREE.Mesh(
@@ -385,16 +324,6 @@ export class AltarScene {
       metalness: 0.16
     });
 
-    const grooveMat = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
-      emissive: 0x0369a1,
-      emissiveIntensity: 0.7,
-      roughness: 0.08,
-      metalness: 0.9,
-      transparent: true,
-      opacity: 0.92
-    });
-
     // ---- 1. 49 根砖柱：每席一根，从地面砌到该席的台面高程 ----
     const bricks: Array<{ x: number; y: number; z: number }> = [];
 
@@ -426,41 +355,8 @@ export class AltarScene {
     blocks.instanceMatrix.needsUpdate = true;
     this.outerShellGroup.add(blocks);
 
-    // ---- 2. 每席 Cube 顶面的内嵌水槽 ----
-    // Cube 本体绝不倾斜、绝不留缝；只有槽底向下一席落 Δh，公共边的出口/入口同高。
-    const grooveWidth = CELL * 0.32;
-    const railMat = new THREE.MeshStandardMaterial({
-      color: 0x475569,
-      roughness: 0.42,
-      metalness: 0.65
-    });
-
-    this.events.forEach((ev, idx) => {
-      const next = this.events[idx + 1];
-      const dx = next ? Math.sign(next.grid_x - ev.grid_x) : 0;
-      const t = this.terraceTransform(ev);
-      const channel = new THREE.Group();
-      channel.position.set(t.cx, t.cy + 0.045, t.cz);
-      channel.rotation.set(t.rx, 0, t.rz);
-
-      const runsEastWest = dx !== 0;
-      const length = CELL * 0.96;
-      const plate = new THREE.Mesh(
-        new THREE.BoxGeometry(runsEastWest ? length : grooveWidth, 0.09, runsEastWest ? grooveWidth : length),
-        grooveMat
-      );
-      channel.add(plate);
-
-      // 两条低矮边墙把刚体水珠关在槽内；拐点仍由下一席的槽接管。
-      const railLong = new THREE.BoxGeometry(runsEastWest ? length : 0.1, 0.20, runsEastWest ? 0.10 : length);
-      [-1, 1].forEach((side) => {
-        const rail = new THREE.Mesh(railLong, railMat);
-        if (runsEastWest) rail.position.set(0, 0.12, side * (grooveWidth / 2 + 0.05));
-        else rail.position.set(side * (grooveWidth / 2 + 0.05), 0.12, 0);
-        channel.add(rail);
-      });
-      this.outerShellGroup.add(channel);
-    });
+    // ---- 2. 阴蝎子楔：水路不许出现在阳 Cube 的外露面 ----
+    this.buildScorpionWaterway();
 
     this.buildRiverAxis();
     this.buildRabbitHole();
@@ -570,8 +466,88 @@ export class AltarScene {
   }
 
   /**
-   * Ulam 中轴水利线：46→23→8→1 是机械提升，不伪装成自然下坡；
-   * 1→4→15→34 才在坛面露出为重力明渠。
+   * 49 枚蝎子楔把水封进 Cube 的阴腔。
+   *
+   * 每一条边都是一段从当前 Cube 腹腔通往相邻 Cube 腹腔的光滑壳管：
+   * 其中心高程严格按席号下降，俯视方向严格按 Ulam 方形螺旋转弯。
+   * 阳 Cube 没有槽、没有坡、没有水滴碰撞面；所以水无从跑到坛外。
+   */
+  private buildScorpionWaterway() {
+    const points = this.events.map((event) => new THREE.Vector3(
+      event.grid_x * CELL,
+      scorpionWaterElevation(event.seat_id),
+      event.grid_z * CELL
+    ));
+    this.waterSpiralPath = points;
+
+    const casingMat = new THREE.MeshStandardMaterial({
+      color: 0x5c3216,
+      emissive: 0x251006,
+      emissiveIntensity: 0.34,
+      roughness: 0.29,
+      metalness: 0.84
+    });
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0369a1,
+      emissiveIntensity: 1.1,
+      roughness: 0.04,
+      metalness: 0.62,
+      transparent: true,
+      opacity: 0.88
+    });
+
+    for (let index = 0; index < points.length - 1; index++) {
+      const from = points[index];
+      const to = points[index + 1];
+      const event = this.events[index];
+      const next = this.events[index + 1];
+      const planarDistance = Math.abs(event.grid_x - next.grid_x) + Math.abs(event.grid_z - next.grid_z);
+      if (planarDistance !== 1 || !(from.y > to.y)) {
+        throw new Error(`蝎子楔拓扑错误：${event.seat_id}→${next.seat_id} 必须相邻且降势`);
+      }
+
+      const centerline = new THREE.LineCurve3(from, to);
+      const casing = new THREE.Mesh(
+        new THREE.TubeGeometry(centerline, 12, SCORPION_CASING_RADIUS, 12, false),
+        casingMat
+      );
+      casing.userData = {
+        type: 'scorpion_wedge',
+        fromSeat: event.seat_id,
+        toSeat: next.seat_id,
+        sealed: true,
+        exposedOnYangCube: false
+      };
+      this.waterworksGroup.add(casing);
+
+      const waterCore = new THREE.Mesh(
+        new THREE.TubeGeometry(centerline, 12, SCORPION_BORE_RADIUS, 10, false),
+        waterMat
+      );
+      waterCore.userData = {
+        type: 'scorpion_water_core',
+        fromSeat: event.seat_id,
+        toSeat: next.seat_id,
+        sealed: true,
+        exposedOnYangCube: false
+      };
+      this.waterworksGroup.add(waterCore);
+
+      // 每个转接心脏留一枚圆滑“蝎节”，把直段锁在 Cube 的腹腔里。
+      const joint = new THREE.Mesh(
+        new THREE.SphereGeometry(SCORPION_CASING_RADIUS * 1.08, 12, 10),
+        casingMat
+      );
+      joint.position.copy(from);
+      joint.userData = { type: 'scorpion_joint', seatId: event.seat_id, exposedOnYangCube: false };
+      this.waterworksGroup.add(joint);
+    }
+  }
+
+  /**
+   * Ulam 中轴水利线：46→23→8→1 是阴腔内的机械提升；
+   * 1→4→15→34 是阴腔内的重力支路。二者都不得露到阳 Cube 表面。
    */
   private buildRiverAxis() {
     const bySeat = new Map(this.events.map((event) => [event.seat_id, event]));
@@ -580,11 +556,11 @@ export class AltarScene {
       throw new Error('Ulam 河轴缺席：46→23→8→1→4→15→34 必须完整存在');
     }
 
-    const liftPoints = axis.slice(0, 4).map((event) => {
-      const point = this.getSeatWorldPos(event);
-      point.y += 0.32;
-      return point;
-    });
+    const liftPoints = axis.slice(0, 4).map((event) => new THREE.Vector3(
+      event.grid_x * CELL,
+      scorpionWaterElevation(event.seat_id),
+      event.grid_z * CELL
+    ));
     const liftCurve = new THREE.CatmullRomCurve3(liftPoints, false, 'centripetal');
     const liftPipe = new THREE.Mesh(
       new THREE.TubeGeometry(liftCurve, 48, 0.16, 10, false),
@@ -595,9 +571,7 @@ export class AltarScene {
 
     const gravityPoints = RIVER_GRAVITY_SEATS.map((seatId) => {
       const event = bySeat.get(seatId)!;
-      const point = this.getSeatWorldPos(event);
-      point.y += 0.16;
-      return point;
+      return new THREE.Vector3(event.grid_x * CELL, scorpionWaterElevation(event.seat_id), event.grid_z * CELL);
     });
     const gravityCurve = new THREE.CatmullRomCurve3(gravityPoints, false, 'centripetal');
     const bed = new THREE.Mesh(
@@ -974,10 +948,15 @@ export class AltarScene {
     this.fountainParticles = new THREE.Points(fGeo, fMat);
     this.fountainGroup.add(this.fountainParticles);
 
-    // Continuous Flowing Spiral Water Stream
-    this.waterSpiralPath = this.events.map((ev) => this.getSeatWorldPos(ev));
-    const curve = new THREE.CatmullRomCurve3(this.waterSpiralPath, false, 'catmullrom', 0.1);
-    const points = curve.getPoints(360);
+    // 水龙沿阴蝎子楔的管芯走；绝不重建成阳面上的顶面水流。
+    if (this.waterSpiralPath.length !== this.events.length) {
+      throw new Error('水龙未绑定 49 枚蝎子楔');
+    }
+    const curve = new THREE.CurvePath<THREE.Vector3>();
+    for (let index = 0; index < this.waterSpiralPath.length - 1; index++) {
+      curve.add(new THREE.LineCurve3(this.waterSpiralPath[index], this.waterSpiralPath[index + 1]));
+    }
+    const points = curve.getSpacedPoints(360);
 
     const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
     const lineMat = new THREE.LineBasicMaterial({
@@ -988,7 +967,7 @@ export class AltarScene {
     });
     const waterLine = new THREE.Line(lineGeo, lineMat);
     waterLine.geometry.setDrawRange(0, 0);
-    this.outerShellGroup.add(waterLine);
+    this.waterworksGroup.add(waterLine);
     this.waterLine = waterLine;
 
     const particleCount = 280;
@@ -1017,7 +996,7 @@ export class AltarScene {
     });
 
     this.waterParticles = new THREE.Points(particleGeo, particleMat);
-    this.outerShellGroup.add(this.waterParticles);
+    this.waterworksGroup.add(this.waterParticles);
 
     // 阴龙不复制水路。它绕过 #00，由小半径起步、按对数展开，
     // 高度以 r² 抛物面抬升；第 n 点对应 C2.transpose(n)。
@@ -1071,7 +1050,7 @@ export class AltarScene {
    * 五态循环：蓄水 → 越阈 → 翻转倒水 → 排空回落 → 复位。
    * 单斗只能"倒"不能"提"，所以提水交给北坡的配重水梯（见 buildWaterLadder）。
    */
-  private buildTippingBucket() {
+  public buildTippingBucket() {
     const size = CELL;
     const wall = BRICK * 0.22;
     const pivotZ = RIVER_HALF_LENGTH - 4.5; // 南端取水口
@@ -1151,7 +1130,7 @@ export class AltarScene {
    * 配重水梯：北坡 7 个立方小斗，每级一个，错时翻转。
    * 主翻斗倒下的水落到第 1 个小斗，它翻转把水递给第 2 个……逐级提到顶层分水口。
    */
-  private buildWaterLadder() {
+  public buildWaterLadder() {
     const z = -(PYRAMID_HALF + 1.8);
     const size = BRICK * 0.8;
 
@@ -1204,7 +1183,7 @@ export class AltarScene {
    *   8.4–12.0s 空斗回落复位
    * 水梯小斗按 0.35s 逐级延迟跟进，水被一级级递到顶层。
    */
-  private updateWaterworks(elapsed: number) {
+  public updateWaterworks(elapsed: number) {
     const CYCLE = 12;
     const FILL_END = 6;
     const TIP_END = 7.2;
@@ -1254,161 +1233,6 @@ export class AltarScene {
     // 河面随循环微微起伏
     if (this.riverSurface) {
       this.riverSurface.position.y = -PLINTH_THICKNESS + 0.55 + Math.sin(elapsed * 1.2) * 0.04;
-    }
-  }
-
-  /** 台面的位置与倾角 —— 视觉台面和物理碰撞体共用同一套数值 */
-  private terraceTransform(ev: SpiralEvent) {
-    const idx = ev.seat_id - 1;
-    const next = this.events[idx + 1];
-    const dx = next ? Math.sign(next.grid_x - ev.grid_x) : 0;
-    const dz = next ? Math.sign(next.grid_z - ev.grid_z) : 0;
-
-    return {
-      // 槽心永远压在 Cube 中心；不能用偏移把相邻 Cube 的公共边拉开。
-      cx: ev.grid_x * CELL,
-      cy: ev.elevation - 0.03,
-      cz: ev.grid_z * CELL,
-      rx: dz * SPIRAL_SLOPE,
-      rz: -dx * SPIRAL_SLOPE
-    };
-  }
-
-  /**
-   * 接 Rapier3D：水到底流不流得通，由物理引擎自己算，不由我们算角度。
-   *
-   * 给 49 席台面各建一块倾斜碰撞体（与视觉同一套位置/倾角），
-   * 在塔顶天井持续投水滴刚体，让重力把它们一路推下去。
-   */
-  private async initRapierPhysics() {
-    try {
-      await RAPIER.init();
-
-      // ⚠️ RAPIER.init() 是异步的：StrictMode 双挂载下，等它 resolve 时
-      //    这一轮祭坛可能已经被 destroy() 拆掉了。此时再造 world，
-      //    就造出一个再也没人 free() 的孤儿世界 —— 必须拦在这。
-      if (this.destroyed) return;
-
-      const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
-      this.physicsWorld = world;
-
-      // 1. 49 席台面碰撞体
-      this.events.forEach((ev) => {
-        const t = this.terraceTransform(ev);
-        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(t.rx, 0, t.rz, 'XYZ'));
-        world.createCollider(
-          RAPIER.ColliderDesc.cuboid(CELL / 2, 0.08, CELL / 2)
-            .setTranslation(t.cx, t.cy, t.cz)
-            .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
-            .setFriction(0.01)
-            .setRestitution(0.02)
-        );
-      });
-
-      // 2. 台基（回收渠所在平面）
-      world.createCollider(
-        RAPIER.ColliderDesc.cuboid(PLINTH_HALF, 0.4, PLINTH_HALF)
-          .setTranslation(0, -0.4, 0)
-          .setFriction(0.04)
-          .setRestitution(0.02)
-      );
-
-      // 3. 水滴刚体池
-      const dropGeo = new THREE.SphereGeometry(0.22, 10, 10);
-      const dropMat = new THREE.MeshStandardMaterial({
-        color: 0x7dd3fc,
-        emissive: 0x0284c7,
-        emissiveIntensity: 1.0,
-        roughness: 0.05,
-        metalness: 0.6,
-        transparent: true,
-        opacity: 0.92
-      });
-
-      for (let i = 0; i < 40; i++) {
-        const mesh = new THREE.Mesh(dropGeo, dropMat);
-        mesh.visible = false;
-        this.physicsDropletsGroup.add(mesh);
-
-        const body = world.createRigidBody(
-          RAPIER.RigidBodyDesc.dynamic()
-            .setTranslation(0, -100, 0)
-            .setLinearDamping(0.02)
-            .setAngularDamping(0.4)
-        );
-        world.createCollider(
-          RAPIER.ColliderDesc.ball(0.22).setMass(0.3).setFriction(0.01).setRestitution(0.02),
-          body
-        );
-        this.droplets.push({ body, mesh });
-      }
-
-      this.physicsReady = true;
-    } catch (err) {
-      console.warn('Rapier 物理初始化失败，退回手工动画：', err);
-    }
-  }
-
-  /** 每帧推进物理世界，并把"水流到第几席"读出来 */
-  private updatePhysics(dt: number) {
-    if (!this.physicsReady || !this.physicsWorld) return;
-    if (this.ritualMode && this.waterParticles?.visible !== true) return;
-
-    const world = this.physicsWorld;
-    const STEP = 1 / 60;
-
-    this.physicsAccumulator += dt;
-    let steps = 0;
-    while (this.physicsAccumulator >= STEP && steps < 5) {
-      world.step();
-      this.physicsAccumulator -= STEP;
-      steps++;
-    }
-
-    // 塔顶天井持续投水
-    this.spawnTimer += dt;
-    if (this.spawnTimer > 0.35) {
-      this.spawnTimer = 0;
-      const top = this.events[0];
-      const d = this.droplets[this.dropletCursor];
-      this.dropletCursor = (this.dropletCursor + 1) % this.droplets.length;
-      d.body.setTranslation(
-        { x: top.grid_x * CELL, y: top.elevation + 2.0, z: top.grid_z * CELL },
-        true
-      );
-      d.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      d.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
-      d.mesh.visible = true;
-    }
-
-    // 同步网格 + 统计最远流到第几席
-    this.droplets.forEach(({ body, mesh }) => {
-      const p = body.translation();
-      mesh.position.set(p.x, p.y, p.z);
-      if (p.y < -20) mesh.visible = false;
-
-      let bestId = 0;
-      let bestD = Number.POSITIVE_INFINITY;
-      this.events.forEach((ev) => {
-        const dx = p.x - ev.grid_x * CELL;
-        const dz = p.z - ev.grid_z * CELL;
-        const d = dx * dx + dz * dz;
-        if (d < bestD) {
-          bestD = d;
-          bestId = ev.seat_id;
-        }
-      });
-
-      if (bestId > 0 && bestD < (CELL * 0.7) ** 2 && bestId > this.maxSeatReached) {
-        this.maxSeatReached = bestId;
-      }
-    });
-
-    if (this.waterProgressEl) {
-      const pct = Math.round((this.maxSeatReached / 49) * 100);
-      this.waterProgressEl.textContent =
-        `Rapier 物理验证：水流已到第 ${this.maxSeatReached} / 49 席（${pct}%）`;
-      this.waterProgressEl.style.color = this.maxSeatReached >= 49 ? '#4ade80' : '#7dd3fc';
     }
   }
 
@@ -1615,7 +1439,6 @@ export class AltarScene {
     this.outerShellGroup.visible = phase !== 'abyss';
     this.hollowInteriorGroup.visible = phase !== 'abyss';
     this.waterworksGroup.visible = !isDark;
-    this.physicsDropletsGroup.visible = !isDark;
     this.fountainGroup.visible = !isDark;
     this.primeLinesGroup.visible = false;
     this.starshipMeshes.forEach((ship) => { ship.visible = false; });
@@ -1666,7 +1489,6 @@ export class AltarScene {
     this.outerShellGroup.visible = true;
     this.hollowInteriorGroup.visible = true;
     this.waterworksGroup.visible = true;
-    this.physicsDropletsGroup.visible = true;
     this.fountainGroup.visible = true;
     this.lanternsGroup.visible = true;
     this.lanternRotationSpeed = 0;
@@ -2024,13 +1846,9 @@ export class AltarScene {
       }
     });
 
-    // 9. 水利机关：公共仪式的黑场与静默不允许后台水声继续说话。
-    if (!this.ritualMode || this.waterParticles?.visible) {
-      this.updateWaterworks(elapsedTime);
-      this.updatePhysics(dt);
-    }
+    // 9. 水流只沿蝎子楔管芯更新；不再驱动任何外置翻斗、露天河或自由落体水滴。
 
-    // 11. Auto patrol
+    // 10. Auto patrol
     if (this.isAutoPatrol) {
       this.currentProgress += 0.05;
       if (this.currentProgress > 49.5) {
@@ -2165,11 +1983,7 @@ export class AltarScene {
    * 十来次之后浏览器 context 配额打满，就是白屏。现在全部回收。
    */
   public destroy() {
-    // 0. 立销毁标记 + 先撤玉玺子系统
-    //    标记必须先立：异步的 Rapier 初始化 resolve 回来时看到它就自己退场，
-    //    否则会造出一个再也没人 free() 的孤儿 world。
-    //    玉玺的 geometry/material/texture 由第 6 步统一遍历回收。
-    this.destroyed = true;
+    // 0. 先撤玉玺子系统；其 geometry/material/texture 由第 6 步统一遍历回收。
     this.disposeRelic();
 
     // 1. rAF
@@ -2185,28 +1999,12 @@ export class AltarScene {
     window.removeEventListener('blur', this.onWindowBlur);
     this.container.removeEventListener('pointerdown', this.onPointerDown);
 
-    // 3. 工程 HUD 的 DOM（数表/物理读数只属于验收，不属于公共仪式）
-    [this.numbersPanelEl, this.waterProgressEl].forEach((el) => {
+    // 3. 工程 HUD 的 DOM（数表只属于验收，不属于公共仪式）
+    [this.numbersPanelEl].forEach((el) => {
       if (el?.parentElement) el.parentElement.removeChild(el);
     });
     this.numbersPanelEl = null;
-    this.waterProgressEl = null;
-
-    // 4. Rapier：Wasm 侧内存不受 GC 管，必须显式 free()，否则每轮泄漏一个世界
-    if (this.physicsWorld) {
-      try {
-        this.physicsWorld.free();
-      } catch (err) {
-        console.warn('Rapier world 释放失败（不影响其余资源回收）：', err);
-      }
-      this.physicsWorld = null;
-    }
-    // 置空 + 落闸双保险：updatePhysics() 开头就是
-    // `if (!this.physicsReady || !this.physicsWorld) return;`，free 之后不会再 step。
-    this.physicsReady = false;
-    this.droplets = [];
-
-    // 5. 控制器（内部也挂着 DOM 监听）
+    // 4. 控制器（内部也挂着 DOM 监听）
     this.controls.dispose();
 
     // 6. 场景全量回收：geometry / material / 全部贴图（28 张 CanvasTexture 在此）
