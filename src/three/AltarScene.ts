@@ -34,6 +34,7 @@ import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { AltarWaterLiftEngine } from './AltarWaterLiftEngine';
+import { AltarMaglevLanternEngine } from './AltarMaglevLanternEngine';
 
 // ── RFC-007 双体水梯 → 场景的映射常数 ──────────────────────────────
 // 引擎世界：H=7.0、桶行程 z∈[-3.5,3.5]。这里把 7 单位行程映射成 6 个世界单位
@@ -135,7 +136,13 @@ export class AltarScene {
   private lastElapsed = 0;
 
   // Speed & Rotation
-  private lanternRotationSpeed = 0; // 默认不转：诗词灯是"挂着"的，不是在那儿乱转
+  // RFC-008 外环超导磁悬浮走马灯（回转/悬浮/声学击发由引擎驱动）。
+  // 半径与 buildOuter16TeaLanterns 的 lanternRadius=23.5 保持一致，避免两套半径打架。
+  private maglev = new AltarMaglevLanternEngine({ radius: 23.5 });
+  /** 北坡双桶撞簧 → 走马灯的地脉震颤 [0,1]：由 waterLift.onPhaseTransition 注入、逐帧衰减 */
+  private waterLiftSeismic = 0;
+  private maglevAnnounced = false;
+  private maglevStrumAnnounced = false;
   private currentProgress = 1;
   private isAutoPatrol = false;
 
@@ -210,10 +217,20 @@ export class AltarScene {
     this.buildCubePyramidAndSeats();
     // 诗词展示层后置：先验收阳 Cube、阴腔与蝎子楔水路，避免牌子遮蔽结构。
     // this.buildInnerStelaeRing();
-    // this.buildOuter16TeaLanterns();
+    // RFC-008：外环 16 面走马大茶灯回廊（引擎驱动，见 animate 第 9b 段）
+    this.buildOuter16TeaLanterns();
     this.buildWujiFountain();
     this.buildStarships();
     this.buildSurroundingAtmosphere();
+
+    // RFC-008 声学接线：走马灯声学击发统一走既有 triggerFountainPulse()，不新造音频 API
+    this.maglev.onAcousticStrum = (chord, bay, chapter) => {
+      altarAudio.triggerFountainPulse();
+      if (!this.maglevStrumAnnounced || this.waterLiftSeismic > 0.4) {
+        this.maglevStrumAnnounced = true;
+        console.log(`[走马灯] 声学击发 chord=${chord} bay=${bay} chapter=${chapter}`);
+      }
+    };
 
     // 6b. 传国玉玺：悬浮玺台（器物，与 49 席完全隔离）
     this.mountRelic();
@@ -692,6 +709,9 @@ export class AltarScene {
     // 相变接线：统一走既有 triggerFountainPulse()，不新造音频 API
     this.waterLift.onPhaseTransition = (highBucket, massSkimmed, tone) => {
       altarAudio.triggerFountainPulse();
+      // RFC-007 → RFC-008 联动：双桶撞死点即给外环走马灯一次地脉冲击（0..1），
+      // 由 animate 第 9b 段逐帧衰减后喂给 maglev.update(dt, seismic)。
+      this.waterLiftSeismic = THREE.MathUtils.clamp(massSkimmed, 0, 1);
       console.log(
         `[水梯] 死点相变 high=${highBucket} skim=${massSkimmed.toFixed(3)}kg ` +
           `tone=${tone} z=${this.waterLift.state.z.toFixed(3)}`
@@ -735,6 +755,23 @@ export class AltarScene {
     if (!this.waterLiftAnnounced) {
       this.waterLiftAnnounced = true;
       console.log(`[水梯] RFC-007 引擎接管 z=${this.waterLift.state.z.toFixed(3)}`);
+    }
+  }
+
+  /**
+   * 每帧把 RFC-008 引擎状态映射到 3D：
+   *   · 回转：lanternsGroup.rotation.y = state.theta（由引擎 omega 驱动）；
+   *   · 悬浮：lanternsGroup.position.y = state.z —— 这是 20mm 级磁浮气隙，
+   *     毫米/微米量级的微振，**不做视觉大起大落**，只忠实反映气隙。
+   */
+  private syncMaglevVisual(): void {
+    if (!this.lanternsGroup) return;
+    this.lanternsGroup.rotation.y = this.maglev.state.theta;
+    this.lanternsGroup.position.y = this.maglev.state.z;
+
+    if (!this.maglevAnnounced) {
+      this.maglevAnnounced = true;
+      console.log(`[走马灯] RFC-008 引擎接管 theta=${this.maglev.state.theta.toFixed(4)}`);
     }
   }
 
@@ -1408,7 +1445,7 @@ export class AltarScene {
     this.primeLinesGroup.visible = false;
     this.starshipMeshes.forEach((ship) => { ship.visible = false; });
     this.lanternsGroup.visible = phase === 'lanterns' || phase === 'extinguishing';
-    this.lanternRotationSpeed = phase === 'lanterns' ? 0.00055 : 0;
+    // 回转由 RFC-008 引擎持续驱动，幕次切换不再改写转速（见 animate 第 9b 段）
     if (this.waterParticles) this.waterParticles.visible = phase === 'naming' || phase === 'lanterns';
     const dualDragonVisible = phase === 'naming' || phase === 'lanterns';
     if (this.waterLine) {
@@ -1456,7 +1493,6 @@ export class AltarScene {
     this.waterworksGroup.visible = true;
     this.fountainGroup.visible = true;
     this.lanternsGroup.visible = true;
-    this.lanternRotationSpeed = 0;
     if (this.waterParticles) this.waterParticles.visible = true;
     if (this.waterLine) {
       this.waterLine.visible = true;
@@ -1512,17 +1548,21 @@ export class AltarScene {
     this.isCameraTransitioning = true;
   }
 
+  /**
+   * 外环回转速度：RFC-008 引擎接管后，直接写引擎的角速度 omega。
+   * （保留旧的公开方法签名，内部改由引擎驱动，避免两套转速逻辑打架。）
+   */
   public setLanternRotationSpeed(speed: number) {
-    this.lanternRotationSpeed = speed;
+    this.maglev.state.omega = speed;
   }
 
   public setSpeedMode(mode: 'pause' | 'ultra_slow' | 'slow') {
     if (mode === 'pause') {
-      this.lanternRotationSpeed = 0.0;
+      this.maglev.state.omega = 0.0;
     } else if (mode === 'ultra_slow') {
-      this.lanternRotationSpeed = 0.0015;
+      this.maglev.state.omega = 0.0015;
     } else if (mode === 'slow') {
-      this.lanternRotationSpeed = 0.005;
+      this.maglev.state.omega = 0.005;
     }
   }
 
@@ -1727,10 +1767,7 @@ export class AltarScene {
     this.controls.update();
     this.updateFreeFlight(dt);
 
-    // 2. Slow continuous rotation of outer 16 Tea Lanterns
-    if (this.lanternsGroup) {
-      this.lanternsGroup.rotation.y += this.lanternRotationSpeed;
-    }
+    // 2. 外环 16 茶灯的回转改由 RFC-008 引擎驱动（见第 9b 段），此处不再手动累加。
 
     // 3. 壁碑已嵌在阴锥内壁上，不再浮动/旋转（不是"浮在外面的卡片"）
 
@@ -1814,6 +1851,13 @@ export class AltarScene {
     // 9. RFC-007 双体水梯：引擎驱动，北坡机关由此获得动力学
     this.waterLift.update(dt);
     this.syncWaterLiftVisual();
+
+    // 9b. RFC-008 外环磁悬浮走马灯：引擎驱动回转/悬浮/声学击发。
+    //     waterLiftSeismic 是北坡双桶撞簧的地脉震颤 —— 先衰减再喂给引擎，
+    //     双桶每撞一次死点 → 走马灯受一次地脉震颤 → 触发声学击发。
+    this.waterLiftSeismic *= 0.92;
+    this.maglev.update(dt, this.waterLiftSeismic);
+    this.syncMaglevVisual();
 
     // 10. Auto patrol
     if (this.isAutoPatrol) {
@@ -1991,6 +2035,9 @@ export class AltarScene {
     this.waterLiftWaterB = null;
     this.waterLiftRopeA = null;
     this.waterLiftRopeB = null;
+    // RFC-008 走马灯：引擎是纯数学状态、无场景资源（几何随场景图第 6 步回收），
+    // 这里只把 RFC-007→RFC-008 的地脉冲击量归零。
+    this.waterLiftSeismic = 0;
     this.waterSpiralPath = [];
     this.waterParticles = null;
     this.fountainParticles = null;
