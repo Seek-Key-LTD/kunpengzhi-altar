@@ -17,11 +17,20 @@ import {
   WujiRevealState,
   wujiRevealStateAt,
   RITUAL_TOTAL_SEC,
+  RITUAL_NAMING_END_SEC,
   RitualPhase,
   ritualPhaseAt,
   ritualLitSeatsAt,
   isTimelineDrivenPhase
 } from '../types/altar';
+import {
+  DRAGON_SEAT_COUNT,
+  TEA_LANTERN_REV_SEC,
+  soundDragonNode,
+  seatTrailTightnessB,
+  teaLanternRotationEnabled,
+  fogCaptionAt
+} from '../data/dualDragon';
 import { TEA_POEM_16_CHAPTERS } from '../data/tea_poem_16';
 import { SEASON1_POEMS } from '../data/season1_poems';
 import {
@@ -118,6 +127,17 @@ export class AltarScene {
   private soundSpiralPath: THREE.Vector3[] = [];
   private soundLine: THREE.Line | null = null;
   private soundParticles: THREE.Points | null = null;
+  // ── #2 · 双龙逐席可视化 ──────────────────────────────────────────
+  /** 每个已触发席位保留一条随音高收紧的对数螺线光迹（索引 = seatId-1）。 */
+  private seatTrailsGroup: THREE.Group | null = null;
+  private seatTrails: THREE.Line[] = [];
+  /** 茶灯旋转门控：ritualMode 下仅 ≥1020s(17:00) 后开放；非仪式档恒开放。 */
+  private lanternGateOpen = false;
+  /** 门控开放瞬间的引擎转角：作为显示零点，避免开门时转角跳变。 */
+  private lanternRotationTheta0 = 0;
+  /** 雾中一句：单一 DOM 行，任何时刻至多一句。 */
+  private fogCaptionEl: HTMLDivElement | null = null;
+  private fogCaptionText = '';
   private fountainParticles: THREE.Points | null = null;
   /** #00 是吸光体，永远不是第 50 席。 */
   private wujiAbsorber: THREE.Mesh | null = null;
@@ -250,6 +270,8 @@ export class AltarScene {
     // RFC-008：外环 16 面走马大茶灯回廊（引擎驱动，见 animate 第 9b 段）
     this.buildOuter16TeaLanterns();
     this.buildWujiFountain();
+    // #2：双龙的逐席对数螺线光迹（每个已触发席位一条，随音高收紧）。
+    this.buildSeatTrails();
     this.buildStarships();
     this.buildSurroundingAtmosphere();
 
@@ -271,6 +293,14 @@ export class AltarScene {
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onWindowBlur);
     this.container.addEventListener('pointerdown', this.onPointerDown);
+
+    // #2 · 雾中一句：单一字幕行，任何时刻至多一句（窗口两两不重叠）。
+    const caption = document.createElement('div');
+    caption.className = 'ritual-caption';
+    caption.setAttribute('aria-live', 'polite');
+    caption.style.display = 'none';
+    this.container.appendChild(caption);
+    this.fogCaptionEl = caption;
 
     // 8. Start loop
     this.animate();
@@ -802,13 +832,60 @@ export class AltarScene {
    */
   private syncMaglevVisual(): void {
     if (!this.lanternsGroup) return;
-    this.lanternsGroup.rotation.y = this.maglev.state.theta;
+    // #2 茶灯门控：仅当门开（ritualMode 下 ≥1020s，或非仪式档）才让茶灯转动。
+    // 引擎与地脉耦合（seismic）保持原样 —— 这里只门控**视觉转角**，不碰动力学。
+    const raw = this.maglev.state.theta;
+    this.lanternsGroup.rotation.y = this.lanternGateOpen ? raw - this.lanternRotationTheta0 : 0;
     this.lanternsGroup.position.y = this.maglev.state.z;
 
     if (!this.maglevAnnounced) {
       this.maglevAnnounced = true;
       console.log(`[走马灯] RFC-008 引擎接管 theta=${this.maglev.state.theta.toFixed(4)}`);
     }
+  }
+
+  /**
+   * #2 要求 5：16 盏茶灯仅在 17:00（1020s = RITUAL_NAMING_END_SEC）之后低速转动
+   * （沿用 RFC-008 引擎既有 maxOmega，120s/圈）。**只门控旋转** ——
+   * RFC-008 的地脉耦合（`maglev.update(dt, waterLiftSeismic)`）一字未动。
+   * 非仪式档（导演台 / 直入）不设门，保持既有行为。
+   */
+  private updateLanternGate(): void {
+    const open = !this.ritualMode || teaLanternRotationEnabled(this.ritualElapsed);
+    if (open === this.lanternGateOpen) return;
+    this.lanternGateOpen = open;
+    if (open) {
+      // 从当前引擎转角起算显示零点，跨过 1020s 时不跳变。
+      this.lanternRotationTheta0 = this.maglev.state.theta;
+      console.log(
+        `[走马灯] 门控开放 @ ${this.ritualElapsed.toFixed(0)}s ≥ ${RITUAL_NAMING_END_SEC}s(17:00)：` +
+          `茶灯始转（maxOmega ⇒ ${TEA_LANTERN_REV_SEC}s/圈）`
+      );
+    }
+  }
+
+  /**
+   * #2：双龙**唯一**触发源 —— 已触发席数。
+   * 仪式中即 `ritualLitSeatsAt(elapsed)` 的结算值（由 setRitualState 写入）；
+   * 非仪式档（导演台 / 直入）恒 49 席。两龙共用此值 ⟹ 同源、不预演未来席。
+   */
+  private dualDragonLitSeats(): number {
+    return this.ritualMode ? this.ritualLitSeats : SEAT_ID_MAX;
+  }
+
+  /**
+   * #2 要求 6：雾中一句。以时间轴结算的 `ritualElapsed` 查唯一权威 `fogCaptionAt`
+   * （窗口两两不重叠 ⟹ 至多一句），只在文本变化时改写 DOM，避免每帧重排。
+   * 非仪式档不显示雾中字幕。
+   */
+  private syncFogCaption(): void {
+    if (!this.fogCaptionEl) return;
+    const line = this.ritualMode ? fogCaptionAt(this.ritualElapsed) : null;
+    const text = line ?? '';
+    if (text === this.fogCaptionText) return;
+    this.fogCaptionText = text;
+    this.fogCaptionEl.textContent = text;
+    this.fogCaptionEl.style.display = text ? '' : 'none';
   }
 
   /**
@@ -1239,15 +1316,13 @@ export class AltarScene {
     this.waterParticles = new THREE.Points(particleGeo, particleMat);
     this.waterworksGroup.add(this.waterParticles);
 
-    // 阴龙不复制水路。它绕过 #00，由小半径起步、按对数展开，
-    // 高度以 r² 抛物面抬升；第 n 点对应 C2.transpose(n)。
+    // 阴龙不复制水路。它绕过 #00，由外缘大半径起步、按半音**向内收**，
+    // 高度随内收**向上抬升** —— 与水龙“向外向下”互为反向（#2 要求 2/4）。
+    // 节点取自唯一权威 `soundDragonNode`，第 n 点对应 C2.transpose(n)。
     const soundPoints: THREE.Vector3[] = [];
-    for (let i = 0; i < 49; i++) {
-      const t = i / 48;
-      const angle = -Math.PI / 2 + t * Math.PI * 6;
-      const radius = 1.25 * Math.exp(t * 2.05);
-      const y = PYRAMID_TOP + 0.45 + radius * radius * 0.11;
-      soundPoints.push(new THREE.Vector3(Math.cos(angle) * radius, y, Math.sin(angle) * radius));
+    for (let i = 0; i < DRAGON_SEAT_COUNT; i++) {
+      const node = soundDragonNode(i + 1);
+      soundPoints.push(new THREE.Vector3(node.x, node.y, node.z));
     }
     this.soundSpiralPath = soundPoints;
     const soundGeo = new THREE.BufferGeometry().setFromPoints(soundPoints);
@@ -1278,6 +1353,50 @@ export class AltarScene {
     soundParticles.visible = false;
     this.scene.add(soundParticles);
     this.soundParticles = soundParticles;
+  }
+
+  /**
+   * #2 要求 3：每个已触发席位保留一条**随音高收紧**的对数螺线光迹。
+   *
+   * 螺线 r(θ)=r0·e^{bθ}：b 由该席音高决定（见 `seatTrailTightnessB`）——
+   * 音越高 b 越小、螺线越紧。锚点取该席音龙节点，使光迹紧贴“按半音回收”的声场。
+   * 逐席建线（49 条），显隐由仪式已触发席数逐帧门控（见 setRitualState），
+   * 未触发者恒不可见 —— 绝不预演未来席。
+   */
+  private buildSeatTrails(): void {
+    const group = new THREE.Group();
+    group.name = 'dual-dragon-seat-trails';
+    // 49 条光迹共用一份材质（disposeSceneResources 以 Set 去重，不会重复回收）。
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xe9d5ff,
+      transparent: true,
+      opacity: 0.5,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const steps = 48;
+    const turns = 2.4;
+    for (let seatId = 1; seatId <= DRAGON_SEAT_COUNT; seatId++) {
+      const node = soundDragonNode(seatId);
+      const b = seatTrailTightnessB(seatId);
+      const pts: THREE.Vector3[] = [];
+      for (let s = 0; s <= steps; s++) {
+        const theta = (s / steps) * turns * Math.PI * 2;
+        const r = 0.06 * Math.exp(b * theta); // 对数螺线：b 越小越紧
+        pts.push(new THREE.Vector3(
+          node.x + Math.cos(theta) * r,
+          node.y + (s / steps) * 0.45,
+          node.z + Math.sin(theta) * r
+        ));
+      }
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+      line.visible = false;
+      line.userData = { type: 'seat_trail', seatId };
+      this.seatTrails.push(line);
+      group.add(line);
+    }
+    this.seatTrailsGroup = group;
+    this.scene.add(group);
   }
 
   private buildStarships() {
@@ -1502,6 +1621,11 @@ export class AltarScene {
       this.soundLine.geometry.setDrawRange(0, this.ritualLitSeats);
     }
     if (this.soundParticles) this.soundParticles.visible = dualDragonVisible;
+    // #2：逐席光迹 —— 只有已触发席位保留光迹（未触发者不可见，绝不预演未来席）。
+    if (this.seatTrailsGroup) this.seatTrailsGroup.visible = dualDragonVisible;
+    this.seatTrails.forEach((trail, idx) => {
+      trail.visible = dualDragonVisible && idx + 1 <= this.ritualLitSeats;
+    });
     if (this.wujiAbsorber) this.wujiAbsorber.visible = phase !== 'abyss';
     // 玉玺属于导演台的器物层；公共仪式中不能让它与 #00 争中心。
     if (this.relic) this.relic.object3D.visible = false;
@@ -1545,6 +1669,8 @@ export class AltarScene {
       this.soundLine.geometry.setDrawRange(0, this.soundLine.geometry.attributes.position.count);
     }
     if (this.soundParticles) this.soundParticles.visible = true;
+    // 直入版：不按幕次演出，49 席光迹一次性全显。
+    this.seatTrails.forEach((trail) => { trail.visible = true; });
     if (this.wujiAbsorber) this.wujiAbsorber.visible = true;
     this.seatLotusMeshes.forEach((flower) => { flower.visible = true; });
   }
@@ -1918,6 +2044,9 @@ export class AltarScene {
     // 0. 公共入口 1800s 五幕时间轴（唯一幕次 / 时间驱动源，仅在仪式运行态推进）。
     this.updateRitualTimeline(dt);
 
+    // 0.2 雾中一句：由时间轴结算后刷新字幕（至多一句）。
+    this.syncFogCaption();
+
     // 0.1 游客路线只由 pointerdown 唤起，绝不在后台自顾自切换。
     if (this.role === 'guest' && this.guestRoutinePlaying) {
       this.guestRoutineTimer += dt;
@@ -1983,44 +2112,35 @@ export class AltarScene {
       posAttr.needsUpdate = true;
     }
 
-    // 6. 阳龙：水只流到仪式已经唤醒的那一席，不预演未来。
+    // 6. 阳龙（水龙）：**逐席触发** —— 每个已触发席位一枚水珠，落在该席蝎子楔水芯。
+    //    席位未触发前既不显形、也不落珠（唯一驱动源 = ritualLitSeatsAt，不预演未来席）。
+    //    方向：沿 Ulam 方形螺旋向外（ring ↑）、向下（y ↓）。
     if (this.waterParticles && this.waterSpiralPath.length > 0) {
       const pAttr = this.waterParticles.geometry.attributes.position as THREE.BufferAttribute;
-      const pathLength = this.ritualMode
-        ? Math.max(1, this.ritualLitSeats)
-        : this.waterSpiralPath.length;
-      for (let i = 0; i < pAttr.count; i++) {
-        const step = (elapsedTime * 2.2 + i * 0.18) % pathLength;
-        const idxA = Math.floor(step);
-        const idxB = Math.min(idxA + 1, pathLength - 1);
-        const frac = step - idxA;
-        const pA = this.waterSpiralPath[idxA];
-        const pB = this.waterSpiralPath[idxB];
-
-        pAttr.setXYZ(
-          i,
-          pA.x + (pB.x - pA.x) * frac + Math.sin(elapsedTime * 4 + i) * 0.04,
-          pA.y + (pB.y - pA.y) * frac + 0.08,
-          pA.z + (pB.z - pA.z) * frac + Math.cos(elapsedTime * 4 + i) * 0.04
-        );
+      const lit = this.dualDragonLitSeats();
+      const visible = Math.min(lit, this.waterSpiralPath.length, pAttr.count);
+      for (let i = 0; i < visible; i++) {
+        const node = this.waterSpiralPath[i];
+        const drift = Math.sin(elapsedTime * 2.4 + i * 0.7) * 0.035;
+        pAttr.setXYZ(i, node.x + drift, node.y + 0.08, node.z + drift * 0.6);
       }
       pAttr.needsUpdate = true;
+      this.waterParticles.geometry.setDrawRange(0, visible);
     }
 
-    // 阴龙：相同的 49 个计数，但用上升的对数螺线显形。
+    // 6b. 阴龙（音龙）：同一触发源的收束段 —— 每个已触发席位一枚音滴，落在该席音龙节点。
+    //     方向与阳龙**互为反向**：向内（radius ↓）、向上（y ↑），按半音逐级回收。
     if (this.soundParticles && this.soundSpiralPath.length > 0) {
       const pAttr = this.soundParticles.geometry.attributes.position as THREE.BufferAttribute;
-      const pathLength = Math.max(1, this.ritualMode ? this.ritualLitSeats : this.soundSpiralPath.length);
-      for (let i = 0; i < pAttr.count; i++) {
-        const step = (elapsedTime * 1.1 + i * 0.12) % pathLength;
-        const idxA = Math.floor(step);
-        const idxB = Math.min(idxA + 1, pathLength - 1);
-        const fraction = step - idxA;
-        const a = this.soundSpiralPath[idxA];
-        const b = this.soundSpiralPath[idxB];
-        pAttr.setXYZ(i, a.x + (b.x - a.x) * fraction, a.y + (b.y - a.y) * fraction, a.z + (b.z - a.z) * fraction);
+      const lit = this.dualDragonLitSeats();
+      const visible = Math.min(lit, this.soundSpiralPath.length, pAttr.count);
+      for (let i = 0; i < visible; i++) {
+        const node = this.soundSpiralPath[i];
+        const rise = Math.sin(elapsedTime * 1.8 + i * 0.5) * 0.02;
+        pAttr.setXYZ(i, node.x, node.y + rise, node.z);
       }
       pAttr.needsUpdate = true;
+      this.soundParticles.geometry.setDrawRange(0, visible);
     }
 
     // 7. Starships floating
@@ -2045,6 +2165,8 @@ export class AltarScene {
     // 9b. RFC-008 外环磁悬浮走马灯：引擎驱动回转/悬浮/声学击发。
     //     waterLiftSeismic 是北坡双桶撞簧的地脉震颤 —— 先衰减再喂给引擎，
     //     双桶每撞一次死点 → 走马灯受一次地脉震颤 → 触发声学击发。
+    //     （地脉耦合链路一字未动；茶灯 1020s 门控只作用在**视觉转角**上。）
+    this.updateLanternGate();
     this.waterLiftSeismic *= 0.92;
     this.maglev.update(dt, this.waterLiftSeismic);
     this.syncMaglevVisual();
@@ -2200,11 +2322,12 @@ export class AltarScene {
     window.removeEventListener('blur', this.onWindowBlur);
     this.container.removeEventListener('pointerdown', this.onPointerDown);
 
-    // 3. 工程 HUD 的 DOM（数表只属于验收，不属于公共仪式）
-    [this.numbersPanelEl].forEach((el) => {
+    // 3. 工程 HUD 的 DOM（数表只属于验收，不属于公共仪式）+ 雾中字幕行
+    [this.numbersPanelEl, this.fogCaptionEl].forEach((el) => {
       if (el?.parentElement) el.parentElement.removeChild(el);
     });
     this.numbersPanelEl = null;
+    this.fogCaptionEl = null;
     // 4. 控制器（内部也挂着 DOM 监听）
     this.controls.dispose();
 
@@ -2230,6 +2353,11 @@ export class AltarScene {
     this.waterLiftSeismic = 0;
     this.waterSpiralPath = [];
     this.waterParticles = null;
+    // #2：逐席光迹的几何随整棵场景图在第 6 步回收，这里只断开引用。
+    this.seatTrails = [];
+    this.seatTrailsGroup = null;
+    this.soundSpiralPath = [];
+    this.soundParticles = null;
     this.fountainParticles = null;
     this.ambientLight = null;
     this.sunLight = null;
