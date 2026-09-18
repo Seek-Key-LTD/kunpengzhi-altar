@@ -21,6 +21,7 @@
  *
  * ⚠️ 与 capture / verify:degrade / capture:ceremony **串行**（软栅格并发会 OOM）。
  * ⚠️ webm/PNG 不入库；blackframe-manifest.txt / probe.json 入库。
+ *    移动端（--mobile）：blackframe-manifest-mobile.txt / probe-mobile.json 落 record-mobile/。
  * ⚠️ 只增不改：本脚本为新增文件，不触碰 src/、docs/、既有断言脚本。
  *
  * 运行：node tools/capture/record-full.mjs   （别名 npm run record:full）
@@ -37,15 +38,25 @@ import { analyze } from './lib/png-probe.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const OUT_DIR = resolve(ROOT, 'artifacts/capture/record');
+// #7 闸门 B 项 · 移动端等效口径：--mobile 切换 390×844@2x + 触控 UA + isMobile，
+// 产物落 record-mobile/（判定口径与桌面版完全一致）；不带 flag 时桌面路径默认行为零变化。
+const MOBILE = process.argv.includes('--mobile');
+const OUT_DIR = resolve(ROOT, MOBILE ? 'artifacts/capture/record-mobile' : 'artifacts/capture/record');
+const MANIFEST_NAME = MOBILE ? 'blackframe-manifest-mobile.txt' : 'blackframe-manifest.txt';
+const PROBE_NAME = MOBILE ? 'probe-mobile.json' : 'probe.json';
+const PROFILE_LABEL = MOBILE
+  ? 'mobile(390×844 @2x, isMobile+hasTouch+移动 UA, SwiftShader 软栅格)'
+  : 'desktop(1280×720 @1x, SwiftShader 软栅格)';
 const PORT = Number(process.env.VERIFY_PORT || (4900 + Math.floor(Math.random() * 100)));
 const URL = `http://127.0.0.1:${PORT}/tools/capture/capture.html`;
 
 const RUN_RATE = 64;
-/** 采样步长（仪式秒）：1800/15 = 121 点。 */
-const SAMPLE_STEP = 15;
-/** pose 对拍关键秒（与五幕取景对齐）。 */
-const POSE_SECS = [90, 600, 1200, 1600, 1780];
+/** 采样步长（仪式秒）：桌面 15s（121 点）；移动端截屏 ~5.4s/张（780×1688@2x），按票面放宽 30s。 */
+const SAMPLE_STEP = MOBILE ? 30 : 15;
+/** 降速点：桌面 1500s（敛光幕起）→ 2x；移动端截屏更贵（64x 每张冲 ~344 仪式秒），提前到 1050s → 2x。 */
+const SLOWDOWN_AT = MOBILE ? 1050 : 1500;
+/** pose 对拍关键秒：桌面 5 点；移动端按票面抽 3 点（90 abyss / 1200 敛光前 / 1770 终寂幕内）。 */
+const POSE_SECS = MOBILE ? [90, 1200, 1770] : [90, 600, 1200, 1600, 1780];
 
 const ARGS_SOFTWARE = [
   '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
@@ -164,7 +175,7 @@ async function loadExpectedPose() {
 async function main() {
   const { spawnSync } = await import('node:child_process');
   const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout.trim();
-  console.log(`\n══ #7 T9 全程录屏 + 黑场清单 · HEAD ${head.slice(0, 7)} ══`);
+  console.log(`\n══ #7 T9 全程录屏 + 黑场清单（${MOBILE ? '移动端' : '桌面'}）· HEAD ${head.slice(0, 7)} ══`);
   mkdirSync(OUT_DIR, { recursive: true });
   mkdirSync(resolve(OUT_DIR, 'video'), { recursive: true });
   mkdirSync(resolve(OUT_DIR, 'frames'), { recursive: true });
@@ -184,11 +195,18 @@ async function main() {
   const browser = await chromium.launch({ args: ARGS_SOFTWARE });
   try {
     // ── 主路径：1800s 全程真跑 + 录屏 + 采样 ─────────────────────────
-    console.log(`[2] 主路径：seek(0) + start(${RUN_RATE}x) 真跑全程 + recordVideo …`);
+    console.log(`[2] 主路径（${PROFILE_LABEL}）：seek(0) + start(${RUN_RATE}x) 真跑全程 + recordVideo …`);
     const context = await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-      deviceScaleFactor: 1,
-      recordVideo: { dir: resolve(OUT_DIR, 'video'), size: { width: 1280, height: 720 } }
+      viewport: MOBILE ? { width: 390, height: 844 } : { width: 1280, height: 720 },
+      deviceScaleFactor: MOBILE ? 2 : 1,
+      isMobile: MOBILE,
+      hasTouch: MOBILE,
+      userAgent: MOBILE
+        ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+        : undefined,
+      recordVideo: MOBILE
+        ? { dir: resolve(OUT_DIR, 'video'), size: { width: 390, height: 844 } }
+        : { dir: resolve(OUT_DIR, 'video'), size: { width: 1280, height: 720 } }
     });
     const page = await context.newPage();
     page.on('pageerror', (e) => { mainPathErrors++; console.error(`[pageerror] ${e.message}`); });
@@ -206,11 +224,9 @@ async function main() {
     if (targets[targets.length - 1] !== 1800) targets.push(1800);
 
     for (const target of targets) {
-      // 敛光幕起（1500s）降速 64x → 2x：64x 下每张截屏（~2s 墙钟）会冲掉 ~128 仪式秒，
-      // 轮询直接撞穿 49s 的终寂幕到时间轴终点（首测 1665s 起全被冲成 t=1800）。
-      // 2x 后每帧 ≤0.4 仪式秒，截屏漂移 ~4s，末段各采样点落在真实秒位（含 1785s 锚点）。
-      // 时间轴仍是真跑推进（不 seek），只是回放速率按 #4 受控口径收慢。
-      if (target === 1500) {
+      // 速率受控（见 SLOWDOWN_AT 注释）：时间轴仍是真跑推进（不 seek），只是回放速率按
+      // #4 受控口径收慢 —— 桌面 1500s 起 2x；移动端 1050s 起 2x。
+      if (target === SLOWDOWN_AT) {
         await page.evaluate((r) => window.__capture.start(r), 2);
       }
       const actual = await waitUntilTime(page, target, hardCapMs);
@@ -337,8 +353,11 @@ async function main() {
   lines.push(`生成时间(UTC): ${new Date().toISOString()}`);
   lines.push(`HEAD: ${head}`);
   lines.push(`模式: run(rate=${RUN_RATE}x, 1800s 全程真跑, #10 幕次运镜生效) · 采样步长: ${SAMPLE_STEP}s（${rows.length} 点）`);
-  lines.push('视口: 1280×720 · 非黑判据: 任一分量 ≥ 8（png-probe 现口径）· 死黑判据: nonBlackRatio < 1e-4 且无字幕');
-  lines.push(`录像: artifacts/capture/record/video/full-run.webm（不入库）· 帧样张: artifacts/capture/record/frames/（不入库）`);
+  lines.push('视口: ' + PROFILE_LABEL);
+  lines.push('采样步长: ' + SAMPLE_STEP + 's' + (MOBILE ? '（移动端按票面允许放宽，墙钟成本：截屏 ~5.4s/张 @780×1688）' : '') +
+    ' · 非黑判据: 任一分量 ≥ 8（png-probe 现口径）· 死黑判据: nonBlackRatio < 1e-4 且无字幕');
+  lines.push('速率受控口径（与桌面版一致）: 0–1500s @64x 真跑，1500s（敛光幕起）起受控降速 2x 至终 —— 64x 下每张截屏约 2s 墙钟会冲掉 ~128 仪式秒，降速后末段采样落在真实秒位');
+  lines.push('录像: artifacts/capture/' + (MOBILE ? 'record-mobile' : 'record') + '/video/full-run.webm（不入库）· 帧样张: 同目录 frames/（不入库）');
   lines.push('');
   lines.push('## 黑场分段（连续同判定聚合）');
   for (const s of segments) {
@@ -351,8 +370,10 @@ async function main() {
   lines.push(`- 纯黑（死黑嫌疑）样点: ${pureBlack.length}${pureBlack.length === 0 ? ' —— 无死黑帧' : ' ←←← 需人工复核: ' + pureBlack.slice(0, 5).map((r) => r.targetSec + 's').join(',')}`);
   lines.push(`- 亮场样点: ${lit.length}`);
   const anchor90 = rows.find((r) => r.targetSec === 90);
-  const anchor1785 = rows.find((r) => r.targetSec === 1785);
-  lines.push(`- 锚点吻合: 90s=${anchor90?.verdict}（预期 content-black）· 1785s=${anchor1785?.verdict}（预期 content-black，实际秒 ${anchor1785?.actualSec}）`);
+  // silence 锚点：取「幕次=终寂且实际秒 < 1800」的末样（桌面 15s 步长落在 1785s；
+  // 移动端 30s 步长落在 1770s —— 按实测落点取，不硬编码目标秒）。
+  const silenceAnchor = rows.filter((r) => r.phase === 'silence' && r.actualSec < 1800).pop();
+  lines.push(`- 锚点吻合: 90s=${anchor90?.verdict}（预期 content-black）· silence 末样 target=${silenceAnchor?.targetSec}s actual=${silenceAnchor?.actualSec}s=${silenceAnchor?.verdict}（预期 content-black）`);
   lines.push('');
   lines.push('## pose 对拍（5 关键秒，ceremonyPoseAt 真模块）');
   for (const p of poseChecks) {
@@ -371,18 +392,18 @@ async function main() {
   for (const r of rows) {
     lines.push(`${r.targetSec} | ${r.actualSec} | ${r.phase} | ${r.nonBlackRatio} | ${r.meanLum} | ${r.brightPixels} | ${r.caption} | ${r.verdict}`);
   }
-  writeFileSync(resolve(OUT_DIR, 'blackframe-manifest.txt'), lines.join('\n'));
+  writeFileSync(resolve(OUT_DIR, MANIFEST_NAME), lines.join('\n'));
 
   const probe = { head, rate: RUN_RATE, sampleStep: SAMPLE_STEP, rows, segments, poseChecks, poseAllOk, degrade, videoFile };
-  writeFileSync(resolve(OUT_DIR, 'probe.json'), JSON.stringify(probe, null, 2));
+  writeFileSync(resolve(OUT_DIR, PROBE_NAME), JSON.stringify(probe, null, 2));
 
   const gateOk = pureBlack.length === 0 && poseAllOk && degrade?.b4 && degrade?.b5 && degrade?.degradeErrors === 0 && mainPathErrors === 0;
   console.log(`\n──── 黑场清单要点 ────`);
   console.log(`  分段 ${segments.length} 段：有内容黑 ${contentBlack.length} · 终局归零 ${endBlack.length} · 纯黑（嫌疑）${pureBlack.length} · 亮场 ${lit.length}`);
-  console.log(`  锚点：90s=${anchor90?.verdict} · 1785s=${anchor1785?.verdict}(actual ${anchor1785?.actualSec})`);
-  console.log(`  pose 对拍：${poseChecks.length}/5 ${poseAllOk ? '全过 ✓' : '存在偏差 ✗'}`);
+  console.log(`  锚点：90s=${anchor90?.verdict} · silence 末样 target=${silenceAnchor?.targetSec}s actual=${silenceAnchor?.actualSec}s=${silenceAnchor?.verdict}`);
+  console.log(`  pose 对拍：${poseChecks.length}/${POSE_SECS.length} ${poseAllOk ? '全过 ✓' : '存在偏差 ✗'}`);
   console.log(`  B 路径：B4=${degrade?.b4} B5=${degrade?.b5} pageerror=${degrade?.degradeErrors}`);
-  console.log(`证据写入: ${OUT_DIR}/blackframe-manifest.txt · probe.json · video/full-run.webm（不入库）`);
+  console.log(`证据写入: ${OUT_DIR}/${MANIFEST_NAME} · ${PROBE_NAME} · video/full-run.webm（不入库）`);
   if (!gateOk) {
     console.error('\n❌ T9 取证判红 → process.exit(1)');
     process.exit(1);

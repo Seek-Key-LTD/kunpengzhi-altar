@@ -1,0 +1,781 @@
+{
+  "head": "e5a2d62f0d2c55d31f9acd3a5750f14115e0729e",
+  "rate": 64,
+  "sampleStep": 30,
+  "rows": [
+    {
+      "targetSec": 0,
+      "actualSec": 0,
+      "phase": "abyss",
+      "phaseLabel": "深渊",
+      "nonBlackRatio": 0.00818,
+      "meanLum": 0.46,
+      "brightPixels": 3005,
+      "caption": "天地未形，混沌如渊。",
+      "verdict": "content-black"
+    },
+    {
+      "targetSec": 30,
+      "actualSec": 32,
+      "phase": "abyss",
+      "phaseLabel": "深渊",
+      "nonBlackRatio": 0.00818,
+      "meanLum": 0.46,
+      "brightPixels": 3005,
+      "caption": "天地未形，混沌如渊。",
+      "verdict": "content-black"
+    },
+    {
+      "targetSec": 60,
+      "actualSec": 61.52,
+      "phase": "abyss",
+      "phaseLabel": "深渊",
+      "nonBlackRatio": 0.00818,
+      "meanLum": 0.46,
+      "brightPixels": 3005,
+      "caption": "天地未形，混沌如渊。",
+      "verdict": "content-black"
+    },
+    {
+      "targetSec": 90,
+      "actualSec": 90.21,
+      "phase": "abyss",
+      "phaseLabel": "深渊",
+      "nonBlackRatio": 0.00818,
+      "meanLum": 0.46,
+      "brightPixels": 3005,
+      "caption": "天地未形，混沌如渊。",
+      "verdict": "content-black"
+    },
+    {
+      "targetSec": 120,
+      "actualSec": 121.63,
+      "phase": "abyss",
+      "phaseLabel": "深渊",
+      "nonBlackRatio": 0.00861,
+      "meanLum": 0.47,
+      "brightPixels": 3005,
+      "caption": "天地未形，混沌如渊。",
+      "verdict": "content-black"
+    },
+    {
+      "targetSec": 150,
+      "actualSec": 150.12,
+      "phase": "abyss",
+      "phaseLabel": "深渊",
+      "nonBlackRatio": 0.00818,
+      "meanLum": 0.46,
+      "brightPixels": 3005,
+      "caption": "天地未形，混沌如渊。",
+      "verdict": "content-black"
+    },
+    {
+      "targetSec": 180,
+      "actualSec": 181.41,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.17961,
+      "meanLum": 6.16,
+      "brightPixels": 76989,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 210,
+      "actualSec": 210.47,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.18122,
+      "meanLum": 6.22,
+      "brightPixels": 76890,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 240,
+      "actualSec": 240.1,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.18479,
+      "meanLum": 6.21,
+      "brightPixels": 71995,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 270,
+      "actualSec": 273.07,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.18998,
+      "meanLum": 6.01,
+      "brightPixels": 58718,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 300,
+      "actualSec": 302.87,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.19666,
+      "meanLum": 5.86,
+      "brightPixels": 51832,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 330,
+      "actualSec": 333.02,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.19117,
+      "meanLum": 5.7,
+      "brightPixels": 52921,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 360,
+      "actualSec": 362.81,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.19836,
+      "meanLum": 5.74,
+      "brightPixels": 54821,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 390,
+      "actualSec": 392.76,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.19228,
+      "meanLum": 5.97,
+      "brightPixels": 58096,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 420,
+      "actualSec": 422.84,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.22812,
+      "meanLum": 6.13,
+      "brightPixels": 61100,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 450,
+      "actualSec": 453.14,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.28354,
+      "meanLum": 6.26,
+      "brightPixels": 63081,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 480,
+      "actualSec": 480.1,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.33282,
+      "meanLum": 6.61,
+      "brightPixels": 67398,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 510,
+      "actualSec": 510.52,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.43057,
+      "meanLum": 7.18,
+      "brightPixels": 73234,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 540,
+      "actualSec": 540.99,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.45432,
+      "meanLum": 8.26,
+      "brightPixels": 76261,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 570,
+      "actualSec": 571.61,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.49641,
+      "meanLum": 11.09,
+      "brightPixels": 168170,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 600,
+      "actualSec": 602.28,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.50747,
+      "meanLum": 15.82,
+      "brightPixels": 236718,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 630,
+      "actualSec": 633.09,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.50269,
+      "meanLum": 14.52,
+      "brightPixels": 250786,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 660,
+      "actualSec": 660.88,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.51924,
+      "meanLum": 11.89,
+      "brightPixels": 155101,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 690,
+      "actualSec": 691.66,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.48114,
+      "meanLum": 10.08,
+      "brightPixels": 96983,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 720,
+      "actualSec": 722.66,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.39919,
+      "meanLum": 9.51,
+      "brightPixels": 97988,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 750,
+      "actualSec": 750.58,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.32239,
+      "meanLum": 9.39,
+      "brightPixels": 99441,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 780,
+      "actualSec": 781.98,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.28909,
+      "meanLum": 9.55,
+      "brightPixels": 103256,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 810,
+      "actualSec": 810.04,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.27867,
+      "meanLum": 9.68,
+      "brightPixels": 101802,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 840,
+      "actualSec": 841.39,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.30339,
+      "meanLum": 10.74,
+      "brightPixels": 109412,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 870,
+      "actualSec": 872.89,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.31936,
+      "meanLum": 10.09,
+      "brightPixels": 107475,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 900,
+      "actualSec": 901.31,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.32356,
+      "meanLum": 10.27,
+      "brightPixels": 107751,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 930,
+      "actualSec": 933.01,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.32166,
+      "meanLum": 10.43,
+      "brightPixels": 107616,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 960,
+      "actualSec": 961.4,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.31867,
+      "meanLum": 10.48,
+      "brightPixels": 107301,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 990,
+      "actualSec": 990.11,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "nonBlackRatio": 0.31817,
+      "meanLum": 10.51,
+      "brightPixels": 107161,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1020,
+      "actualSec": 1020.51,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.33121,
+      "meanLum": 11.26,
+      "brightPixels": 120320,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1050,
+      "actualSec": 1050.04,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.3282,
+      "meanLum": 11.08,
+      "brightPixels": 116452,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1080,
+      "actualSec": 1080.04,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.33287,
+      "meanLum": 11.25,
+      "brightPixels": 117307,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1110,
+      "actualSec": 1110.05,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.34254,
+      "meanLum": 11.83,
+      "brightPixels": 121814,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1140,
+      "actualSec": 1140.05,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.33748,
+      "meanLum": 11.81,
+      "brightPixels": 114749,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1170,
+      "actualSec": 1170.05,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.34769,
+      "meanLum": 11.54,
+      "brightPixels": 116962,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1200,
+      "actualSec": 1200.06,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.37505,
+      "meanLum": 11.35,
+      "brightPixels": 116362,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1230,
+      "actualSec": 1230.06,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.33978,
+      "meanLum": 10.8,
+      "brightPixels": 111217,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1260,
+      "actualSec": 1260.06,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.42539,
+      "meanLum": 10.14,
+      "brightPixels": 100043,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1290,
+      "actualSec": 1290.06,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.52809,
+      "meanLum": 10.35,
+      "brightPixels": 101676,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1320,
+      "actualSec": 1320.06,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.61784,
+      "meanLum": 10.66,
+      "brightPixels": 103121,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1350,
+      "actualSec": 1350.07,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.59649,
+      "meanLum": 10.99,
+      "brightPixels": 110830,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1380,
+      "actualSec": 1380.08,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.60815,
+      "meanLum": 11.87,
+      "brightPixels": 121255,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1410,
+      "actualSec": 1410.08,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "nonBlackRatio": 0.6109,
+      "meanLum": 12.43,
+      "brightPixels": 128990,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1440,
+      "actualSec": 1440.09,
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "nonBlackRatio": 0.60295,
+      "meanLum": 10.85,
+      "brightPixels": 108525,
+      "caption": "水尽声收，唯余极点一束冷光。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1470,
+      "actualSec": 1470.01,
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "nonBlackRatio": 0.59991,
+      "meanLum": 10.68,
+      "brightPixels": 106705,
+      "caption": "水尽声收，唯余极点一束冷光。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1500,
+      "actualSec": 1500.03,
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "nonBlackRatio": 0.58743,
+      "meanLum": 9.95,
+      "brightPixels": 95317,
+      "caption": "水尽声收，唯余极点一束冷光。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1530,
+      "actualSec": 1530.04,
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "nonBlackRatio": 0.57424,
+      "meanLum": 9.86,
+      "brightPixels": 90214,
+      "caption": "水尽声收，唯余极点一束冷光。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1560,
+      "actualSec": 1560.06,
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "nonBlackRatio": 0.58198,
+      "meanLum": 10.64,
+      "brightPixels": 121385,
+      "caption": "水尽声收，唯余极点一束冷光。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1590,
+      "actualSec": 1590.07,
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "nonBlackRatio": 0.56235,
+      "meanLum": 10.66,
+      "brightPixels": 154550,
+      "caption": "水尽声收，唯余极点一束冷光。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1620,
+      "actualSec": 1620.08,
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "nonBlackRatio": 0.54284,
+      "meanLum": 11.42,
+      "brightPixels": 164582,
+      "caption": "水尽声收，唯余极点一束冷光。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1650,
+      "actualSec": 1650.09,
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "nonBlackRatio": 0.51228,
+      "meanLum": 10.61,
+      "brightPixels": 147137,
+      "caption": "水尽声收，唯余极点一束冷光。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1680,
+      "actualSec": 1680.1,
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "nonBlackRatio": 0.48833,
+      "meanLum": 9.93,
+      "brightPixels": 142363,
+      "caption": "水尽声收，唯余极点一束冷光。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1710,
+      "actualSec": 1710.02,
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "nonBlackRatio": 0.46972,
+      "meanLum": 9.19,
+      "brightPixels": 135579,
+      "caption": "水尽声收，唯余极点一束冷光。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1740,
+      "actualSec": 1740.04,
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "nonBlackRatio": 0.46579,
+      "meanLum": 8.89,
+      "brightPixels": 132039,
+      "caption": "水尽声收，唯余极点一束冷光。",
+      "verdict": "lit"
+    },
+    {
+      "targetSec": 1770,
+      "actualSec": 1770.05,
+      "phase": "silence",
+      "phaseLabel": "静默",
+      "nonBlackRatio": 0.00694,
+      "meanLum": 0.43,
+      "brightPixels": 2843,
+      "caption": "万籁俱寂，归于无极。",
+      "verdict": "content-black"
+    },
+    {
+      "targetSec": 1800,
+      "actualSec": 1800,
+      "phase": "silence",
+      "phaseLabel": "静默",
+      "nonBlackRatio": 0,
+      "meanLum": 0,
+      "brightPixels": 0,
+      "caption": "",
+      "verdict": "end-black"
+    }
+  ],
+  "segments": [
+    {
+      "verdict": "content-black",
+      "phase": "abyss",
+      "phaseLabel": "深渊",
+      "startSec": 0,
+      "endSec": 150,
+      "samples": 6
+    },
+    {
+      "verdict": "lit",
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "startSec": 180,
+      "endSec": 990,
+      "samples": 28
+    },
+    {
+      "verdict": "lit",
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "startSec": 1020,
+      "endSec": 1410,
+      "samples": 14
+    },
+    {
+      "verdict": "lit",
+      "phase": "extinguishing",
+      "phaseLabel": "敛光",
+      "startSec": 1440,
+      "endSec": 1740,
+      "samples": 11
+    },
+    {
+      "verdict": "content-black",
+      "phase": "silence",
+      "phaseLabel": "静默",
+      "startSec": 1770,
+      "endSec": 1770,
+      "samples": 1
+    },
+    {
+      "verdict": "end-black",
+      "phase": "silence",
+      "phaseLabel": "静默",
+      "startSec": 1800,
+      "endSec": 1800,
+      "samples": 1
+    }
+  ],
+  "poseChecks": [
+    {
+      "target": 90,
+      "t1": 90.21440000009538,
+      "dt": 0,
+      "dPos": 0,
+      "dFov": 0,
+      "tol": 0.000001,
+      "ok": true
+    },
+    {
+      "target": 1200,
+      "t1": 1200.0572000000566,
+      "dt": 0,
+      "dPos": 0,
+      "dFov": 0,
+      "tol": 0.000001,
+      "ok": true
+    },
+    {
+      "target": 1770,
+      "t1": 1770.0469999995228,
+      "dt": 0,
+      "dPos": 0,
+      "dFov": 0,
+      "tol": 0.000001,
+      "ok": true
+    }
+  ],
+  "poseAllOk": true,
+  "degrade": {
+    "lost": true,
+    "why": "",
+    "atLoss": {
+      "draw": 1267,
+      "raf": 43,
+      "time": 121.60000000000007
+    },
+    "settle1": {
+      "draw": 1268,
+      "raf": 132,
+      "time": 220.82560000014314
+    },
+    "settle2": {
+      "draw": 1268,
+      "raf": 222,
+      "time": 316.89600000000024
+    },
+    "b4": true,
+    "b5": true,
+    "degradeErrors": 0
+  },
+  "videoFile": "/Users/ben/code/kunpengzhi-altar/artifacts/capture/record-mobile/video/full-run.webm"
+}
