@@ -15,7 +15,12 @@ import {
   WUJI_REVEAL_SEC,
   WUJI_SILENCE_SEC,
   WujiRevealState,
-  wujiRevealStateAt
+  wujiRevealStateAt,
+  RITUAL_TOTAL_SEC,
+  RitualPhase,
+  ritualPhaseAt,
+  ritualLitSeatsAt,
+  isTimelineDrivenPhase
 } from '../types/altar';
 import { TEA_POEM_16_CHAPTERS } from '../data/tea_poem_16';
 import { SEASON1_POEMS } from '../data/season1_poems';
@@ -91,6 +96,19 @@ export class AltarScene {
   private ritualTimeSec: number | null = null;
   /** #00 显形档位：hidden(<24:00) / revealed(≥24:00) / silent(≥29:11)。用于幂等与一次性播报。 */
   private wujiRevealState: WujiRevealState = 'hidden';
+
+  // ── 公共入口 · 1800s 五幕时间轴 ────────────────────────────────────
+  /** 仪式已运行秒数（仅在 ritualRunning 时随 dt 推进）。 */
+  private ritualElapsed = 0;
+  /** 时间轴是否在推进：startRitual() 置真，presentImmediately() 保持假。 */
+  private ritualRunning = false;
+  /** 上一次结算到的幕次，用于只在边界改写场景（避免每帧重写）。 */
+  private ritualPhase: RitualPhase = 'abyss';
+  /** naming 幕上一帧的 litSeats；-1 表示需要强制刷新。 */
+  private namingLitSeats = -1;
+  /** Web Audio 手势兜底是否已武装（避免重复绑定）。 */
+  private audioKicked = false;
+  private audioResumeHandler: (() => void) | null = null;
   
   // Interactive Objects & Meshes
   private waterSpiralPath: THREE.Vector3[] = [];
@@ -1439,7 +1457,7 @@ export class AltarScene {
 
   /** 公共入口的导演状态：让水、光、声遵从同一条三十分钟时间轴。 */
   public setRitualState(
-    phase: 'abyss' | 'naming' | 'lanterns' | 'extinguishing' | 'silence',
+    phase: RitualPhase,
     litSeats: number,
     activeSeatId: number | null
   ) {
@@ -1582,6 +1600,95 @@ export class AltarScene {
     if (changed) {
       console.log(`[无极] #00 未显形 t=${t.toFixed(0)}s < 24:00：吸光体隐藏、冷顶光熄灭`);
     }
+  }
+
+  /**
+   * 公共入口：启动 1800s 五幕时间轴（唯一的幕次 / 时间驱动源）。
+   *
+   * 置初幕 abyss —— 0–180s 深渊黑场是正典，不跳过、不倍速。
+   * presentImmediately() 保留不删；导演路径（#5）自行决定用哪条。
+   */
+  public startRitual() {
+    this.ritualRunning = true;
+    this.ritualElapsed = 0;
+    this.ritualPhase = 'abyss';
+    this.namingLitSeats = -1;
+    // 先归到 #00「未显形」档（<24:00），再落到初幕 abyss（黑场、litSeats=0）。
+    this.setRitualTime(0);
+    this.setRitualState('abyss', 0, null);
+    this.kickAudio();
+  }
+
+  /**
+   * 每帧推进 1800s 五幕时间轴；仅在仪式运行态生效。
+   *
+   * 防双写：只在 0 / 180 / 1020 三个边界改写幕次；1440（24:00）与 1751（29:11）
+   * 一律交给 setRitualTime() 内部结算 —— 这里**绝不**重复调
+   * setRitualState('extinguishing' | 'silence')。
+   */
+  private updateRitualTimeline(dt: number) {
+    if (!this.ritualRunning) return;
+    this.ritualElapsed = Math.min(RITUAL_TOTAL_SEC, this.ritualElapsed + dt);
+
+    const phase = ritualPhaseAt(this.ritualElapsed);
+    if (phase !== this.ritualPhase) {
+      const prev = this.ritualPhase;
+      this.ritualPhase = phase;
+      // 只有早段三幕在此改写；extinguishing / silence 交给 setRitualTime（契约：互斥、覆盖五幕）。
+      if (isTimelineDrivenPhase(phase)) {
+        if (phase === 'abyss') {
+          this.setRitualState('abyss', 0, null);
+        } else if (phase === 'naming') {
+          this.namingLitSeats = -1; // 强制刷新首个 litSeats
+          this.setRitualState('naming', 0, this.activeSeatId);
+        } else {
+          this.setRitualState('lanterns', SEAT_ID_MAX, this.activeSeatId);
+        }
+      }
+      console.log(`[仪式] 幕次 ${prev} → ${phase} @ ${this.ritualElapsed.toFixed(0)}s / 1800s`);
+    }
+
+    // naming 幕：litSeats 由 0 线性升到 49（仅在整席台阶变化时重算，避免每帧重写）。
+    if (phase === 'naming') {
+      const litSeats = ritualLitSeatsAt(this.ritualElapsed);
+      if (litSeats !== this.namingLitSeats) {
+        this.namingLitSeats = litSeats;
+        this.setRitualState('naming', litSeats, this.activeSeatId);
+      }
+    }
+
+    // 唯一时间注入点：#00 显形（1440）/ 静默（1751）阈值 + extinguishing / silence 幕次。
+    this.setRitualTime(this.ritualElapsed);
+  }
+
+  /**
+   * 启动公共仪式音频。Web Audio 需用户手势：先尽力 init()；
+   * 被浏览器挂起 / 拦下就绑首次 pointerdown / keydown 再试一次。
+   * **全程静默降级，绝不抛错。**
+   */
+  private kickAudio() {
+    if (this.audioKicked) return;
+    this.audioKicked = true;
+
+    const attempt = () => {
+      void altarAudio.init().catch(() => {
+        /* 未获用户手势：静默降级，不影响画面 */
+      });
+    };
+
+    attempt(); // 若已在手势上下文（如导演台点击进入）会即刻成功
+
+    const resume = () => {
+      attempt(); // 幂等 + 并发安全：init() 单飞，已初始化时短路
+      if (this.audioResumeHandler) {
+        window.removeEventListener('pointerdown', this.audioResumeHandler);
+        window.removeEventListener('keydown', this.audioResumeHandler);
+        this.audioResumeHandler = null;
+      }
+    };
+    this.audioResumeHandler = resume;
+    window.addEventListener('pointerdown', resume, { once: true });
+    window.addEventListener('keydown', resume, { once: true });
   }
 
   public focusTeaLantern(chapterIndex: number) {
@@ -1805,7 +1912,10 @@ export class AltarScene {
     const dt = Math.min(0.05, elapsedTime - this.lastElapsed);
     this.lastElapsed = elapsedTime;
 
-    // 0. 游客路线只由 pointerdown 唤起，绝不在后台自顾自切换。
+    // 0. 公共入口 1800s 五幕时间轴（唯一幕次 / 时间驱动源，仅在仪式运行态推进）。
+    this.updateRitualTimeline(dt);
+
+    // 0.1 游客路线只由 pointerdown 唤起，绝不在后台自顾自切换。
     if (this.role === 'guest' && this.guestRoutinePlaying) {
       this.guestRoutineTimer += dt;
       if (this.rabbitHoleTourActive) {
@@ -2136,6 +2246,14 @@ export class AltarScene {
     this.renderer.forceContextLoss();
     if (this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+    }
+
+    // 8b. 公共入口 1800s 时间轴 / Web Audio 手势兜底：停推进，摘掉 window 监听。
+    this.ritualRunning = false;
+    if (this.audioResumeHandler) {
+      window.removeEventListener('pointerdown', this.audioResumeHandler);
+      window.removeEventListener('keydown', this.audioResumeHandler);
+      this.audioResumeHandler = null;
     }
 
     // 9. Tone.js：altarAudio 是这一轮仪式造的乐器，随祭坛一起拆，

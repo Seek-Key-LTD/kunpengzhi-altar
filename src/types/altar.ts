@@ -209,3 +209,61 @@ export function wujiRevealStateAt(sec: number): WujiRevealState {
   if (sec >= WUJI_REVEAL_SEC) return 'revealed';
   return 'hidden';
 }
+
+// ── 公共入口 · 1800s 五幕时间轴 ────────────────────────────────────────
+//
+// 公共页的**唯一驱动源**：三十分钟一个整轮，五幕依次推进。
+//   abyss 0–180（黑场，litSeats=0）｜naming 180–1020（litSeats 0→49 线性）
+//   lanterns 1020–1440（litSeats=49）｜extinguishing 1440–1751｜silence 1751–1800
+// 其中 1440（24:00）/ 1751（29:11）两个转场由 WUJI_REVEAL_SEC / WUJI_SILENCE_SEC
+// 在 setRitualTime 内部结算；时间轴**只在 0 / 180 / 1020 边界**改写幕次，避免双写。
+
+/** 一轮仪式的总时长（秒）= 30 分钟。公共入口恒此值，无倍速、无跳过。 */
+export const RITUAL_TOTAL_SEC = 30 * 60; // 1800s
+
+/** abyss 深渊黑场结束 = 180s（3:00）。 */
+export const RITUAL_ABYSS_END_SEC = 3 * 60; // 180s
+
+/** naming 命名幕结束 = 1020s（17:00）。 */
+export const RITUAL_NAMING_END_SEC = 17 * 60; // 1020s
+
+/** lanterns 走马灯幕结束 = 1440s（24:00）= #00 显形阈值。 */
+export const RITUAL_LANTERNS_END_SEC = WUJI_REVEAL_SEC; // 1440s
+
+/** 公共入口的五幕。 */
+export type RitualPhase = 'abyss' | 'naming' | 'lanterns' | 'extinguishing' | 'silence';
+
+/**
+ * 仪式时间（秒）→ 五幕。纯函数，唯一权威映射。
+ * 边界：<180 abyss｜<1020 naming｜<1440 lanterns｜<1751 extinguishing｜其余 silence。
+ */
+export function ritualPhaseAt(sec: number): RitualPhase {
+  if (sec < RITUAL_ABYSS_END_SEC) return 'abyss';
+  if (sec < RITUAL_NAMING_END_SEC) return 'naming';
+  if (sec < RITUAL_LANTERNS_END_SEC) return 'lanterns';
+  if (sec < WUJI_SILENCE_SEC) return 'extinguishing';
+  return 'silence';
+}
+
+/**
+ * 时间轴是否负责改写的幕次（早段三幕）。
+ *
+ * 只有 abyss / naming / lanterns 由 1800s 推进器直接 setRitualState；
+ * extinguishing / silence 两幕**必须**交给 setRitualTime() 的 #00 显形阈值结算。
+ * 两侧集合互斥且合并覆盖五幕 —— 这就是 1440 / 1751 永不双写的契约。
+ */
+export function isTimelineDrivenPhase(phase: RitualPhase): boolean {
+  return phase === 'abyss' || phase === 'naming' || phase === 'lanterns';
+}
+
+/**
+ * naming 幕内 litSeats 的线性爬升 [0, 49]。
+ * 幕外返回该幕的稳态值（abyss=0、lanterns/extinguishing/silence=49），
+ * 供时间轴与断言共用，避免两处各写一遍插值。
+ */
+export function ritualLitSeatsAt(sec: number): number {
+  if (sec <= RITUAL_ABYSS_END_SEC) return 0;
+  if (sec >= RITUAL_NAMING_END_SEC) return SEAT_ID_MAX;
+  const t = (sec - RITUAL_ABYSS_END_SEC) / (RITUAL_NAMING_END_SEC - RITUAL_ABYSS_END_SEC);
+  return Math.round(t * SEAT_ID_MAX);
+}

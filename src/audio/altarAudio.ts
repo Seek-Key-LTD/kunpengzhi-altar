@@ -4,6 +4,8 @@ import { SpiralEvent } from '../types/altar';
 class AltarAudioEngine {
   private isInitialized = false;
   private isMuted = false;
+  /** 进行中的 init()：合并并发调用，避免重复造一整套乐器（Tone 节点不会自动回收）。 */
+  private initPromise: Promise<void> | null = null;
   
   // Synthesizers
   private bellSynth: Tone.PolySynth | null = null;
@@ -14,9 +16,23 @@ class AltarAudioEngine {
   private delay: Tone.FeedbackDelay | null = null;
   private lowpass: Tone.Filter | null = null;
 
-  public async init() {
-    if (this.isInitialized) return;
-    
+  /**
+   * 幂等且**并发安全**的初始化：多次调用共享同一个进行中的 Promise。
+   *
+   * Web Audio 需要用户手势；公共页在仪式开始时先尽力 init()，被浏览器挂起时
+   * 由首次 pointerdown/keydown 再调一次。若不做单飞，两次并发 init() 会各造
+   * 一整套 synth —— 旧的没断开就泄漏在 destination 上。
+   */
+  public init(): Promise<void> {
+    if (this.isInitialized) return Promise.resolve();
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = this.doInit().finally(() => {
+      this.initPromise = null;
+    });
+    return this.initPromise;
+  }
+
+  private async doInit(): Promise<void> {
     await Tone.start();
     
     // Ambient spatial reverb
@@ -156,6 +172,7 @@ class AltarAudioEngine {
     this.delay = null;
     this.lowpass = null;
     this.isInitialized = false;
+    this.initPromise = null;
   }
 }
 

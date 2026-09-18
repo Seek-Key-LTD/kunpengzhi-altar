@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "test:waterway": "node scripts/verify-scorpion-waterway.mjs",
     "test:wuji": "node scripts/verify-wuji-absorber.mjs",
+    "test:ritual": "node scripts/verify-ritual-timeline.mjs",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler pages deploy dist --project-name=kunpengzhi-altar"
   },
