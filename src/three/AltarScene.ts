@@ -56,6 +56,7 @@ import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
 import { AltarWaterLiftEngine } from './AltarWaterLiftEngine';
 import { AltarMaglevLanternEngine } from './AltarMaglevLanternEngine';
+import type { WebglTier } from './webglCapability';
 
 // ── RFC-007 双体水梯 → 场景的映射常数 ──────────────────────────────
 // 引擎世界：H=7.0、桶行程 z∈[-3.5,3.5]。这里把 7 单位行程映射成 6 个世界单位
@@ -75,13 +76,39 @@ export const RITUAL_PLAYBACK_MIN = 0.25;
 export const RITUAL_PLAYBACK_MAX = 64;
 export const RITUAL_PLAYBACK_DEFAULT = 1;
 
+/**
+ * #7 · 构造选项。
+ *
+ * `tier` 由 `App` 在**构造之前**探测好再传进来（设计说明书 §1.4：探测与构造解耦）。
+ * 缺省 `{ tier: 'full' }` ⇒ 与既有行为逐字一致（导演台 / 取证入口不受影响）。
+ */
+export interface AltarSceneOptions {
+  /** 能力三态。`none` ⇒ 无画模式：不建渲染器、不建几何，时间轴 / 字幕 / 音频照常。 */
+  tier?: WebglTier;
+}
+
 export class AltarScene {
   private container: HTMLElement;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
-  private renderer: THREE.WebGLRenderer;
+  /** #7：无画模式下为 null —— 没有 WebGL 就没有渲染器，也就不该有 canvas。 */
+  private renderer: THREE.WebGLRenderer | null = null;
   private controls: OrbitControls;
   private animationFrameId: number | null = null;
+
+  // ── #7 · 能力三态 / 无画模式 ───────────────────────────────────────
+  /** 当前档位。运行中上下文丢失会被改写为 `none` / `context-lost`。 */
+  private tier: WebglTier = { tier: 'full' };
+  /** 丢失前的档位，用于 `webglcontextrestored` 后原样恢复（不猜、不升级）。 */
+  private tierBeforeLoss: WebglTier | null = null;
+  /** `tier='none'` ⇒ 无画：不出画，但**时钟不停**（#4 单一包络不变量）。 */
+  private drawless = false;
+  /** 运行中上下文已丢失且尚未恢复 ⇒ 停掉 draw call，避免刷屏报错。 */
+  private contextLost = false;
+  /** 降级 / 恢复回调（App 据此换静默层）。 */
+  private onDegrade?: (tier: WebglTier) => void;
+  /** `destroy()` 幂等闸：React.StrictMode 会双挂，二次销毁不得炸。 */
+  private destroyed = false;
   
   // Scene Groups
   private outerShellGroup: THREE.Group;
@@ -226,13 +253,18 @@ export class AltarScene {
     events: SpiralEvent[],
     onSeatSelect?: (seatId: number) => void,
     onLanternSelect?: (chapterIndex: number) => void,
-    onInteriorPoemSelect?: (seasonId: string) => void
+    onInteriorPoemSelect?: (seasonId: string) => void,
+    options: AltarSceneOptions = {}
   ) {
     this.container = container;
     this.events = events;
     this.onSeatSelect = onSeatSelect;
     this.onLanternSelect = onLanternSelect;
     this.onInteriorPoemSelect = onInteriorPoemSelect;
+
+    // #7 · 档位先落，再决定「建不建渲染器 / 建不建几何」。
+    this.tier = options.tier ?? { tier: 'full' };
+    this.drawless = this.tier.tier === 'none';
 
     // 1. Scene setup
     this.scene = new THREE.Scene();
@@ -245,19 +277,43 @@ export class AltarScene {
     this.camera.position.set(48, 40, 58);
 
     // 3. Renderer setup
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setSize(container.clientWidth, container.clientHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.25;
-    container.appendChild(this.renderer.domElement);
+    //    #7：无画模式（tier='none'）**不建渲染器** —— 没有 WebGL 时这一步必抛
+    //    「Error creating WebGL context」，而那正是本单要兜掉的白屏。不建渲染器
+    //    也就不会往 DOM 里塞 canvas。时间轴 / 字幕 / 音频不受影响（见第 8 步）。
+    if (!this.drawless) {
+      this.renderer = new THREE.WebGLRenderer({
+        // 降档档位关抗锯齿：软栅格 / 仅 WebGL1 的机器上这是最贵的一项。
+        antialias: this.tier.tier === 'full',
+        powerPreference: 'high-performance'
+      });
+      this.renderer.setSize(container.clientWidth, container.clientHeight);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = 1.25;
+      // #7 降档（§1.2）：能画，但软栅格 / 仅 WebGL1 扛不住满配 ——
+      // 只降 pixelRatio 与阴影（两项最贵），几何、材质、雾、配色一律不动。
+      if (this.tier.tier === 'degraded') {
+        this.renderer.setPixelRatio(1);
+        this.renderer.shadowMap.enabled = false;
+      }
+      container.appendChild(this.renderer.domElement);
+      // #7 §1.1 B/C：运行中上下文丢失 / 恢复。preventDefault 由本类与 three 内部
+      // 各调一次（幂等），缺了它浏览器就不会尝试恢复上下文。
+      this.renderer.domElement.addEventListener('webglcontextlost', this.onWebglContextLost);
+      this.renderer.domElement.addEventListener('webglcontextrestored', this.onWebglContextRestored);
+    }
 
     // 4. Controls
+    //    无画模式下没有 renderer.domElement，给 OrbitControls 一张**游离** canvas：
+    //    它只用来挂监听，永不入 DOM ⇒ 公共页查不到 canvas，也不占渲染资源。
     // ⚠️ minDistance 曾降到 0.5 以便"贴着看"，但那正是穿模的直接来源。
     //    安全边界见 docs/身份与相机权限规范.md §3.2。
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls = new OrbitControls(
+      this.camera,
+      this.renderer ? this.renderer.domElement : document.createElement('canvas')
+    );
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
     this.controls.minDistance = 0.8;
@@ -282,20 +338,29 @@ export class AltarScene {
     this.scene.add(this.waterworksGroup);
 
     // 6. Build All Complex Layers
-    this.initLighting();
-    this.buildPlinthAndRiver();
-    this.buildCubePyramidAndSeats();
-    // 诗词展示层后置：先验收阳 Cube、阴腔与蝎子楔水路，避免牌子遮蔽结构。
-    // this.buildInnerStelaeRing();
-    // RFC-008：外环 16 面走马大茶灯回廊（引擎驱动，见 animate 第 9b 段）
-    this.buildOuter16TeaLanterns();
-    this.buildWujiFountain();
-    // #2：双龙的逐席对数螺线光迹（每个已触发席位一条，随音高收紧）。
-    this.buildSeatTrails();
-    this.buildStarships();
-    this.buildSurroundingAtmosphere();
+    //    #7：无画模式跳过**全部**几何 / 贴图 / 光源构建 —— 画不出来，就不该在
+    //    一台连 WebGL 都没有的机器上白烧一次 CPU。这些网格只服务于出画，
+    //    时间轴 / 字幕 / 音频一个都不读它们（#4：渲染层降级只是不画，不改时钟）。
+    if (!this.drawless) {
+      this.initLighting();
+      this.buildPlinthAndRiver();
+      this.buildCubePyramidAndSeats();
+      // 诗词展示层后置：先验收阳 Cube、阴腔与蝎子楔水路，避免牌子遮蔽结构。
+      // this.buildInnerStelaeRing();
+      // RFC-008：外环 16 面走马大茶灯回廊（引擎驱动，见 animate 第 9b 段）
+      this.buildOuter16TeaLanterns();
+      this.buildWujiFountain();
+      // #2：双龙的逐席对数螺线光迹（每个已触发席位一条，随音高收紧）。
+      this.buildSeatTrails();
+      this.buildStarships();
+      this.buildSurroundingAtmosphere();
 
-    // RFC-008 声学接线：走马灯声学击发统一走既有 triggerFountainPulse()，不新造音频 API
+      // 6b. 传国玉玺：悬浮玺台（器物，与 49 席完全隔离）
+      this.mountRelic();
+    }
+
+    // RFC-008 声学接线：走马灯声学击发统一走既有 triggerFountainPulse()，不新造音频 API。
+    // ⚠️ 这一段**在无画模式下也保留**：它是音频链路，不是画面链路 —— 降级下音频照旧。
     this.maglev.onAcousticStrum = (chord, bay, chapter) => {
       altarAudio.triggerFountainPulse();
       if (this.maglevStrumLogCount < 8) {
@@ -303,9 +368,6 @@ export class AltarScene {
         console.log(`[走马灯] 声学击发 chord=${chord} bay=${bay} chapter=${chapter}`);
       }
     };
-
-    // 6b. 传国玉玺：悬浮玺台（器物，与 49 席完全隔离）
-    this.mountRelic();
 
     // 7. Event listeners
     window.addEventListener('resize', this.onWindowResize);
@@ -916,6 +978,63 @@ export class AltarScene {
     this.fogCaptionEl.style.display = text ? '' : 'none';
   }
 
+  // ── #7 · 上下文丢失 / 恢复（§1.1 B / C）────────────────────────────
+
+  /**
+   * 运行中上下文丢失（显卡驱动重置、标签页被回收、上下文配额打满 …）。
+   *
+   * 三条纪律：
+   *   1. **必须** `preventDefault()` —— 否则浏览器不尝试恢复，页面就此死掉；
+   *   2. **绝不**在这里抛错 / 弹错：归入 `none` 档，由 App 换静默层；
+   *   3. **只关 draw call，不动时钟** —— 1800s 时间轴、雾中字幕、音频继续跑
+   *      （#4 单一包络不变量：渲染层降级只是不画，不改时钟）。
+   */
+  private onWebglContextLost = (event: Event) => {
+    event.preventDefault();
+    if (this.contextLost) return;
+    this.contextLost = true;
+    this.tierBeforeLoss = this.tier;
+    const next: WebglTier = { tier: 'none', reason: 'context-lost' };
+    this.tier = next;
+    if (this.onDegrade) this.onDegrade(next);
+  };
+
+  /**
+   * 上下文已恢复：按**丢失前**的档位原样恢复（不猜、不擅自升档）。
+   *
+   * three.js 内部已监听同一事件并重建 GL 资源，这里只负责把本类的档位与回调对齐。
+   * 是否撤掉静默层由 App 决定（本类不碰 DOM 结构）。
+   */
+  private onWebglContextRestored = () => {
+    if (!this.contextLost) return;
+    this.contextLost = false;
+    const restored: WebglTier = this.tierBeforeLoss ?? { tier: 'full' };
+    this.tierBeforeLoss = null;
+    this.tier = restored;
+    if (this.onDegrade) this.onDegrade(restored);
+  };
+
+  /**
+   * #7：登记降级回调 —— 运行中上下文丢失 / 恢复时触发（`none` ⇒ App 换静默层）。
+   * 传 `undefined` 即注销。**不进公共产物**的是"强制降级开关"，本回调是正常产品逻辑。
+   */
+  public setOnDegrade(callback?: (tier: WebglTier) => void): void {
+    this.onDegrade = callback;
+  }
+
+  /** #7：当前能力档位（构造时传入，运行中可能因上下文丢失改写）。 */
+  public get webglTier(): WebglTier {
+    return this.tier;
+  }
+
+  /**
+   * #7：无画模式（`tier='none'`）—— 不建渲染器、不出画；
+   * **时间轴 / 雾中字幕 / 音频照常**（#4 单一包络不变量）。
+   */
+  public get isDrawless(): boolean {
+    return this.drawless;
+  }
+
   /**
    * Ulam 中轴水利线：46→23→8→1 是阴腔内的机械提升；
    * 1→4→15→34 是阴腔内的重力支路。二者都不得露到阳 Cube 表面。
@@ -1484,7 +1603,7 @@ export class AltarScene {
     const height = this.container.clientHeight;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
+    this.renderer?.setSize(width, height);
   };
 
   private onPointerDown = (event: MouseEvent) => {
@@ -2071,8 +2190,9 @@ export class AltarScene {
    * 仅取证用，公共/导演运行时不调用 ⇒ 对生产零影响。返回该相机便于驱动读参数。
    */
   public setOrthoTopdown(halfWidth: number = PYRAMID_HALF): THREE.OrthographicCamera {
-    const el = this.renderer.domElement;
-    const aspect = el.height > 0 ? el.width / el.height : 1;
+    // #7：无画模式没有 canvas，退化成 1:1 视口（本方法只服务取证入口，不在降级路径上）。
+    const el = this.renderer ? this.renderer.domElement : null;
+    const aspect = el && el.height > 0 ? el.width / el.height : 1;
     const cam = new THREE.OrthographicCamera(
       -halfWidth * aspect,
       halfWidth * aspect,
@@ -2311,7 +2431,11 @@ export class AltarScene {
     }
 
     // #5：取证正交相机存在时以它渲一帧（俯视 7×7），否则走主循环透视相机。
-    this.renderer.render(this.scene, this.orthoTopdownCamera ?? this.camera);
+    // #7：无画模式 / 上下文已丢失 ⇒ **不画**。只跳过这一次 draw call，
+    //     上面的时间轴推进、字幕刷新、音频包络**一字未动**（#4 不变量）。
+    if (this.renderer && !this.contextLost) {
+      this.renderer.render(this.scene, this.orthoTopdownCamera ?? this.camera);
+    }
   };
 
   // ── 传国玉玺（T03 接线，只此一段，不碰祭坛其余部分）────────────────
@@ -2424,6 +2548,11 @@ export class AltarScene {
    * 十来次之后浏览器 context 配额打满，就是白屏。现在全部回收。
    */
   public destroy() {
+    // 0. 幂等闸：React.StrictMode 双挂、或 App 兜底路径重复清理时，二次调用必须安全返回。
+    //    （销毁后 renderer / controls 已置空，再走一遍会炸在 null 上。）
+    if (this.destroyed) return;
+    this.destroyed = true;
+
     // 0. 先撤玉玺子系统；其 geometry/material/texture 由第 6 步统一遍历回收。
     this.disposeRelic();
 
@@ -2489,12 +2618,19 @@ export class AltarScene {
 
     // 8. 渲染器：dispose 之后必须 forceContextLoss()，
     //    否则 WebGL context 只是被标记为可丢弃，配额不会立刻回来。
-    this.renderer.setRenderTarget(null);
-    this.renderer.dispose();
-    this.renderer.forceContextLoss();
-    if (this.renderer.domElement.parentElement) {
-      this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+    //    #7：无画模式根本没有渲染器（也就没有 canvas），这一步整段跳过。
+    if (this.renderer) {
+      this.renderer.domElement.removeEventListener('webglcontextlost', this.onWebglContextLost);
+      this.renderer.domElement.removeEventListener('webglcontextrestored', this.onWebglContextRestored);
+      this.renderer.setRenderTarget(null);
+      this.renderer.dispose();
+      this.renderer.forceContextLoss();
+      if (this.renderer.domElement.parentElement) {
+        this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+      }
+      this.renderer = null;
     }
+    this.onDegrade = undefined;
 
     // 8b. 公共入口 1800s 时间轴 / Web Audio 手势兜底：停推进，摘掉 window 监听。
     this.ritualRunning = false;
