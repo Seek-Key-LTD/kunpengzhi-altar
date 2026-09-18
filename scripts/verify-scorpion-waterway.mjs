@@ -1,33 +1,41 @@
 /**
  * 蝎子楔水路的纯几何验收。
- * 不依赖 WebGL/Rapier：CI 先把错误拓扑、反坡和露天水路挡在合并前。
+ * 不依赖 WebGL/Rapier：常量**一律**从真模块 `src/data/altarGeometry.ts` 现场打包取值，
+ * 杜绝「脚本自抄一份 BRICK/CELL/PYRAMID_TOP → 与源码漂移」。CI 先把错误拓扑、
+ * 反坡和露天水路挡在合并前。
  */
 import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
-const BRICK = 3;
-const CELL = BRICK;
-const PYRAMID_TOP = 21;
-const DROP_PER_SEAT = (PYRAMID_TOP - BRICK) / 48;
-const EMBED_DEPTH = BRICK * 0.56;
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-function ulamCoords(total) {
-  const points = [{ x: 0, z: 0 }];
-  let x = 0; let z = 0; let step = 1;
-  while (points.length < total) {
-    for (let i = 0; i < step && points.length < total; i++) { x += 1; points.push({ x, z }); }
-    for (let i = 0; i < step && points.length < total; i++) { z += 1; points.push({ x, z }); }
-    step += 1;
-    for (let i = 0; i < step && points.length < total; i++) { x -= 1; points.push({ x, z }); }
-    for (let i = 0; i < step && points.length < total; i++) { z -= 1; points.push({ x, z }); }
-    step += 1;
-  }
-  return points;
+const esbuild = resolve(ROOT, 'node_modules/.bin/esbuild');
+assert.ok(existsSync(esbuild), '缺少 esbuild（vite 内置依赖）');
+
+const tmp = mkdtempSync(resolve(tmpdir(), 'waterway-'));
+let geo;
+try {
+  execFileSync(esbuild, [
+    resolve(ROOT, 'src/data/altarGeometry.ts'),
+    '--bundle', '--platform=node', '--format=esm', '--log-level=warning',
+    `--outfile=${resolve(tmp, 'geo.mjs')}`
+  ], { stdio: ['ignore', 'ignore', 'inherit'] });
+  geo = await import(pathToFileURL(resolve(tmp, 'geo.mjs')).href);
+} finally {
+  rmSync(tmp, { recursive: true, force: true });
 }
 
-const path = ulamCoords(49).map((point, index) => ({
+// —— 全部取自真模块，脚本不再自持任何几何常量 ——
+const { BRICK, CELL, PYRAMID_TOP, SEATS_PER_LEVEL, DROP_PER_SEAT, SCORPION_EMBED_DEPTH, ulamCoords } = geo;
+
+const path = ulamCoords(SEATS_PER_LEVEL * 7).map((point, index) => ({
   seat: index + 1,
   ...point,
-  y: PYRAMID_TOP - index * DROP_PER_SEAT - EMBED_DEPTH
+  y: PYRAMID_TOP - index * DROP_PER_SEAT - SCORPION_EMBED_DEPTH
 }));
 
 assert.equal(path.length, 49, '水龙必须恰有 49 个席位节点');
@@ -46,4 +54,4 @@ for (const point of path) {
   assert.ok(point.y < top && point.y > top - BRICK, `第 ${point.seat} 席水芯必须埋在其顶层 Cube 内`);
 }
 
-console.log(`scorpion-waterway: 49 nodes, 48 sealed interfaces, Δh=${DROP_PER_SEAT}`);
+console.log(`scorpion-waterway: 49 nodes, 48 sealed interfaces, Δh=${DROP_PER_SEAT}（常量取自真模块）`);
