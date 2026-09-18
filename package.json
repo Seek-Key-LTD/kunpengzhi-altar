@@ -10,6 +10,7 @@
     "test:waterway": "node scripts/verify-scorpion-waterway.mjs",
     "test:wuji": "node scripts/verify-wuji-absorber.mjs",
     "test:ritual": "node scripts/verify-ritual-timeline.mjs",
+    "test:ceremony": "node scripts/verify-ceremony-view.mjs",
     "test:dragon": "node scripts/verify-dual-dragon.mjs",
     "test:audio": "node scripts/verify-audio-envelope.mjs",
     "test:physics": "node scripts/verify-physics-failure.mjs",
