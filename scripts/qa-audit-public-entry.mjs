@@ -46,14 +46,28 @@ const SUFFIX = LABEL ? `-${LABEL}` : '';
 const SELF_TEST = process.argv.includes('--self-test');
 const LAUNCH_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 
-// 工程泄露扫描词（#5 验收口径）—— DOM/文本/window 面
-const SCAN_WORDS = ['topology', 'ulam', '49', '91', 'rapier', 'camera', 'debug', 'speed', '倍速', 'playback'];
+// 工程泄露扫描词（#5 验收口径）+ #6 荣誉层增量（docs/design/006 §6.2）—— DOM/文本/window 面
+// ⚠️ §6.2 基线前置条件：追加词后必须复跑一次基线，确认公共页「暴露词清单」仍为（无）。
+//    若因新增词出现命中，**先定位再定夺**，不得为"过闸"而删词。
+const SCAN_WORDS = [
+  // #5 原有
+  'topology', 'ulam', '49', '91', 'rapier', 'camera', 'debug', 'speed', '倍速', 'playback',
+  // #6 增量 · 管理语义（中文，公共页本就无文案）
+  '座次', '通证', '成交', '转让', '预约', '贡献', '荣誉', '铸造', '认领',
+  // #6 增量 · 凭证 / 会计 / 证据语义（英文子串，误报风险中，基线已确认 0 命中）
+  'asn', 'nft', 'sbt', 'soulbound', 'opensea',
+  'credits', 'epoch', 'snapshot', 'vesting', 'tokenid'
+];
 
 // bundle 面：公共页**实际下发**的 JS 里是否夹带「导演 / 工程入口」代码。
 // 用精确工程标记（避免 three.js 通用词 noise）；`rapier` 作为阴性对照（死依赖，应 0）。
 const BUNDLE_MARKERS = [
+  // #5 原有
   'altar.director.confirmed', '我已知晓，进入', '导演 / 认证台', '前端伪认证',
-  '12-TET', 'chromatic_descent', '大衍之数五十', 'DirectorApp', '断代', 'rapier'
+  '12-TET', 'chromatic_descent', '大衍之数五十', 'DirectorApp', '断代', 'rapier',
+  // #6 增量 · 荣誉层工程字面量（§6.2：用特征字面量，不用 'ASN'/'SBT' 这类易被压缩产物噪声误命中的泛词）
+  'snapshot_hash', 'MonthlyRanking', 'EvidenceSnapshot', 'CredentialExhibit',
+  'soulbound', 'asn_credential_ref', 'frozenSnapshotId', 'toPublicView'
 ];
 
 function loadPlaywright() {
