@@ -12,6 +12,7 @@
     "test:ritual": "node scripts/verify-ritual-timeline.mjs",
     "test:dragon": "node scripts/verify-dual-dragon.mjs",
     "test:audio": "node scripts/verify-audio-envelope.mjs",
+    "capture": "node tools/capture/capture.mjs",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler pages deploy dist --project-name=kunpengzhi-altar"
   },
@@ -30,6 +31,7 @@
     "@types/three": "^0.174.0",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.21",
+    "playwright": "^1.63.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2",

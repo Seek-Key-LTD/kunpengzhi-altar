@@ -1793,6 +1793,30 @@ export class AltarScene {
   }
 
   /**
+   * #7 工程入口 · 定位仪式时间（秒）—— 把内部时钟与全部派生状态**一次性**结算到 t。
+   *
+   * 供无头取证（`tools/capture`）按幕次 / 席次精确取样：直接置 `ritualElapsed = t`，
+   * 复算幕次 / litSeats / #00 显形阈值，使后续 animate 帧从 t 起续跑。
+   * 与「只调 setRitualState + setRitualTime 单点摆位」不同 —— 这里**同时对齐内部时钟**，
+   * 否则下一帧 updateRitualTimeline 会用旧时钟把画面覆写回去（雾中字幕/门控也读时钟）。
+   * 不改变时间轴推进逻辑；音频包络由下一帧的 updateRitualTimeline 统一结算（保持单一调用点）。
+   */
+  public seekTo(sec: number): number {
+    const t = Number.isFinite(sec) ? Math.max(0, Math.min(RITUAL_TOTAL_SEC, sec)) : 0;
+    this.ritualElapsed = t;
+    const phase = ritualPhaseAt(t);
+    this.ritualPhase = phase;
+    const litSeats = ritualLitSeatsAt(t);
+    this.namingLitSeats = litSeats;
+    if (isTimelineDrivenPhase(phase)) {
+      this.setRitualState(phase, litSeats, null);
+    }
+    // 无论哪一幕都结算 #00 显形 / 静默（extinguishing / silence 由 setRitualTime 内部处理）。
+    this.setRitualTime(t);
+    return t;
+  }
+
+  /**
    * 每帧推进 1800s 五幕时间轴；仅在仪式运行态生效。
    *
    * 防双写：只在 0 / 180 / 1020 三个边界改写幕次；1440（24:00）与 1751（29:11）

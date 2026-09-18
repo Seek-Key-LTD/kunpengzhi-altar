@@ -3,3 +3,8 @@ dist/
 .wrangler/
 .env*
 .DS_Store
+
+# 无头视觉取证产物（tools/capture）：只提交脚本 + 文本清单，不提交二进制图
+artifacts/capture/**/*.png
+artifacts/capture/**/*.jpg
+artifacts/capture/**/*.jpeg

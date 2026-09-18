@@ -1,0 +1,19 @@
+# 华夏祭坛 · 无头视觉取证清单
+生成时间(UTC): 2026-09-18T03:42:33.132Z
+模式: run  · 速率: 64x
+视口: 1280×720  · 实测帧率: 25.9 fps
+GL: webgl2 ✓ · ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+非黑判据: 任一分量 ≥ 8  · 发光判据: 亮度 ≥ 32
+
+字段: 序号 | 幕 | 目标t | 实到t | 席数 | 非黑占比 | 均亮 | 发光像素 | 字幕
+1 | abyss(深渊) | 90s | 100.12s | lit=0 | nonBlack=0.550% | meanLum=0.28 | bright=1432 | caption="天地未形，混沌如渊。" | sha256=9fa94f221aaa
+2 | naming(命名) | 600s | 610.23s | lit=25 | nonBlack=5.020% | meanLum=2.44 | bright=20604 | caption="四十九席，逐一点亮；水向外行，音向内收。" | sha256=4c083dbcc6fe
+3 | lanterns(走马灯) | 1200s | 1218.51s | lit=49 | nonBlack=7.720% | meanLum=4.05 | bright=39054 | caption="十七时整，茶灯始转；一周一百二十秒。" | sha256=75dd5fd14c02
+4 | extinguishing(敛光) | 1600s | 1618.51s | lit=49 | nonBlack=7.320% | meanLum=3.67 | bright=36151 | caption="水尽声收，唯余极点一束冷光。" | sha256=b70533ae5c81
+5 | silence(静默) | 1780s | 1791.31s | lit=49 | nonBlack=0.500% | meanLum=0.27 | bright=1332 | caption="万籁俱寂，归于无极。" | sha256=b5278701d32c
+
+## 深渊/静默幕 · 「有内容黑」论证
+- abyss(深渊) t=100.12s：字幕=「天地未形，混沌如渊。」，非黑像素=5069 个（均亮 0.28）。→ 有内容黑（字幕在场，非死黑）
+- silence(静默) t=1791.31s：字幕=「万籁俱寂，归于无极。」，非黑像素=4608 个（均亮 0.27）。→ 有内容黑（字幕在场，非死黑）
+
+## 结论：✅ 无死黑帧 —— 各幕均有可测内容
