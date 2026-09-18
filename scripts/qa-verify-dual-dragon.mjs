@@ -324,7 +324,7 @@ ok(/spawnSync\(process\.execPath/.test(runner), 'run-tests：每个套件在独�
 ok(/res\.status\s*!==\s*0/.test(runner) && /throw\s+new\s+Error/.test(runner),
   'run-tests：任一子进程非零退出即 throw（传导失败）');
 // —— 注入失败：新建临时探针 + 临时 runner 副本（不改动任何入库文件）——
-// ⚠️ 本套件已注册进 run-tests（第 8 套）。副本若原样包含自身会自引用无限递归，
+// ⚠️ 本套件已注册进 run-tests（第 9 套）。副本若原样包含自身会自引用无限递归，
 //    故副本先剔除包含本文件名的行；语义不变（仍证明副本非零退出可传导）。
 const SELF = 'scripts/qa-verify-dual-dragon.mjs';
 const runnerBody = runner.includes(SELF)
