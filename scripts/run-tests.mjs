@@ -26,7 +26,10 @@ const SUITES = [
   ['朗诵模块·17 章 manifest（#11-B）', 'scripts/verify-ritual-narration.mjs'],
   ['QA 独立门禁（#3/#8）', 'scripts/qa-verify-issue3-8.mjs'],
   ['QA 独立门禁（#2/#9）', 'scripts/qa-verify-dual-dragon.mjs'],
-  ['QA 独立门禁（#4）', 'scripts/qa-verify-audio-envelope.mjs']
+  ['QA 独立门禁（#4）', 'scripts/qa-verify-audio-envelope.mjs'],
+  // #6 荣誉层：数据契约 + #00 三态（44 断言） + 公共入口不可达（15 断言）
+  ['荣誉层聚合·#00 三态（#6 T1–T6）', 'scripts/verify-honor-aggregation.mjs'],
+  ['荣誉层隔离·import-graph（#6 T9）', 'scripts/verify-honor-isolation.mjs']
 ];
 
 for (const [name, rel] of SUITES) {
