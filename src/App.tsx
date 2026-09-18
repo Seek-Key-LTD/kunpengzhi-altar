@@ -40,12 +40,12 @@ export const App: React.FC = () => {
       return;
     }
 
-    // 当前直入版本不开放游客档：进入即为已认证的观察席，WASD/QE 立刻可用。
+    // 公共入口采用自由观察席：进入即开放鼠标 OrbitControls 与 WASD/QE。
     // 真正 OIDC 接入后由身份层覆写此角色；祭坛本体仍只消费 role，不自行验权。
     altar.setRole('authenticated');
-    // #8：公共入口改由 1800s 五幕时间轴驱动（abyss→naming→lanterns→extinguishing→silence）。
-    // presentImmediately() 保留不删，供导演 / 直入路径（#5）另用。
-    altar.startRitual();
+    // 公共入口不强制启动仪式镜头，避免时间轴接管相机并锁死观察席控制。
+    // 需要演示完整五幕时间轴时，再由导演入口显式调用 startRitual()。
+    altar.presentImmediately();
 
     // #7 T5：**只换画面层**。时间轴 / 雾中字幕 / 音频由 AltarScene 的**同一个**
     // animate 循环继续推进 —— 这里不新建第二套时间轴，也不新建计时器（#4 不变量）。
