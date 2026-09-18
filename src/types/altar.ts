@@ -14,16 +14,20 @@ export interface SpiralEvent {
   midi_note_name: string;
   midi_velocity: number;
   midi_duration_beats: number;
-  harmony_event: string;
+  /**
+   * 以下「讲解 / 汇报」字段**可选**：公共仪式数据面不产出，由导演台
+   * （`src/director/seatPresentation.ts`）按需合并 —— 保证公共 chunk 不含导演文案（#5）。
+   */
+  harmony_event?: string;
   flower_type: 'peony' | 'lotus' | 'plum' | 'orchid' | 'bamboo' | 'chrysanthemum' | 'pine';
   flower_color: string;
   light_preset: string;
-  camera_target: string;
-  starship_id: string;
-  starship_name: string;
-  display_name: string;
+  camera_target?: string;
+  starship_id?: string;
+  starship_name?: string;
+  display_name?: string;
   role_title?: string;
-  message_excerpt: string;
+  message_excerpt?: string;
   zodiac_sector: number; // 1 to 12
   is_prime: boolean; // Ulam spiral prime alignment
   is_finale: boolean;

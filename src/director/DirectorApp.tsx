@@ -17,6 +17,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AltarScene } from '../three/AltarScene';
 import { INITIAL_SPIRAL_EVENTS } from '../data/spiral_events';
+import { seatPresentation } from './seatPresentation';
 import { altarAudio } from '../audio/altarAudio';
 import { useRelicState } from '../hooks/useRelicState';
 import { ROLE_CAPABILITIES, type AltarRole, type CameraMode } from '../types/altar';
@@ -138,7 +139,9 @@ export const DirectorApp: React.FC = () => {
     setEntered(true);
   };
 
-  const activeEvent = INITIAL_SPIRAL_EVENTS[Math.min(48, Math.max(0, activeSeatId - 1))];
+  // 公共事件（坐标/音高/时序） + 导演台讲解文案（display_name/message_excerpt/…）按需合并。
+  const baseEvent = INITIAL_SPIRAL_EVENTS[Math.min(48, Math.max(0, activeSeatId - 1))];
+  const activeEvent = { ...baseEvent, ...seatPresentation(baseEvent) };
 
   // ── 未确认：先挡一道 ───────────────────────────────────────────────
   if (!entered) {

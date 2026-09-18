@@ -239,7 +239,10 @@ ok(!/setPlaybackRate|playbackRate|倍速|播放速度|回放速率|\brate\b/i.te
 ok(!/type\s*=\s*["']range["']|<input|<button|slider|onChange/i.test(app), '公共 App.tsx 无 input/button/slider/onChange');
 ok(!/from\s+'\.\/components\//.test(app), '公共 App.tsx 不引任何 UI 组件（无倍速入口可挂）');
 const main = readSrc('src/main.tsx');
-ok(/route\s*===\s*'director'\s*\?\s*<DirectorApp\s*\/>\s*:\s*<App\s*\/>/.test(main), '路由：public → App（公共树=App.tsx）');
+// #5 · 路由两态门控：形式允许「三元」或「lazy 分支 + Suspense」；此处校验语义 + 按需加载证据。
+ok(/route\s*[!=]==\s*'director'/.test(main) && /<App\s*\/>/.test(main), '路由：public → App（公共树=App.tsx）');
+ok(/lazy\s*\(\s*\(\)\s*=>\s*import\(\s*'\.\/director\/DirectorApp'\s*\)\s*\)/.test(main), '#5：导演路由懒加载（动态 import → 独立 chunk）');
+ok(/<Suspense[\s\S]{0,140}<DirectorApp\s*\/>/.test(main), '#5：Suspense 兜底包裹 DirectorApp（按需拉取）');
 ok(!/'\.\/components\//.test(app), '公共树不含 components 目录组件');
 log('setPlaybackRate 仅 AltarScene 定义、全仓零调用；公共树 App.tsx 无倍速/输入控件');
 
