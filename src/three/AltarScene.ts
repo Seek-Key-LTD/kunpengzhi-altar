@@ -1318,20 +1318,17 @@ export class AltarScene {
     ctx.font = '16px "Noto Serif SC", serif';
     ctx.fillText(ch.historicalTheme, 192, 95);
 
-    ctx.fillStyle = '#fef08a';
-    ctx.font = '18px "Noto Serif SC", serif';
+    // 双列是版式，不把“左栏/右栏/起承/转合”等编辑标签烧进门帘纹理。
+    // CanvasTexture 不受 CSS 影响，因此 3D 扇面在这里直接按两列排版；
+    // HTML 阅读层另由 CSS grid 控制同一份左右数据。
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = '16px "Noto Serif SC", serif';
     ctx.textAlign = 'left';
-    ctx.fillText('【左栏·起承】', 30, 140);
-    ctx.fillStyle = '#f1f5f9';
-    ch.leftColumn.slice(0, 3).forEach((line, i) => {
-      ctx.fillText(line, 30, 175 + i * 32);
+    ch.leftColumn.slice(0, 4).forEach((line, i) => {
+      ctx.fillText(line, 24, 145 + i * 32);
     });
-
-    ctx.fillStyle = '#7dd3fc';
-    ctx.fillText('【右栏·转合】', 30, 295);
-    ctx.fillStyle = '#f1f5f9';
-    ch.rightColumn.slice(0, 3).forEach((line, i) => {
-      ctx.fillText(line, 30, 330 + i * 32);
+    ch.rightColumn.slice(0, 4).forEach((line, i) => {
+      ctx.fillText(line, 202, 145 + i * 32);
     });
 
     ctx.fillStyle = '#fbbf24';
