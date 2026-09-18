@@ -54,6 +54,7 @@ import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
+import { RitualNarration, type NarrationChapter } from '../audio/ritualNarration';
 import { AltarWaterLiftEngine } from './AltarWaterLiftEngine';
 import { AltarMaglevLanternEngine } from './AltarMaglevLanternEngine';
 import type { WebglTier } from './webglCapability';
@@ -165,6 +166,10 @@ export class AltarScene {
   /** Web Audio 手势兜底是否已武装（避免重复绑定）。 */
   private audioKicked = false;
   private audioResumeHandler: (() => void) | null = null;
+  /** 章节朗诵与门帘轨道镜头共用的唯一章节游标。 */
+  private narration: RitualNarration;
+  private lanternChoreographyActive = false;
+  private activeLanternChapter = 0;
   
   // Interactive Objects & Meshes
   private waterSpiralPath: THREE.Vector3[] = [];
@@ -261,6 +266,13 @@ export class AltarScene {
     this.onSeatSelect = onSeatSelect;
     this.onLanternSelect = onLanternSelect;
     this.onInteriorPoemSelect = onInteriorPoemSelect;
+    this.narration = new RitualNarration({
+      events: {
+        onChapterStart: (chapter) => this.onNarrationChapterStart(chapter),
+        onChapterEnd: (chapter) => this.onNarrationChapterEnd(chapter),
+        onComplete: () => { this.lanternChoreographyActive = false; }
+      }
+    });
 
     // #7 · 档位先落，再决定「建不建渲染器 / 建不建几何」。
     this.tier = options.tier ?? { tier: 'full' };
@@ -2027,6 +2039,7 @@ export class AltarScene {
 
   public focusTeaLantern(chapterIndex: number) {
     this.cameraMode = 'outer_lanterns';
+    this.activeLanternChapter = Math.max(0, Math.min(15, chapterIndex - 1));
     const angle = ((chapterIndex - 1) / 16) * Math.PI * 2;
     const lanternRadius = 23.5;
     const lanternHeight = 2.6;
@@ -2043,6 +2056,40 @@ export class AltarScene {
 
     this.targetCameraPos.set(camX, lanternHeight + 0.5, camZ);
     this.targetControlsTarget.set(x, lanternHeight, z);
+    this.isCameraTransitioning = true;
+  }
+
+  /** 朗诵开始时把镜头锁到当前扇面；章节结束时由播放器推进到下一面。 */
+  private onNarrationChapterStart(chapter: NarrationChapter): void {
+    this.lanternChoreographyActive = true;
+    this.focusTeaLantern(chapter.index + 1);
+  }
+
+  private onNarrationChapterEnd(chapter: NarrationChapter): void {
+    const next = chapter.index + 1;
+    if (next < 17) this.focusTeaLantern(next + 1);
+  }
+
+  /** 显式启动 17 章朗诵；必须由导演入口或用户手势调用。 */
+  public startLanternNarration(fromChapter = 0): void {
+    this.lanternChoreographyActive = true;
+    this.narration.play(fromChapter);
+  }
+
+  public stopLanternNarration(): void {
+    this.narration.stop();
+    this.lanternChoreographyActive = false;
+  }
+
+  /** 每帧重算当前扇面的世界机位，避免外环转动时镜头脱离门帘。 */
+  private syncLanternCameraRail(): void {
+    if (!this.lanternChoreographyActive || this.cameraMode !== 'outer_lanterns') return;
+    const baseAngle = (this.activeLanternChapter / 16) * Math.PI * 2;
+    const angle = baseAngle + this.lanternsGroup.rotation.y;
+    const panelRadius = 23.5;
+    const cameraRadius = 30.5;
+    this.targetCameraPos.set(Math.sin(angle) * cameraRadius, 3.1 + this.lanternsGroup.position.y, Math.cos(angle) * cameraRadius);
+    this.targetControlsTarget.set(Math.sin(angle) * panelRadius, 2.6 + this.lanternsGroup.position.y, Math.cos(angle) * panelRadius);
     this.isCameraTransitioning = true;
   }
 
@@ -2312,6 +2359,9 @@ export class AltarScene {
         this.rabbitHoleTourActive = false;
       }
     }
+
+    // 0.15 朗诵门帘轨道：目标机位始终跟随当前扇面的世界角度。
+    this.syncLanternCameraRail();
 
     // 1. Smooth Camera Transition
     if (this.isCameraTransitioning) {
