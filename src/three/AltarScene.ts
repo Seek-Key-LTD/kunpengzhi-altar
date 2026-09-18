@@ -1,7 +1,5 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-// #10 幕次取景核：纯函数 pose = ceremonyPoseAt(sec)，时间源只读（本类 ritualElapsed 写入点保持 4 处不变）。
-import { ceremonyPoseAt } from './ceremonyView';
 import {
   SpiralEvent,
   CameraMode,
@@ -1634,11 +1632,7 @@ export class AltarScene {
         const hit = lanternHits[0].object;
         const chIdx = hit.userData?.chapterIndex;
         if (chIdx) {
-          // #10 §6.2：仪式推进态不再触发聚焦跃迁 —— 公共页三个回调本就传 undefined，
-          // 点选本无 UI 后果，这里掐掉的是那一次无谓的相机目标写入；回调本体保留。
-          if (!this.ritualRunning) {
-            this.focusTeaLantern(chIdx);
-          }
+          this.focusTeaLantern(chIdx);
           if (this.onLanternSelect) {
             this.onLanternSelect(chIdx);
           }
@@ -1655,10 +1649,7 @@ export class AltarScene {
         const hit = stelaHits[0].object;
         const sId = hit.userData?.seasonId;
         if (sId) {
-          // #10 §6.2：同上 —— 仪式推进态不做聚焦跃迁，回调本体保留。
-          if (!this.ritualRunning) {
-            this.focusInteriorPoem(sId);
-          }
+          this.focusInteriorPoem(sId);
           if (this.onInteriorPoemSelect) {
             this.onInteriorPoemSelect(sId);
           }
@@ -1676,10 +1667,7 @@ export class AltarScene {
         const seatId = hit.userData?.seatId;
         if (seatId && this.onSeatSelect) {
           this.onSeatSelect(seatId);
-          // #10 §6.2：同上 —— 仪式推进态不做选中跃迁（patrol 分支会写相机目标）。
-          if (!this.ritualRunning) {
-            this.setActiveSeat(seatId);
-          }
+          this.setActiveSeat(seatId);
           return;
         }
       }
@@ -1700,16 +1688,13 @@ export class AltarScene {
   };
 
   private onKeyDown = (event: KeyboardEvent) => {
-    // #10 §6.2 · 仪式推进态下键盘通路整体关闭：镜头由幕次运镜独占，WASD/QE 不得
-    // 改写位姿。setRitualState() 关掉的是鼠标 OrbitControls；这里补上键盘那一半 ——
-    // 它既是 #5 隔离的一处既存缝隙（公共页为 authenticated、freeCamera=true），
-    // 也是确定性（同一秒必同构图）的直接威胁：录屏者按一个键，1800s 录屏即不可复现。
-    if (this.ritualRunning) {
-      this.pressedKeys.clear();
-      return;
-    }
     if (!this.capabilities.freeCamera) return;
     const key = event.key.toLowerCase();
+    if (key === 'r') {
+      this.resetCamera();
+      event.preventDefault();
+      return;
+    }
     if (!['w', 'a', 's', 'd', 'q', 'e', 'shift'].includes(key)) return;
     this.pressedKeys.add(key);
     event.preventDefault();
@@ -2201,6 +2186,21 @@ export class AltarScene {
     }
   }
 
+  /** 将自由观察席复位到场景外部的安全总览位。 */
+  public resetCamera(): void {
+    const position = new THREE.Vector3(48, 40, 58);
+    const target = new THREE.Vector3(0, 6, 0);
+    this.camera.position.copy(position);
+    this.controls.target.copy(target);
+    this.targetCameraPos.copy(position);
+    this.targetControlsTarget.copy(target);
+    this.lastSafeCameraPos.copy(position);
+    this.cameraMode = 'orbit';
+    this.isCameraTransitioning = false;
+    this.pressedKeys.clear();
+    this.controls.update();
+  }
+
   /**
    * #5 · 7×7 正交取证：启用**俯视正交相机**（沿 -Y 看，视口半宽 = `halfWidth`，丢弃 y）。
    *
@@ -2288,43 +2288,6 @@ export class AltarScene {
     this.isAutoPatrol = patrol;
   }
 
-  // ── #10 公共仪式幕次取景 ──────────────────────────────────────────
-
-  /**
-   * #10 · 每帧把取景**整写**为 ceremonyPoseAt(sec) 的结果（设计书 §4.3：整写而非
-   * lerp 逼近 —— lerp 的收敛速率按帧计，同一 sec 在不同帧率下位姿不同，录屏不可作证据）。
-   *
-   * · 时间源只读：唯一入参就是仪式秒（animate 内实参字面为 this.ritualElapsed），
-   *   本方法不持有、不推进、不改写任何时间 —— ritualElapsed 写入点保持原 4 处不变。
-   * · 单点接管：只在 animate 内 controls.update() / updateFreeFlight() 之后调用一次
-   *   ⇒ 绘制时位姿就是 pose 本身，不被任何旧机制覆写（§5.1）。
-   * · 两处豁免（不得接管）：① 取证俯视正交相机在场 ⇒ 交回取证控制权；
-   *   ② 仪式未运行（导演 presentImmediately / 直入路径）⇒ 镜头权限一丝不动。
-   * · 与 #7 相容：tier='none'（无画）下 camera/controls 依然无条件构造
-   *   ⇒ 本方法照常执行，是一条「看不见结果但永不失败」的空转，三档同一路径。
-   */
-  private applyCeremonyView(sec: number) {
-    if (this.orthoTopdownCamera !== null) return;
-    if (!this.ritualRunning) return;
-    const pose = ceremonyPoseAt(sec);
-    this.camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
-    this.controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
-    if (this.camera.fov !== pose.fov) {
-      this.camera.fov = pose.fov;
-      // 视口极端布局下 aspect 可能为 0/NaN —— 投影矩阵只在有限 aspect 下重算；
-      // 位姿（position / target）与 aspect 无关，照写不误。
-      // ⚠️ 对设计书 §4.3 伪码「|fov − pose.fov| > 1e-4 才写」的一条偏差（已在回报明示）：
-      //    该死区会在换幕附近留下最高 1e-4 度的残余误差且永不收敛（取证实测 8.85e-6），
-      //    破坏「同一 sec ⟹ 逐位相同」的确定性合约。改为**精确写**（!== 判等）：
-      //    运动中每帧本就要重算投影（pose.fov 逐帧在变），静止后恰好零写，开销不变。
-      if (Number.isFinite(this.camera.aspect) && this.camera.aspect > 0) {
-        this.camera.updateProjectionMatrix();
-      }
-    }
-    // 整写之后旧 lerp 过渡通道不再有权改写位姿：一次性清掉残留过渡标志（§5.1 机制 A）。
-    this.isCameraTransitioning = false;
-  }
-
   public updateEvents(events: SpiralEvent[]) {
     this.events = events;
   }
@@ -2379,12 +2342,6 @@ export class AltarScene {
 
     this.controls.update();
     this.updateFreeFlight(dt);
-
-    // 1.8 #10 幕次运镜（单点接管）：在会改写位姿的旧机制 —— lerp 逼近（1）/ 安全边界
-    //     （1.5）/ controls.update() / 自由飞行 —— 全部落定之后整写，绘制时位姿就是
-    //     pose 本身。AltarScene.ts「公共页唯一的镜头运动是 animate() 第 0 段的连续环绕」
-    //     的既有注释自此成为真话。
-    this.applyCeremonyView(this.ritualElapsed);
 
     // 2. 外环 16 茶灯的回转改由 RFC-008 引擎驱动（见第 9b 段），此处不再手动累加。
 
