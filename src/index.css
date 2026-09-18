@@ -147,6 +147,81 @@ body {
   to { opacity: 1; filter: blur(0); }
 }
 
+/* ── #7 · 静默层（无画路径）─────────────────────────────────────────
+   气质沿用 .ritual-landing：radial-gradient 深底 + clamp() 字号 + 渐入。
+   整层 pointer-events: none —— 静听行**无按钮、无倒计时、不可点**。
+   z-index 压在雾中字幕之下（见下条），以便「有声、有字幕、无画」同时成立。 */
+.ritual-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6vh 8vw;
+  background: radial-gradient(
+    circle at 50% 44%,
+    rgba(16, 36, 52, 0.82) 0%,
+    rgba(5, 7, 13, 0.97) 56%,
+    #000 100%
+  );
+  cursor: default;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ritual-veil__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(18px, 3.4vh, 44px);
+  text-align: center;
+}
+
+.ritual-veil__title {
+  margin: 0;
+  color: rgba(226, 244, 250, 0.9);
+  font: 400 clamp(19px, 3vw, 40px)/1.6 "Noto Serif SC", "Songti SC", serif;
+  letter-spacing: 0.32em;
+  text-shadow: 0 0 26px rgba(145, 215, 235, 0.3);
+  animation: ritual-landing-in 2.4s ease both;
+}
+
+.ritual-veil__line {
+  margin: 0;
+  color: rgba(208, 230, 239, 0.66);
+  font: 400 clamp(14px, 1.7vw, 24px)/1.7 "Noto Serif SC", "Songti SC", serif;
+  letter-spacing: 0.24em;
+  animation: ritual-landing-in 3.2s ease both;
+}
+
+.ritual-veil__still {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(20px, 6vh, 64px);
+  width: min(88vw, 720px);
+  transform: translateX(-50%);
+  margin: 0;
+  text-align: center;
+  color: rgba(200, 224, 232, 0.4);
+  font: 400 clamp(11px, 1.1vw, 14px)/1.7 "Noto Serif SC", "Songti SC", serif;
+  letter-spacing: 0.16em;
+  cursor: default;
+}
+
+/* 无画路径下，雾中字幕必须浮在静默层之上：字幕是 DOM，不依赖 WebGL（#7 T5）。
+   .ritual-canvas 未形成层叠上下文（无 z-index/transform），故此处 z-index 有效。 */
+.ritual-canvas .ritual-caption {
+  z-index: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ritual-veil__title,
+  .ritual-veil__line { animation: none; }
+}
+
 /* Custom sleek scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
