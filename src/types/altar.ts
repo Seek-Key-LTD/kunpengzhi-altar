@@ -164,3 +164,48 @@ export const GUEST_ROUTINES: CameraMode[] = ['cinematic', 'rabbit_hole', 'patrol
 export const GUEST_ROUTINE_SECONDS = 18;
 
 export type AltarCycleState = 'accumulating' | 'overturning' | 'cascading' | 'recycling' | 'resetting';
+
+// ── #00 无极点 · 吸光体 ────────────────────────────────────────────────
+//
+// #00 是坛心正上方不可占有的纵向泉眼，**不是第 50 席**。
+// 席位域只有 1..49（= 7²，暴露带 2n−1 之和）；0 号是**锚点**而非席位：
+//   · 不进 events / ulamCoords / 席位数组
+//   · 无音高（seatMidi）、不入拾取（raycast）、不参与铸造 / 认领 / 贡献统计
+// 这里把「席位域」与「锚点」定义成唯一权威来源，任何越界值一律判为“非席位”。
+
+/** #00 无极点锚点：永不属于席位域。 */
+export const WUJI_ANCHOR_ID = 0;
+
+/** 席位域（含端点）。认领 / 音高 / 座次只允许落在这个闭区间内。 */
+export const SEAT_ID_MIN = 1;
+export const SEAT_ID_MAX = 49;
+
+/**
+ * 判席：只有 [1, 49] 的整数是席位。
+ * 0（#00 锚点）、负数、越界值与任何非整数一律返回 false —— 这是所有
+ * “席位相关路径”唯一的准入闸门。
+ */
+export function isSeatId(id: number): boolean {
+  return Number.isInteger(id) && id >= SEAT_ID_MIN && id <= SEAT_ID_MAX;
+}
+
+/**
+ * 仪式时间轴阈值（秒）。公共页当前是**直入版**（App 直接 presentImmediately()，
+ * 没有内建三十分钟时间轴），所以这两个时间码**不依赖** App 的时间轴：
+ * 由导演台 / 工程入口经 `AltarScene.setRitualTime(sec)` 注入。
+ */
+export const WUJI_REVEAL_SEC = 24 * 60;      // 24:00 —— 窄角冷色顶光点亮 #00 吸光体
+export const WUJI_SILENCE_SEC = 29 * 60 + 11; // 29:11 —— 除该光外全坛完全静默
+
+/** #00 的显形档位：hidden(<24:00) / revealed(≥24:00) / silent(≥29:11)。 */
+export type WujiRevealState = 'hidden' | 'revealed' | 'silent';
+
+/**
+ * 由仪式时间（秒）推 #00 显形档位 —— 唯一权威映射。
+ * 阈值边界：sec ≥ 1440 显形；sec ≥ 1751 静默。纯函数，便于断言与复用。
+ */
+export function wujiRevealStateAt(sec: number): WujiRevealState {
+  if (sec >= WUJI_SILENCE_SEC) return 'silent';
+  if (sec >= WUJI_REVEAL_SEC) return 'revealed';
+  return 'hidden';
+}

@@ -1,4 +1,4 @@
-import { SpiralEvent } from '../types/altar';
+import { SpiralEvent, isSeatId } from '../types/altar';
 import {
   SEATS_PER_LEVEL,
   seatElevation,
@@ -47,6 +47,13 @@ const SEAT_PLAN = ulamCoords(SEATS_PER_LEVEL * 7).map((p, idx) => {
 export const SEAT_BOTTOM_MIDI = 36; // C2 —— 第 1 席
 export const SEAT_TOP_MIDI = 84; // C6 —— 第 49 席
 export function seatMidi(seatId: number): number {
+  // #00 无极点（锚点 0）不是席位：绝不占用任何音高槽位。
+  // 越界与非整数同样拒发 —— 音高路径对“非席位”一律闭合（唯一准入闸门 = isSeatId）。
+  if (!isSeatId(seatId)) {
+    throw new RangeError(
+      `seatMidi: 席位号必须是 1..49 的整数，收到 ${seatId}；#00 无极点无音高`
+    );
+  }
   return SEAT_BOTTOM_MIDI + (seatId - 1);
 }
 

@@ -9,7 +9,13 @@ import {
   GUEST_ROUTINE_SECONDS,
   ROLE_CAPABILITIES,
   CAMERA_SAFETY_BY_ROLE,
-  CAMERA_DISTANCE_BY_ROLE
+  CAMERA_DISTANCE_BY_ROLE,
+  SEAT_ID_MAX,
+  isSeatId,
+  WUJI_REVEAL_SEC,
+  WUJI_SILENCE_SEC,
+  WujiRevealState,
+  wujiRevealStateAt
 } from '../types/altar';
 import { TEA_POEM_16_CHAPTERS } from '../data/tea_poem_16';
 import { SEASON1_POEMS } from '../data/season1_poems';
@@ -81,6 +87,10 @@ export class AltarScene {
   private wujiLight: THREE.SpotLight | null = null;
   private ritualMode = false;
   private ritualLitSeats = 0;
+  /** 仪式时间（秒）。null = 未注入 —— 直入版公共页不驱动三十分钟时间轴。 */
+  private ritualTimeSec: number | null = null;
+  /** #00 显形档位：hidden(<24:00) / revealed(≥24:00) / silent(≥29:11)。用于幂等与一次性播报。 */
+  private wujiRevealState: WujiRevealState = 'hidden';
   
   // Interactive Objects & Meshes
   private waterSpiralPath: THREE.Vector3[] = [];
@@ -361,7 +371,10 @@ export class AltarScene {
     const bricks: Array<{ x: number; y: number; z: number }> = [];
 
     const rabbitHoleSeats = new Set<number>(RABBIT_HOLE_SEATS);
-    this.events.forEach((ev) => {
+    // #00 无极点（锚点 0）不在席位域：任何 seat_id 非 [1,49] 的条目都不许砌成砖柱或席位。
+    // 这一步让「#00 混进第 50 席」在结构上不可能发生，而不是靠约定。
+    const seatEvents = this.events.filter((ev) => isSeatId(ev.seat_id));
+    seatEvents.forEach((ev) => {
       const levels = Math.max(1, Math.round(ev.elevation / BRICK));
       for (let i = 0; i < levels; i++) {
         // 横轴 40→19→6→1→2→11→28：只抽第二层的同尺寸 Cube。
@@ -397,7 +410,7 @@ export class AltarScene {
     this.buildRabbitHole();
 
     // ---- 3. 49 席：托座 / 质数环 / 莲花 ----
-    this.events.forEach((ev) => {
+    seatEvents.forEach((ev) => {
       const seatPos = this.getSeatWorldPos(ev);
       const seatGroup = new THREE.Group();
       seatGroup.position.copy(seatPos);
@@ -475,7 +488,7 @@ export class AltarScene {
     });
 
     // Build Ulam Prime Diagonal Alignment Lines
-    const primes = this.events.filter(e => e.is_prime);
+    const primes = seatEvents.filter(e => e.is_prime);
     const diagLineMat = new THREE.LineBasicMaterial({
       color: 0x38bdf8,
       linewidth: 2,
@@ -1093,7 +1106,11 @@ export class AltarScene {
   }
 
   private buildWujiFountain() {
-    // #00：只接受末段的一束冷顶光。它没有 seatId、没有音高，也不进入拾取列表。
+    // #00 无极点 · 吸光体：
+    //   · 独立网格，挂在**场景根**上（不属于 outerShellGroup / 任何席位组）；
+    //   · 材质：color 黑 / roughness 0.95 / metalness 0.1 / **无自发光**（emissive 关闭）；
+    //   · 无 seatId、无音高、不进拾取列表，只在 24:00 后接受末段一束窄角冷顶光。
+    //   世界坐标：x=0, y=PYRAMID_TOP+0.14(=21.14), z=0 —— 坛心正上方，不可占有。
     const absorber = new THREE.Mesh(
       new THREE.CylinderGeometry(0.72, 0.82, 0.18, 48),
       new THREE.MeshStandardMaterial({
@@ -1105,7 +1122,9 @@ export class AltarScene {
       })
     );
     absorber.position.set(0, PYRAMID_TOP + 0.14, 0);
-    absorber.userData = { ritual_anchor: 'wuji', claimable: false, tokenizable: false };
+    absorber.name = 'wuji_absorber_#00';
+    // 归属标记：永不可认领 / 不可通证化；seatId 明置为 null（#00 不是席位，绝无第 50 席）。
+    absorber.userData = { ritual_anchor: 'wuji', seatId: null, claimable: false, tokenizable: false };
     this.scene.add(absorber);
     this.wujiAbsorber = absorber;
 
@@ -1510,6 +1529,59 @@ export class AltarScene {
     if (this.soundParticles) this.soundParticles.visible = true;
     if (this.wujiAbsorber) this.wujiAbsorber.visible = true;
     this.seatLotusMeshes.forEach((flower) => { flower.visible = true; });
+  }
+
+  /** 当前注入的仪式时间（秒）；null = 尚未注入。供导演台 / 工程入口读取。 */
+  public get currentRitualTime(): number | null {
+    return this.ritualTimeSec;
+  }
+
+  /**
+   * 注入仪式时间（秒）—— 24:00 显形 / 29:11 静默的**唯一驱动入口**。
+   *
+   * 公共页当前是直入版（App 直接 presentImmediately()，没有内建三十分钟时间轴），
+   * 所以这两个时间码**不依赖** App 的时间轴，而由导演台 / 工程入口按需调用本方法注入。
+   * 复用了既有的 setRitualState(phase) 机制，不新造一套并行状态。
+   *
+   *   · sec < 24:00 → #00 尚未显形：冷顶光熄灭、吸光体隐藏（其余景观不动）
+   *   · sec ≥ 24:00 → 末段：窄角冷色顶光点亮 #00 吸光体
+   *   · sec ≥ 29:11 → 终局：除该冷顶光外，全坛完全静默
+   *
+   * 幂等且无帧循环依赖：一次调用即结算；跨档位时才切换场景状态并播报一次。
+   */
+  public setRitualTime(sec: number) {
+    const t = Number.isFinite(sec) ? Math.max(0, sec) : 0;
+    this.ritualTimeSec = t;
+
+    const next: WujiRevealState = wujiRevealStateAt(t);
+    const changed = next !== this.wujiRevealState;
+    this.wujiRevealState = next;
+
+    if (next === 'silent') {
+      // 29:11 起：除 #00 的窄角冷色顶光外，全坛静默（不灰、不亮、不响）。
+      // 走既有 silence 幕次：其余灯光归零、水/灯/石经收束，只留 wujiLight 一束。
+      this.setRitualState('silence', SEAT_ID_MAX, null);
+      if (changed) {
+        console.log(`[无极] #00 静默 t=${t.toFixed(0)}s ≥ ${WUJI_SILENCE_SEC}s(29:11)：除冷顶光外全坛寂灭`);
+      }
+      return;
+    }
+    if (next === 'revealed') {
+      // 24:00 起：末段窄角冷色顶光点亮 #00 吸光体；其余景观按 extinguishing 收束。
+      this.setRitualState('extinguishing', SEAT_ID_MAX, this.activeSeatId);
+      if (changed) {
+        console.log(`[无极] #00 显形 t=${t.toFixed(0)}s ≥ ${WUJI_REVEAL_SEC}s(24:00)：窄角冷色顶光点亮吸光体`);
+      }
+      return;
+    }
+
+    // 24:00 之前：#00 尚未显形 —— 不点灯、隐藏吸光体。
+    // #00 始终不在席位 / 拾取 / 音高 / 贡献路径上，这里只改它自己的可见性与受光。
+    if (this.wujiLight) this.wujiLight.intensity = 0;
+    if (this.wujiAbsorber) this.wujiAbsorber.visible = false;
+    if (changed) {
+      console.log(`[无极] #00 未显形 t=${t.toFixed(0)}s < 24:00：吸光体隐藏、冷顶光熄灭`);
+    }
   }
 
   public focusTeaLantern(chapterIndex: number) {
@@ -2051,6 +2123,8 @@ export class AltarScene {
     this.rimLight = null;
     this.apexLight = null;
     this.wujiLight = null;
+    // #00 无极点吸光体：几何随整棵场景图在第 6 步回收，这里只断开引用。
+    this.wujiAbsorber = null;
     this.onSeatSelect = undefined;
     this.onLanternSelect = undefined;
     this.onInteriorPoemSelect = undefined;
