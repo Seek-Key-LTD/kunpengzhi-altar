@@ -136,7 +136,12 @@ export type WebglTier =
 4. 无工程字：正文**不含** `SCAN_WORDS / ADMIN_WORDS` 任一词（复用 `qa-audit-public-entry.mjs` 词表）。
 5. 无公共句柄：`typeof window.__altar/__capture === 'undefined'`。
 6. **亮度探针**：对降级截图跑 `capture.mjs` 的 `analyze()`（`:181-210`）——断言 `nonBlackRatio > 0`（有内容，非死黑）且 `meanLum` 落在**暗场**区间（默认 `meanLum < 40`），`brightPixels` 非"整屏白" ⇒ 证明是"安静暗场页"而非"白屏报错"。
-7. B 路径补充：触发丢失后渲染循环停止（`cancelAnimationFrame`）且**无异常**。
+7. B 路径补充：触发丢失后 **draw 冻结、时钟存活**（`B4.draw-frozen` + `B5.clock-alive`）且**无异常**：
+   - **B4 · draw 冻结**：`AltarScene.ts:2436-2438` `if (this.renderer && !this.contextLost) { this.renderer.render(...) }` —— `full` / `degraded` 档照常出画（`degraded` 只降 `pixelRatio` 与阴影，`:297-300`）；`none` 档本就无 `renderer`；运行中 `webglcontextlost` 后 `:992-995` 置 `contextLost = true` ⇒ 逐帧**跳过 draw call**，`webglcontextrestored` 后 `:1008-1010` 置回 `false` 原样恢复。监听挂载于 `:304-305`。
+   - **B5 · 时钟存活**：RAF 主循环**不取消** —— 全文件 `cancelAnimationFrame` 仅 1 处，且在 `destroy()` 内（`:2561`；`destroy()` 幂等闸 `:2550-2554`，属卸载路径而非降级路径）⇒ 降级期间 `updateRitualTimeline`（`:2282`）与音频包络 `altarAudio.applyPhaseEnvelope`（`:1993`）、雾中字幕照常推进，**只有 draw 停**（`AltarScene.ts:2434-2435` 原文「上面的时间轴推进、字幕刷新、音频包络**一字未动**」）。这正是 #4 单封套不变量（降级不得停表）的实现形态。
+   - 降级回调：`setOnDegrade`（`AltarScene.ts:1021`）由 `App.tsx:54` 消费，只负责换/撤静默层，**不触碰时钟与 RAF**。
+
+> 裁定 2026-09-18：字面 cancelAnimationFrame 方案废弃，改用 B4.draw-frozen + B5.clock-alive；单封套不变量（#4）优先。本节口径以此为准。
 
 ### 4.4 证据产物（对应 issue「验收证据」）
 
