@@ -14,6 +14,7 @@
     "test:audio": "node scripts/verify-audio-envelope.mjs",
     "test:physics": "node scripts/verify-physics-failure.mjs",
     "test:isolation": "node scripts/verify-entry-isolation.mjs",
+    "test:narration": "node scripts/verify-ritual-narration.mjs",
     "capture": "node tools/capture/capture.mjs",
     "audit:entry": "node scripts/qa-audit-public-entry.mjs",
     "preview": "vite preview",
