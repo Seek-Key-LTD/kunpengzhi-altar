@@ -214,7 +214,14 @@ ok(/lowpass/.test(audio) && /reverb/.test(audio) && /120/.test(audio), '保留�
 const app = readSrc('src/App.tsx');
 ok(!/setPlaybackRate|playbackRate|倍速|播放速度|回放速率|速率/i.test(app), '公共 App 无任何倍速/回放标识');
 ok(!/type\s*=\s*["']range["']|onChange|<input|<button|slider/i.test(app), '公共 App 无输入/按钮/滑块控件');
-ok(!/from\s+'\.\/components\//.test(app), '公共 App 不引任何 UI 组件（无倍速入口可挂）');
+// #7：静默层 `src/components/WebglFallback.tsx` 属**公共侧**纯展示层，单独放行；
+// components/* 其余组件仍一律禁止。放行≠放宽 —— 下一条改为**实测**该组件零交互控件，
+// 比原来「一刀切禁止 components/」更能证明「倍速入口无处可挂」。
+ok(!/from\s+'\.\/components\/(?!WebglFallback')/.test(app),
+  '公共 App 不引任何 UI 组件（#7 静默层 WebglFallback 除外）');
+const veilSrc = readSrc('src/components/WebglFallback.tsx');
+ok(!/<button|<input|<select|<textarea|onChange|onClick|onPointerDown|slider|type\s*=\s*["']range["']/i.test(veilSrc),
+  '#7 静默层零交互控件（无按钮/输入/回调 ⇒ 无处可挂倍速入口）');
 ok(!/startRitual\s*\(\)[\s\S]{0,80}setPlaybackRate/.test(app), '公共 App 从不对 setPlaybackRate 下发');
 log('公共渲染树 = App.tsx（仅 ritual-root/canvas），无倍速/回放/输入控件；速率 API 仅存在于 AltarScene');
 
