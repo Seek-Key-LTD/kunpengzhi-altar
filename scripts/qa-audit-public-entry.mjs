@@ -1,9 +1,9 @@
 // 与 npm run capture 必须串行执行（并发软光栅会 OOM/SIGKILL）；本脚本已支持 AUDIT_PORT 固定端口
 /**
- * · QA 独立浏览器审查（严过关）· Gitea #5 公共/工程入口隔离 —— 只读，不改 src
+ * · QA 独立浏览器审查（严过关）· Gitea #5 / #9 公共/工程入口隔离 —— 只读，不改 src
  *
- * 用途：#5「入口隔离」的**前后对比**工具。本脚本本轮先跑出「现状基线」，
- * 工程师 #5 落地后用**同一条命令**复跑，前后差异本身即 #5 证据。
+ * 定位：**独立硬门禁**（`npm run audit:entry`，不进 `npm test`）。在「证据生成」之上，
+ * 对公共入口 `#/` 的隔离做**可判红**断言：任一条不满足 → 打印失败明细并 `process.exit(1)`。
  *
  * 做的事：
  *   1. `npm run build` → `vite preview` 指**本地产物**（不测线上，避免 CDN 缓存干扰）
@@ -14,8 +14,20 @@
  *      写入后**可达**。给出两态 DOM 差异
  *   5. 落盘 artifacts/audit/audit-public-entry.{json,txt}（文本/json；不产 png）
  *
- * 运行：node scripts/qa-audit-public-entry.mjs            （含 build）
- *      node scripts/qa-audit-public-entry.mjs --skip-build （复用现有 dist）
+ * 硬门禁断言（任一失败 → exit 1）：
+ *   A. 公共页 DOM/文本/window 词表命中 = 0
+ *   B. 公共页下发 bundle 逐 token 命中 = 0（`grep -o -F` 口径；扫描读到 0 字节视为失败）
+ *   C. window.__altar / window.__capture 均未定义
+ *   D. 网络侧：公共页 `#/` **不请求**导演懒加载 chunk
+ *   E. 正向对照：`#/director`（已确认）**必须**命中导演懒加载 chunk
+ *   F. 正向对照：该导演 chunk **必须**内含导演标记
+ *   （没有 E/F 正向对照的阴性结论不算证据 —— 路由一旦失效，D 会被误判成「隔离成功」）
+ *
+ * 运行：
+ *   node scripts/qa-audit-public-entry.mjs              （含 build，硬门禁）
+ *   node scripts/qa-audit-public-entry.mjs --skip-build （复用现有 dist）
+ *   node scripts/qa-audit-public-entry.mjs --self-test   （注入违规，证明门禁会判红并 exit 1）
+ *   AUDIT_PORT=4500 可固定端口；🚫 与 `npm run capture` 串行（并发软光栅会 OOM/SIGKILL）
  */
 import { createRequire } from 'node:module';
 import { spawn, spawnSync, execSync } from 'node:child_process';
@@ -31,6 +43,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const SKIP_BUILD = process.argv.includes('--skip-build');
 const LABEL = (() => { const i = process.argv.indexOf('--label'); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : ''; })();
 const SUFFIX = LABEL ? `-${LABEL}` : '';
+const SELF_TEST = process.argv.includes('--self-test');
 const LAUNCH_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 
 // 工程泄露扫描词（#5 验收口径）—— DOM/文本/window 面
@@ -139,6 +152,35 @@ function analyzeDistChunks() {
   return { allJs, staticallyReferenced, lazyChunks };
 }
 
+// ── 门禁核心：**纯函数**。输入一次审查的可判据结果，输出 {pass, checks, failures}。
+// 之所以抽成纯函数：`--self-test` 会用「注入违规」的输入调用同一个函数，
+// 从而证明「门禁确实会判红」——而不是靠人肉宣读结论。
+function evaluateGate(r) {
+  const checks = [
+    { id: 'A.dom-zero', desc: '公共页 #/ DOM/文本/window 词表命中 = 0',
+      ok: r.exposedWords.length === 0,
+      detail: r.exposedWords.length ? '命中: ' + r.exposedWords.join(', ') : '命中: 0' },
+    { id: 'B.bundle-zero', desc: '公共页下发 bundle 逐 token 命中 = 0（且扫描有效）',
+      ok: r.bundleScanOk && r.bundleLeaked.length === 0,
+      detail: !r.bundleScanOk ? 'bundle 扫描读到 0 字节（不可信，视为失败）'
+        : (r.bundleLeaked.length ? '夹带: ' + r.bundleLeaked.join(', ') : '夹带: 0') },
+    { id: 'C.window-clean', desc: 'window.__altar / window.__capture 均未定义',
+      ok: !r.pollutionKey.__altarKey && !r.pollutionKey.__captureKey,
+      detail: `__altar=${r.pollutionKey.__altarKey} __capture=${r.pollutionKey.__captureKey}` },
+    { id: 'D.public-no-lazy', desc: '网络侧：公共页 #/ 不请求导演懒加载 chunk',
+      ok: r.publicLoadedLazy.length === 0,
+      detail: r.publicLoadedLazy.length ? '公共页竟请求: ' + r.publicLoadedLazy.join(', ') : '未请求 ✓' },
+    { id: 'E.director-hits-lazy', desc: '正向对照：#/director（已确认）命中导演懒加载 chunk',
+      ok: r.directorLoadedLazy.length >= 1,
+      detail: r.directorLoadedLazy.length ? '命中: ' + r.directorLoadedLazy.join(', ') : '未命中（路由或懒加载失效）' },
+    { id: 'F.director-lazy-has-marker', desc: '正向对照：导演懒加载 chunk 内含导演标记',
+      ok: r.directorLazyHasMarker === true,
+      detail: r.directorLazyHasMarker ? '含导演标记 ✓' : '导演 chunk 内无任何导演标记（不可信）' }
+  ];
+  const failures = checks.filter((c) => !c.ok);
+  return { pass: failures.length === 0, checks, failures };
+}
+
 async function main() {
   const head = execSync('git rev-parse HEAD', { cwd: ROOT, encoding: 'utf8' }).trim();
   console.log(`\n══ QA 公共入口审查 · HEAD ${head.slice(0, 7)} ══`);
@@ -165,6 +207,8 @@ async function main() {
     { cwd: ROOT, stdio: ['ignore', 'ignore', 'ignore'] });
   const killServer = () => { try { server.kill('SIGTERM'); } catch { /* noop */ } };
   process.on('exit', killServer);
+
+  let gatePass = true, gateFailCount = 0, selfTestPass = true, selfTest = null;
 
   try {
     const up = await waitForServer(`${BASE}/`);
@@ -252,6 +296,52 @@ async function main() {
       }));
       const dirDiff = lineDiff(d1Data.innerText, d2Data.innerText);
 
+      // ── 门禁判定 ──────────────────────────────────────────────────
+      const pubLazy = loadedLazy(pubReqs);
+      const d2Lazy = loadedLazy(d2Reqs);
+      const readLazyText = (f) => { try { return readFileSync(resolve(ROOT, 'dist/assets', f), 'utf8'); } catch { return ''; } };
+      const d2LazyHasMarker = d2Lazy.some((f) => BUNDLE_MARKERS.some((m) => readLazyText(f).includes(m)));
+      const exposedWords = pubHits.filter((h) => h.count > 0).map((h) => h.word);
+
+      const gateResults = {
+        exposedWords,
+        bundleScanOk,
+        bundleLeaked,
+        pollutionKey: { __altarKey: pubData.pollution.__altarKey, __captureKey: pubData.pollution.__captureKey },
+        publicLoadedLazy: pubLazy,
+        directorLoadedLazy: d2Lazy,
+        directorLazyHasMarker: d2LazyHasMarker
+      };
+      const gate = evaluateGate(gateResults);
+      gatePass = gate.pass;
+      gateFailCount = gate.failures.length;
+
+      // 负样本自检：注入违规 → 用同一门禁函数，必须判红（否则门禁无牙齿）
+      if (SELF_TEST) {
+        const injectedLazy = chunks.lazyChunks[0] || 'chunk-INJECTED.js';
+        const injected = {
+          ...gateResults,
+          exposedWords: [...gateResults.exposedWords, 'topology'],                    // 注入 DOM 违规
+          bundleLeaked: [...gateResults.bundleLeaked, 'altar.director.confirmed'],    // 注入 bundle 违规
+          publicLoadedLazy: [...gateResults.publicLoadedLazy, injectedLazy]           // 注入网络违规
+        };
+        const red = evaluateGate(injected);
+        selfTest = { injectedLazy, injectedFailures: red.failures.map((f) => f.id), wentRed: !red.pass };
+        const redLines = [
+          '# QA 门禁 · 负样本自检（--self-test）：注入违规 → 门禁应判红',
+          `- HEAD: ${head}`,
+          `- 时间: ${new Date().toISOString()}`,
+          `- 注入违规：exposedWords += \`topology\`；bundleLeaked += \`altar.director.confirmed\`；publicLoadedLazy += \`${injectedLazy}\``,
+          `- 期望：门禁判红（exit 1）`,
+          `- 实测：${red.pass ? '❌ 未判红（门禁无牙齿，FAIL）' : '✓ 已判红（PASS）'}`,
+          `- 触发失败断言（${red.failures.length} 项）：`,
+          ...red.failures.map((f) => `    ✗ [${f.id}] ${f.desc} — ${f.detail}`),
+          '',
+          '（本文件是「门禁有牙齿」的证据；由 `npm run audit:entry -- --self-test` 生成）'
+        ];
+        writeFileSync(resolve(OUT_DIR, 'audit-public-entry-selftest-red.txt'), redLines.join('\n'));
+      }
+
       const report = {
         generatedAt: new Date().toISOString(),
         head,
@@ -289,7 +379,8 @@ async function main() {
             loadedLazyChunks: loadedLazy(d2Reqs)
           }
         },
-        directorDiff: dirDiff
+        directorDiff: dirDiff,
+        gate: { pass: gate.pass, checks: gate.checks, selfTest }
       };
 
       writeFileSync(resolve(OUT_DIR, `audit-public-entry${SUFFIX}.json`), JSON.stringify(report, null, 2));
@@ -337,8 +428,6 @@ async function main() {
       L.push(`bundle 夹带工程/导演标记: ${bundleLeaked.length ? bundleLeaked.map((m) => '`' + m + '`').join(', ') : '（无）'}`);
       L.push(`（阴性对照 \`rapier\`=${bundleResults.flatMap((b) => Object.keys(b.hits)).includes('rapier') ? '夹带(异常)' : '0 ✓ 死依赖确未打包'}）`);
       L.push('');
-      const pubLazy = loadedLazy(pubReqs);
-      const d2Lazy = loadedLazy(d2Reqs);
       L.push(`## 1c) 网络请求侧：公共页是否**实际下载**导演懒加载 chunk`);
       L.push(`dist chunk：静态引用 ${chunks.staticallyReferenced.length} 个 / 懒加载 ${chunks.lazyChunks.length} 个（${chunks.lazyChunks.join(', ') || '（无）'}）`);
       L.push(`- 公共页 \`#/\` 实际请求 assets：${pubReqs.filter((u) => u.includes('/assets/')).map((u) => u.split('/').pop()).join(', ') || '（无）'}`);
@@ -365,6 +454,12 @@ async function main() {
       L.push(`- window.__altar 定义: ${mk(pubData.pollution.__altarKey)}（应 ✘）`);
       L.push(`- window.__capture 定义: ${mk(pubData.pollution.__captureKey)}（应 ✘）`);
       L.push('');
+      L.push(`## 4) 硬门禁断言${SELF_TEST ? ' + 负样本自检' : ''}（任一失败 → exit 1）`);
+      for (const c of gate.checks) L.push(`- [${c.ok ? 'PASS' : 'FAIL'}] ${c.id} · ${c.desc} — ${c.detail}`);
+      L.push('');
+      L.push(`**门禁判定：${gate.pass ? 'PASS ✅' : `FAIL ❌（${gate.failures.length} 项）`}**`);
+      if (SELF_TEST) L.push(`- 负样本自检（--self-test）：注入违规后 ${selfTest.wentRed ? '判红 ✓（门禁有牙齿）' : '未判红 ❌'}；红灯留档 \`artifacts/audit/audit-public-entry-selftest-red.txt\``);
+      L.push('');
       L.push(`> 原始数据见 audit-public-entry.json`);
       writeFileSync(resolve(OUT_DIR, `audit-public-entry${SUFFIX}.txt`), L.join('\n'));
       writeFileSync(resolve(OUT_DIR, `audit-public-entry${SUFFIX}.html.txt`), pubData.outerHTML);
@@ -382,12 +477,35 @@ async function main() {
       console.log(`#/director 无确认: hasCanvas=${d1Data.markers.hasRitualCanvas} gate=${d1Data.markers.hasGateButton} → ${d1Data.markers.hasSceneCanvas && !d1Data.markers.hasGateButton ? '进入(应否!)' : '挡住'}`);
       console.log(`#/director 有确认: hasCanvas=${d2Data.markers.hasRitualCanvas} gate=${d2Data.markers.hasGateButton} → ${d2Data.markers.hasSceneCanvas && !d2Data.markers.hasGateButton ? '进入(可达)' : '未进入(异常)'}`);
       console.log(`网络侧: 公共页加载懒加载chunk = ${pubLazy.length ? pubLazy.join(', ') + ' ⚠泄漏' : '无 ✓'}; 导演页加载 = ${d2Lazy.join(', ') || '无(异常)'}`);
+      console.log(`\n──── 硬门禁断言（${gate.checks.length} 项）────`);
+      for (const c of gate.checks) console.log(`  ${c.ok ? '✓' : '✗'} [${c.id}] ${c.desc} — ${c.detail}`);
+      console.log(gate.pass ? '✅ 门禁 PASS：公共入口零暴露 + 正/负向对照成立' : `❌ 门禁 FAIL：${gate.failures.length} 项不满足`);
+      if (SELF_TEST) {
+        selfTestPass = selfTest.wentRed && gate.pass;
+        console.log(`负样本自检：注入违规后 ${selfTest.wentRed ? '已判红 ✓（门禁有牙齿）' : '未判红 ❌'}（红灯留档 artifacts/audit/audit-public-entry-selftest-red.txt）`);
+      }
       console.log(`报告写入: ${OUT_DIR}/audit-public-entry${SUFFIX}.{json,txt,html.txt}`);
     } finally {
       await browser.close().catch(() => {});
     }
   } finally {
     killServer();
+  }
+
+  // ── 门禁退出码：真实态红 → exit 1；负样本自检未判红 → exit 1 ──
+  // ── 自检模式：把「注入违规」驱动到同一条红灯路径 → 必须以 exit 1 收尾（即"门禁有牙齿"的证据）──
+  if (SELF_TEST) {
+    if (selfTest && selfTest.wentRed) {
+      console.error('\n【负样本自检】注入违规 → 门禁判红（A/B/D 触发）→ process.exit(1)  ← 期望红灯，非真实回归');
+    } else {
+      console.error('\n【负样本自检】注入违规后门禁未判红 → 门禁无牙齿 → process.exit(1)');
+    }
+    process.exit(1);
+  }
+  // ── 常规模式：真实态红 → exit 1 ──
+  if (!gatePass) {
+    console.error(`\n❌ QA 门禁判红：${gateFailCount} 项断言不满足 → process.exit(1)`);
+    process.exit(1);
   }
   console.log('\n完成。');
 }
