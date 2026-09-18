@@ -4,7 +4,7 @@ HEAD: e5a2d62f0d2c55d31f9acd3a5750f14115e0729e
 模式: run(rate=64x, 1800s 全程真跑, #10 幕次运镜生效) · 采样步长: 30s（61 点）
 视口: mobile(390×844 @2x, isMobile+hasTouch+移动 UA, SwiftShader 软栅格)
 采样步长: 30s（移动端按票面允许放宽，墙钟成本：截屏 ~5.4s/张 @780×1688） · 非黑判据: 任一分量 ≥ 8（png-probe 现口径）· 死黑判据: nonBlackRatio < 1e-4 且无字幕
-速率受控口径（与桌面版一致）: 0–1500s @64x 真跑，1500s（敛光幕起）起受控降速 2x 至终 —— 64x 下每张截屏约 2s 墙钟会冲掉 ~128 仪式秒，降速后末段采样落在真实秒位
+速率受控口径: 0–1050s @64x 真跑，1050s 起受控降速 2x 至终 —— 64x 下每张截屏约 5.4s 墙钟会冲掉 ~346 仪式秒，降速后末段采样落在真实秒位（勘误 2026-09-18：原文误印桌面口径 1500s/~128s，实测/脚本实值见本行修订；数据零改动）
 录像: artifacts/capture/record-mobile/video/full-run.webm（不入库）· 帧样张: 同目录 frames/（不入库）
 
 ## 黑场分段（连续同判定聚合）
@@ -22,7 +22,7 @@ HEAD: e5a2d62f0d2c55d31f9acd3a5750f14115e0729e
 - 亮场样点: 53
 - 锚点吻合: 90s=content-black（预期 content-black）· silence 末样 target=1770s actual=1770.05s=content-black（预期 content-black）
 
-## pose 对拍（5 关键秒，ceremonyPoseAt 真模块）
+## pose 对拍（3 关键秒，ceremonyPoseAt 真模块）（勘误 2026-09-18：原文误印「5 关键秒」桌面口径，实测/脚本实值见本行修订；数据零改动）
 - 目标 90s → t=90.21 Δpos=0.00e+0 ≤ 1.00e-6 Δfov=0.00e+0 ✓
 - 目标 1200s → t=1200.06 Δpos=0.00e+0 ≤ 1.00e-6 Δfov=0.00e+0 ✓
 - 目标 1770s → t=1770.05 Δpos=0.00e+0 ≤ 1.00e-6 Δfov=0.00e+0 ✓

@@ -53,10 +53,14 @@ const URL = `http://127.0.0.1:${PORT}/tools/capture/capture.html`;
 const RUN_RATE = 64;
 /** 采样步长（仪式秒）：桌面 15s（121 点）；移动端截屏 ~5.4s/张（780×1688@2x），按票面放宽 30s。 */
 const SAMPLE_STEP = MOBILE ? 30 : 15;
-/** 降速点：桌面 1500s（敛光幕起）→ 2x；移动端截屏更贵（64x 每张冲 ~344 仪式秒），提前到 1050s → 2x。 */
+/** 降速点：桌面 1500s（敛光幕起）→ 2x；移动端截屏更贵（64x 每张冲 ~346 仪式秒，实测 344），提前到 1050s → 2x。 */
 const SLOWDOWN_AT = MOBILE ? 1050 : 1500;
 /** pose 对拍关键秒：桌面 5 点；移动端按票面抽 3 点（90 abyss / 1200 敛光前 / 1770 终寂幕内）。 */
 const POSE_SECS = MOBILE ? [90, 1200, 1770] : [90, 600, 1200, 1600, 1780];
+/** 实测单张截屏墙钟（秒）：桌面 1280×720@1x ~2s；移动 780×1688@2x ~5.4s（两轮实测回显）。 */
+const SHOT_WALL_SEC = MOBILE ? 5.4 : 2;
+/** 64x 下每张截屏冲掉的仪式秒 = 64 × 单张墙钟秒（桌面 128 / 移动 346，实测 344——差为轮询粒度）—— manifest 描述由此拼装，不硬编码。 */
+const DRIFT_PER_SHOT = Math.round(RUN_RATE * SHOT_WALL_SEC);
 
 const ARGS_SOFTWARE = [
   '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
@@ -356,7 +360,7 @@ async function main() {
   lines.push('视口: ' + PROFILE_LABEL);
   lines.push('采样步长: ' + SAMPLE_STEP + 's' + (MOBILE ? '（移动端按票面允许放宽，墙钟成本：截屏 ~5.4s/张 @780×1688）' : '') +
     ' · 非黑判据: 任一分量 ≥ 8（png-probe 现口径）· 死黑判据: nonBlackRatio < 1e-4 且无字幕');
-  lines.push('速率受控口径（与桌面版一致）: 0–1500s @64x 真跑，1500s（敛光幕起）起受控降速 2x 至终 —— 64x 下每张截屏约 2s 墙钟会冲掉 ~128 仪式秒，降速后末段采样落在真实秒位');
+  lines.push(`速率受控口径: 0–${SLOWDOWN_AT}s @${RUN_RATE}x 真跑，${SLOWDOWN_AT}s 起受控降速 2x 至终 —— ${RUN_RATE}x 下每张截屏约 ${SHOT_WALL_SEC}s 墙钟会冲掉 ~${DRIFT_PER_SHOT} 仪式秒，降速后末段采样落在真实秒位`);
   lines.push('录像: artifacts/capture/' + (MOBILE ? 'record-mobile' : 'record') + '/video/full-run.webm（不入库）· 帧样张: 同目录 frames/（不入库）');
   lines.push('');
   lines.push('## 黑场分段（连续同判定聚合）');
