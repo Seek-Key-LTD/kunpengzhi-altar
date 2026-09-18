@@ -1628,7 +1628,10 @@ export class AltarScene {
    */
   private updateRitualTimeline(dt: number) {
     if (!this.ritualRunning) return;
-    this.ritualElapsed = Math.min(RITUAL_TOTAL_SEC, this.ritualElapsed + dt);
+    // dt 兜底：与同文件 setRitualTime 对齐 —— 非有限 dt 一律当 0。
+    // 否则一次 NaN 会让 ritualElapsed 永久 NaN，仪式卡死在终幕、再不复位。
+    const step = Number.isFinite(dt) ? dt : 0;
+    this.ritualElapsed = Math.min(RITUAL_TOTAL_SEC, this.ritualElapsed + step);
 
     const phase = ritualPhaseAt(this.ritualElapsed);
     if (phase !== this.ritualPhase) {
