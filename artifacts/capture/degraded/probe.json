@@ -1,0 +1,207 @@
+{
+  "generatedAt": "2026-09-18T07:53:45.709Z",
+  "head": "3b24a1ca957978a62e2e10d32fd2f7ab968538e2",
+  "baseUrl": "http://127.0.0.1:4662",
+  "pathA": {
+    "launchArgs": [
+      "--disable-webgl",
+      "--disable-webgl2",
+      "--disable-3d-apis"
+    ],
+    "hasVeil": true,
+    "hasCanvas": false,
+    "hasCaption": true,
+    "interactive": 0,
+    "innerText": "天地未形，混沌如渊。\n\n坛不设形，声自往还。\n\n此刻唯余字与音。\n\n静听即可。",
+    "search": "",
+    "hash": "#/",
+    "pollution": {
+      "__altar": false,
+      "__capture": false,
+      "__degrade": false,
+      "__webglTier": false
+    },
+    "probe": {
+      "file": "degrade-01-nowebgl.png",
+      "bytes": 427574,
+      "sha256": "029e65c55c0ad8f723381e8df43b1f365c80166f3bad289bca15c56486dd90eb",
+      "nonBlackRatio": 0.8176884765625,
+      "meanLum": 10.735833314602843,
+      "brightPixels": 9143,
+      "totalPixels": 1024000
+    },
+    "errors": {
+      "pageerror": 0,
+      "consoleError": 0,
+      "samples": []
+    },
+    "wordHits": [],
+    "missingLines": [],
+    "clockAdvanced": true,
+    "clock0": 347,
+    "clock1": 439,
+    "wordHitCount": 0
+  },
+  "pathB": {
+    "launchArgs": [
+      "--use-gl=angle",
+      "--use-angle=swiftshader",
+      "--enable-unsafe-swiftshader"
+    ],
+    "beforeHasCanvas": true,
+    "beforeVeil": false,
+    "lost": {
+      "ok": true
+    },
+    "hasVeil": true,
+    "hasCaption": true,
+    "interactive": 0,
+    "drawAtLoss": 1507,
+    "drawAfter": 1507,
+    "rafAtLoss": 309,
+    "rafAfter": 431,
+    "search": "",
+    "hash": "#/",
+    "pollution": {
+      "__altar": false,
+      "__capture": false,
+      "__degrade": false,
+      "__webglTier": false
+    },
+    "innerText": "天地未形，混沌如渊。\n\n坛不设形，声自往还。\n\n此刻唯余字与音。\n\n静听即可。",
+    "errors": {
+      "pageerror": 0,
+      "consoleError": 0,
+      "samples": []
+    },
+    "probe": {
+      "file": "degrade-02-contextlost.png",
+      "bytes": 270006,
+      "sha256": "20b74b232aa585d5353fc63cddba3ad995263e3c06d9d1265d7bac3755cb8790",
+      "nonBlackRatio": 0.8176826171875,
+      "meanLum": 10.807376577297308,
+      "brightPixels": 10167,
+      "totalPixels": 1024000
+    }
+  },
+  "gate": {
+    "pass": true,
+    "checks": [
+      {
+        "id": "A1.pageerror-zero",
+        "desc": "A 路径：无未捕获异常（pageerror = 0）",
+        "ok": true,
+        "detail": "pageerror=0"
+      },
+      {
+        "id": "A2.console-error-zero",
+        "desc": "A 路径：console error = 0",
+        "ok": true,
+        "detail": "console.error=0"
+      },
+      {
+        "id": "A3.veil-present",
+        "desc": "A 路径：静默层在场（三句锚文本齐全）",
+        "ok": true,
+        "detail": "hasVeil=true 缺: （无）"
+      },
+      {
+        "id": "A4.no-canvas",
+        "desc": "A 路径：无 WebGL 画布（不建 3D）",
+        "ok": true,
+        "detail": "canvas=false"
+      },
+      {
+        "id": "A5.caption-kept",
+        "desc": "A 路径：雾中字幕仍在（有字幕）",
+        "ok": true,
+        "detail": "caption=true"
+      },
+      {
+        "id": "A6.no-interactive",
+        "desc": "A 路径：零交互控件（无按钮/输入）",
+        "ok": true,
+        "detail": "控件=0"
+      },
+      {
+        "id": "A7.dom-words-zero",
+        "desc": "A 路径：DOM/文本/window 敏感词命中 = 0（含静默层文案）",
+        "ok": true,
+        "detail": "命中: 0"
+      },
+      {
+        "id": "A8.window-clean",
+        "desc": "A 路径：无公共句柄 __altar/__capture，且无降级调试开关 __degrade/__webglTier",
+        "ok": true,
+        "detail": "__altar=false __capture=false __degrade=false __webglTier=false"
+      },
+      {
+        "id": "A9.no-url-switch",
+        "desc": "A 路径：未使用任何 URL 开关（search/hash 皆非开关）",
+        "ok": true,
+        "detail": "search=\"\" hash=\"#/\""
+      },
+      {
+        "id": "A10.dark-with-content",
+        "desc": "A 路径：有内容地暗（nonBlack>0 且 meanLum<40 且非白屏）",
+        "ok": true,
+        "detail": "nonBlackRatio=0.81769 meanLum=10.74 bright=9143"
+      },
+      {
+        "id": "B1.before-has-canvas",
+        "desc": "B 路径：丢失前正常出画（canvas 在场）",
+        "ok": true,
+        "detail": "canvas=true"
+      },
+      {
+        "id": "B2.console-error-zero",
+        "desc": "B 路径：console error = 0（含丢失瞬间）",
+        "ok": true,
+        "detail": "console.error=0"
+      },
+      {
+        "id": "B3.pageerror-zero",
+        "desc": "B 路径：无未捕获异常（含丢失瞬间）",
+        "ok": true,
+        "detail": "pageerror=0"
+      },
+      {
+        "id": "B4.draw-frozen",
+        "desc": "B 路径：丢失后**停画**（GL draw call 计数冻结）",
+        "ok": true,
+        "detail": "丢时=1507 丢后=1507"
+      },
+      {
+        "id": "B5.clock-alive",
+        "desc": "B 路径：丢失后**时钟未停**（rAF 仍在涨 ⇒ #4 单时间轴不变量）",
+        "ok": true,
+        "detail": "丢时=309 丢后=431"
+      },
+      {
+        "id": "B6.veil-swapped",
+        "desc": "B 路径：丢失后换静默层",
+        "ok": true,
+        "detail": "hasVeil=true"
+      },
+      {
+        "id": "B7.caption-kept",
+        "desc": "B 路径：丢失后雾中字幕仍在",
+        "ok": true,
+        "detail": "caption=true"
+      },
+      {
+        "id": "B8.no-url-switch",
+        "desc": "B 路径：靠标准扩展触发，未用任何 URL/页面开关",
+        "ok": true,
+        "detail": "search=\"\" hash=\"#/\""
+      },
+      {
+        "id": "B9.dark-with-content",
+        "desc": "B 路径：换层后仍「有内容地暗」",
+        "ok": true,
+        "detail": "nonBlackRatio=0.81768 meanLum=10.81"
+      }
+    ],
+    "selfTest": null
+  }
+}

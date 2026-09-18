@@ -1,0 +1,13 @@
+# #7 降级取证 · 负样本自检（--self-test）：注入违规 → 门禁应判红
+- HEAD: 3b24a1ca957978a62e2e10d32fd2f7ab968538e2
+- 注入：A 恢复 canvas / 抽掉锚文本 / 注入词 topology / 注入 __degrade；B draw 未冻结 / raf 未涨 / 未换层
+- 期望：门禁判红（exit 1）
+- 实测：✓ 已判红（PASS）
+- 触发失败断言（7 项）：
+    ✗ [A3.veil-present] A 路径：静默层在场（三句锚文本齐全） — hasVeil=true 缺: 坛不设形，声自往还。
+    ✗ [A4.no-canvas] A 路径：无 WebGL 画布（不建 3D） — canvas=true
+    ✗ [A7.dom-words-zero] A 路径：DOM/文本/window 敏感词命中 = 0（含静默层文案） — 命中: topology
+    ✗ [A8.window-clean] A 路径：无公共句柄 __altar/__capture，且无降级调试开关 __degrade/__webglTier — __altar=false __capture=false __degrade=true __webglTier=false
+    ✗ [B4.draw-frozen] B 路径：丢失后**停画**（GL draw call 计数冻结） — 丢时=1519 丢后=1618
+    ✗ [B5.clock-alive] B 路径：丢失后**时钟未停**（rAF 仍在涨 ⇒ #4 单时间轴不变量） — 丢时=326 丢后=326
+    ✗ [B6.veil-swapped] B 路径：丢失后换静默层 — hasVeil=false

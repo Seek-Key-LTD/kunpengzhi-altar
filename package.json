@@ -18,6 +18,7 @@
     "test:honor": "node scripts/verify-honor-aggregation.mjs",
     "test:honor-isolation": "node scripts/verify-honor-isolation.mjs",
     "capture": "node tools/capture/capture.mjs",
+    "verify:degrade": "node tools/capture/verify-webgl-degradation.mjs",
     "audit:entry": "node scripts/qa-audit-public-entry.mjs",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler pages deploy dist --project-name=kunpengzhi-altar"
