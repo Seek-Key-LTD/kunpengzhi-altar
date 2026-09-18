@@ -60,6 +60,23 @@ export const App: React.FC = () => {
   return (
     <main className="ritual-root" aria-label="华夏祭坛">
       <div ref={containerRef} className="ritual-canvas" />
+      <aside
+        aria-label="相机快捷键提示"
+        className="pointer-events-none absolute right-4 top-4 z-20 w-52 rounded-xl border border-slate-700/70 bg-slate-950/75 px-3 py-2.5 text-[11px] leading-5 text-slate-300 shadow-xl backdrop-blur-md"
+      >
+        <div className="mb-1 font-semibold tracking-wide text-amber-300">观察席快捷键</div>
+        <div className="grid grid-cols-2 gap-x-3">
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">W</kbd> 前进</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">S</kbd> 后退</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">A</kbd> 左移</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">D</kbd> 右移</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">Q</kbd> 下降</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">E</kbd> 上升</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">Shift</kbd> 加速</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">R</kbd> 复位</span>
+        </div>
+        <div className="mt-1 border-t border-slate-800 pt-1 text-slate-400">鼠标拖拽旋转 · 滚轮缩放 · 右键拖拽平移</div>
+      </aside>
       {veiled && <WebglFallback />}
     </main>
   );
