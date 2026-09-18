@@ -115,10 +115,6 @@ export const TeaLanternsModal: React.FC<TeaLanternsModalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 my-4">
                 {/* Left Column (起承) */}
                 <div className="bg-slate-900/60 rounded-2xl p-5 border border-slate-800/80">
-                  <div className="text-xs text-amber-400 font-serif font-semibold mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
-                    <span>【左栏 · 起承】（帘左）</span>
-                    <span className="font-mono text-slate-500">韵：{currentChapter.rhymeWordLeft}</span>
-                  </div>
                   <div className="space-y-3 font-serif text-base text-slate-200 leading-loose">
                     {currentChapter.leftColumn.map((line, lIdx) => (
                       <div key={lIdx} className="tracking-widest flex items-center space-x-2">
@@ -131,10 +127,6 @@ export const TeaLanternsModal: React.FC<TeaLanternsModalProps> = ({
 
                 {/* Right Column (转合) */}
                 <div className="bg-slate-900/60 rounded-2xl p-5 border border-slate-800/80">
-                  <div className="text-xs text-sky-400 font-serif font-semibold mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
-                    <span>【右栏 · 转合】（帘右）</span>
-                    <span className="font-mono text-slate-500">韵：{currentChapter.rhymeWordRight}</span>
-                  </div>
                   <div className="space-y-3 font-serif text-base text-slate-200 leading-loose">
                     {currentChapter.rightColumn.map((line, rIdx) => (
                       <div key={rIdx} className="tracking-widest flex items-center space-x-2">
