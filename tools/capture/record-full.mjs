@@ -375,7 +375,7 @@ async function main() {
   const silenceAnchor = rows.filter((r) => r.phase === 'silence' && r.actualSec < 1800).pop();
   lines.push(`- 锚点吻合: 90s=${anchor90?.verdict}（预期 content-black）· silence 末样 target=${silenceAnchor?.targetSec}s actual=${silenceAnchor?.actualSec}s=${silenceAnchor?.verdict}（预期 content-black）`);
   lines.push('');
-  lines.push('## pose 对拍（5 关键秒，ceremonyPoseAt 真模块）');
+  lines.push(`## pose 对拍（${POSE_SECS.length} 关键秒，ceremonyPoseAt 真模块）`);
   for (const p of poseChecks) {
     lines.push(`- 目标 ${p.target}s → t=${fm(p.t1, 2)} Δpos=${p.dPos.toExponential(2)} ≤ ${p.tol.toExponential(2)} Δfov=${p.dFov.toExponential(2)} ${p.ok ? '✓' : '✗'}`);
   }
