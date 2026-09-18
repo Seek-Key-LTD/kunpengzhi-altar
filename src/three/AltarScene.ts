@@ -874,10 +874,16 @@ export class AltarScene {
     if (open) {
       // 从当前引擎转角起算显示零点，跨过 1020s 时不跳变。
       this.lanternRotationTheta0 = this.maglev.state.theta;
-      console.log(
-        `[走马灯] 门控开放 @ ${this.ritualElapsed.toFixed(0)}s ≥ ${RITUAL_NAMING_END_SEC}s(17:00)：` +
-          `茶灯始转（maxOmega ⇒ ${TEA_LANTERN_REV_SEC}s/圈）`
-      );
+      // 只在**仪式运行态且确由 ≥1020s 触发**时播报：构造函数同步调 animate()，
+      // 首帧早于 App.startRitual()，此时 ritualMode 仍为 false（!ritualMode 分支开门），
+      // 若在此打印会给出「门控开放 @ 0s ≥ 1020s(17:00)」这类**误导审计**的日志。
+      // 门控行为本身不变（开门/关门照旧），只收敛日志。
+      if (this.ritualRunning && this.ritualMode) {
+        console.log(
+          `[走马灯] 门控开放 @ ${this.ritualElapsed.toFixed(0)}s ≥ ${RITUAL_NAMING_END_SEC}s(17:00)：` +
+            `茶灯始转（maxOmega ⇒ ${TEA_LANTERN_REV_SEC}s/圈）`
+        );
+      }
     }
   }
 

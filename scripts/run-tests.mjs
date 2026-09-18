@@ -13,7 +13,8 @@ import { dirname, resolve } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-// 顺序即门禁顺序：几何 → 席位排除 → 时间轴 → 双龙（#2）→ 音高 → 投影 → QA 独立复核（#3/#8）→ QA 独立复核（#2）
+// 顺序即门禁顺序：几何 → 席位排除 → 时间轴 → 双龙（#2）→ 音高 → 投影 → 音频包络（#4）
+// → QA 独立复核（#3/#8）→ QA 独立复核（#2/#9）→ QA 独立复核（#4）
 const SUITES = [
   ['蝎子楔水路几何（真模块常量）', 'scripts/verify-scorpion-waterway.mjs'],
   ['#00 无极点排除（#3）', 'scripts/verify-wuji-absorber.mjs'],
@@ -23,7 +24,8 @@ const SUITES = [
   ['7×7 正交投影', 'scripts/assert-ulam-projection.mjs'],
   ['五阶段音频包络（#4）', 'scripts/verify-audio-envelope.mjs'],
   ['QA 独立门禁（#3/#8）', 'scripts/qa-verify-issue3-8.mjs'],
-  ['QA 独立门禁（#2/#9）', 'scripts/qa-verify-dual-dragon.mjs']
+  ['QA 独立门禁（#2/#9）', 'scripts/qa-verify-dual-dragon.mjs'],
+  ['QA 独立门禁（#4）', 'scripts/qa-verify-audio-envelope.mjs']
 ];
 
 for (const [name, rel] of SUITES) {
