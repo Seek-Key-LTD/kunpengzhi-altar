@@ -2,8 +2,8 @@
 （本轮为 #5【当前态】：同一条命令复跑，前/后 diff 即 #5 证据）
 
 - HEAD: 01cd9ff14230e22a7bdb1e924664e3e83b608f4e
-- 时间: 2026-09-18T05:55:29.333Z
-- 被测: http://127.0.0.1:4448（vite preview 本地产物，非线上）
+- 时间: 2026-09-18T05:54:18.468Z
+- 被测: http://127.0.0.1:4588（vite preview 本地产物，非线上）
 - 复跑: `node scripts/qa-audit-public-entry.mjs`（或 `--skip-build` 复用 dist）
 
 ## 1) 公共页 #/ 工程暴露逐词命中
@@ -78,7 +78,7 @@ DOM 文本差异（无确认→有确认）：
 - window.__altar 定义: ✘（应 ✘）
 - window.__capture 定义: ✘（应 ✘）
 
-## 4) 硬门禁断言 + 负样本自检（任一失败 → exit 1）
+## 4) 硬门禁断言（任一失败 → exit 1）
 - [PASS] A.dom-zero · 公共页 #/ DOM/文本/window 词表命中 = 0 — 命中: 0
 - [PASS] B.bundle-zero · 公共页下发 bundle 逐 token 命中 = 0（且扫描有效） — 夹带: 0
 - [PASS] C.window-clean · window.__altar / window.__capture 均未定义 — __altar=false __capture=false
@@ -87,6 +87,5 @@ DOM 文本差异（无确认→有确认）：
 - [PASS] F.director-lazy-has-marker · 正向对照：导演懒加载 chunk 内含导演标记 — 含导演标记 ✓
 
 **门禁判定：PASS ✅**
-- 负样本自检（--self-test）：注入违规后 判红 ✓（门禁有牙齿）；红灯留档 `artifacts/audit/audit-public-entry-selftest-red.txt`
 
 > 原始数据见 audit-public-entry.json
