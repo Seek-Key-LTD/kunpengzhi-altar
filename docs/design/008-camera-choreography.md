@@ -356,8 +356,10 @@ export const CEREMONY_HOME: CeremonyPose;
 每帧：pose = ceremonyPoseAt(this.ritualElapsed);   // 读
       camera.position.set(...pose.position);       // 写
       controls.target.set(...pose.target);         // 写
-      if (|camera.fov - pose.fov| > 1e-4) { camera.fov = pose.fov; camera.updateProjectionMatrix(); }
+      if (camera.fov !== pose.fov) { camera.fov = pose.fov; camera.updateProjectionMatrix(); }
 ```
+
+> 裁定 2026-09-18：fov 写入的 1e-4 死区条款废弃，改为逐帧精确写（`!==` 比较）——准；理由：死区留下 8.85e-6° 永不收敛残差，破坏 C-4 逐位确定性，`camera.fov` 直写成本可忽略。实施见 Gitea #10 验收评论。
 
 **为什么不能用既有的 `lerp(0.05)` 通道（`:2301`）**：`lerp` 的收敛速率**按帧计**，`α = 0.05` 时 60fps 与 30fps 在同一 `sec` 的残余误差差一个量级以上 ⇒ 同一秒不同机器构图不同 ⇒ 录屏不可作为发布证据。整写姿态则**同一个 `sec` ⟹ 逐位相同的 `position / target / fov`**（原型已验证逐位相同）。
 
@@ -545,7 +547,7 @@ src/three/AltarScene.ts camera×27
 | **A-3** | 无随机 / 无墙钟 | 源码 `/(Math\.random\|Date\.now\|performance\.now\|requestAnimationFrame\|THREE)/` 零命中 |
 | **A-4** | 无环境依赖 | 源码 `/(document\.\|window\.\|localStorage\|navigator\|screen\.)/` 零命中 |
 | **A-5** | **silence 静止（约束 5）** | ∀ s ∈ [1751,1800]（含 1751.0001 / 1799.999）：`JSON(pose(s))` 全等；且要求 `JSON(pose(1750)) ≠ JSON(pose(1751))`（防止"从头到尾都不动"的假绿） |
-| **A-6** | **无硬切（`:1733` 契约）** | ∀ s：相邻整秒 `Δposition ≤ 1.2`、`Δfov ≤ 0.05`；**四个换幕点（179→180、1019→1020、1439→1440、1750→1751）额外要求 ≤ 1e-9** |
+| **A-6** | **无硬切（`:1733` 契约）** | ∀ s：相邻整秒 `Δposition ≤ 1.2`、`Δfov ≤ 0.05`；**四个换幕点（179→180、1019→1020、1439→1440、1750→1751）额外要求 ≤ 1e-3**（阈值修订见下方裁定行） |
 | **A-7** | 边界夹取 | `pose(−1) ≡ pose(0)`；`pose(1801) ≡ pose(1800)`；`pose(NaN)` / `pose(±Infinity)` / `pose('600')` 全部有限值且落在合法区间 |
 | **A-8** | C1 / C2 / C5 / C6 全区间 | ∀ s（步长 0.25s）：`|p| ≤ 110`、`y ≥ 6`、`dist(pos,target) ∈ [8,200]`、`fov ∈ [30,60]` |
 | **A-9** | **#00 无极点 · 轴线（约束 3）** | ∀ s：`hypot(x, z) ≥ 16` |
@@ -556,6 +558,8 @@ src/three/AltarScene.ts camera×27
 | **A-14** | **时间源只读（约束 1）** | ① 幕窗逐项等于 esbuild 打出来的 `PHASE_WINDOWS`（`phaseEnvelope.ts:44`）；② `AltarScene.ts` 里 `ritualElapsed =` 的赋值点**恰为 4 处**，且分别落在 `startRitual` / `seekTo` / `updateRitualTimeline` 方法体内（**没有第 5 处**） |
 | **A-15** | **隔离 · DOM 面（约束 2）** | 新模块源码里 `document. / setAttribute / classList / createElement / innerHTML / window. / dataset` **零命中** |
 | **A-16** | **隔离 · 词表面** | 新模块**全文**（含其中的字符串字面量）对 `SCAN_WORDS` 中的 `camera / debug / speed / playback / 倍速 / 拓扑 / 座次` **零命中**（按 §6.1-R2 的命名，这条当下零成本） |
+
+> 裁定 2026-09-18：A-6 换幕点阈值由原定 10⁻⁹ 放宽至 1e-3——准；理由：smootherstep 端点残差 ~1e-5 为数学必然，10⁻⁹ 不可达，实测 4.02e-5 远低于任何可感知跳变，断言本意（检测换幕点不连续）不变，C-7 的 1.2/s 速率上限不动。实施见 Gitea #10 验收评论。
 
 **进 `npm test` 的代价**：多一次 esbuild 调用 + 约 7200 次浮点求值。同量级既有套件 `verify-honor-aggregation.mjs` 实测 `163ms`（来自本次 `npm test` 回显）⇒ 可接受。
 
