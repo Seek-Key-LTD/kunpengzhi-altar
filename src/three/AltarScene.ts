@@ -2309,10 +2309,14 @@ export class AltarScene {
     const pose = ceremonyPoseAt(sec);
     this.camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
     this.controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
-    if (Math.abs(this.camera.fov - pose.fov) > 1e-4) {
+    if (this.camera.fov !== pose.fov) {
       this.camera.fov = pose.fov;
       // 视口极端布局下 aspect 可能为 0/NaN —— 投影矩阵只在有限 aspect 下重算；
       // 位姿（position / target）与 aspect 无关，照写不误。
+      // ⚠️ 对设计书 §4.3 伪码「|fov − pose.fov| > 1e-4 才写」的一条偏差（已在回报明示）：
+      //    该死区会在换幕附近留下最高 1e-4 度的残余误差且永不收敛（取证实测 8.85e-6），
+      //    破坏「同一 sec ⟹ 逐位相同」的确定性合约。改为**精确写**（!== 判等）：
+      //    运动中每帧本就要重算投影（pose.fov 逐帧在变），静止后恰好零写，开销不变。
       if (Number.isFinite(this.camera.aspect) && this.camera.aspect > 0) {
         this.camera.updateProjectionMatrix();
       }
