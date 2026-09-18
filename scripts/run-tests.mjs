@@ -21,6 +21,7 @@ const SUITES = [
   ['水龙×音龙·49 席双向同源（#2）', 'scripts/verify-dual-dragon.mjs'],
   ['49 半音 C2→C6（Tone）', 'scripts/assert-semitones.mjs'],
   ['7×7 正交投影', 'scripts/assert-ulam-projection.mjs'],
+  ['五阶段音频包络（#4）', 'scripts/verify-audio-envelope.mjs'],
   ['QA 独立门禁（#3/#8）', 'scripts/qa-verify-issue3-8.mjs'],
   ['QA 独立门禁（#2/#9）', 'scripts/qa-verify-dual-dragon.mjs']
 ];

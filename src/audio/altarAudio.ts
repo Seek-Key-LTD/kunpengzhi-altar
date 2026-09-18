@@ -1,5 +1,7 @@
 import * as Tone from 'tone';
-import { SpiralEvent } from '../types/altar';
+import { SpiralEvent, RitualPhase } from '../types/altar';
+import type { LayerGains } from './phaseEnvelope';
+import { applyPhaseEnvelope as computePhaseEnvelope } from './phaseEnvelope';
 
 class AltarAudioEngine {
   private isInitialized = false;
@@ -15,6 +17,23 @@ class AltarAudioEngine {
   private reverb: Tone.Reverb | null = null;
   private delay: Tone.FeedbackDelay | null = null;
   private lowpass: Tone.Filter | null = null;
+
+  // ── #4 五阶段包络：三条声链各自的 gain 节点 ──────────────────────────
+  /** 水声链增益（waterNoise → waterGain → reverb）。 */
+  private waterGain: Tone.Gain | null = null;
+  /** 翻斗链条链增益（bucketChain → bucketFilter → bucketGain → reverb）。 */
+  private bucketGain: Tone.Gain | null = null;
+  /** 低频空间混响链增益（reverb → reverbGain → destination，兼作总空间总线）。 */
+  private reverbGain: Tone.Gain | null = null;
+  /** #4 翻斗链条声源（新增）：死点/翻斗一记金属链条声。 */
+  private bucketChain: Tone.NoiseSynth | null = null;
+  private bucketFilter: Tone.Filter | null = null;
+  /**
+   * 当前三层包络目标增益。默认 {1,1,1} = 未调制（导演/工程直入无时间轴时不淡出）；
+   * 公共仪式由 AltarScene 逐帧按 ritualPhaseAt 注入，silence 幕落到 {0,0,0}。
+   * 未起声时仅缓存，`init()` 完成后由 doInit 落地。
+   */
+  private layerGains: LayerGains = { water: 1, bucket: 1, reverb: 1 };
 
   /**
    * 幂等且**并发安全**的初始化：多次调用共享同一个进行中的 Promise。
@@ -35,12 +54,14 @@ class AltarAudioEngine {
   private async doInit(): Promise<void> {
     await Tone.start();
     
-    // Ambient spatial reverb
+    // Ambient spatial reverb —— 低频空间混响链。末端 reverbGain 受 #4 包络调制，
+    // 兼作整条空间总线（bell/pluck/pad 也都汇入 reverb）。
+    this.reverbGain = new Tone.Gain(this.layerGains.reverb).toDestination();
     this.reverb = new Tone.Reverb({
       decay: 6.5,
       preDelay: 0.08,
       wet: 0.45
-    }).toDestination();
+    }).connect(this.reverbGain);
     await this.reverb.generate();
 
     this.lowpass = new Tone.Filter(120, 'lowpass').connect(this.reverb);
@@ -77,13 +98,26 @@ class AltarAudioEngine {
     }).connect(this.reverb);
     this.padSynth.volume.value = -16;
 
-    // Water ripple subtle noise
+    // Water ripple subtle noise —— 水声链（经 waterGain 受包络调制）
+    this.waterGain = new Tone.Gain(this.layerGains.water).connect(this.reverb);
     this.waterNoise = new Tone.NoiseSynth({
       noise: { type: 'pink' },
       envelope: { attack: 0.05, decay: 0.3, sustain: 0 }
-    }).connect(this.reverb);
+    }).connect(this.waterGain);
     this.waterNoise.volume.value = -24;
 
+    // #4 翻斗链条（新增声源）：RFC-007 死点/翻斗一记金属链条声。
+    // 走 bandpass 噪声 —— 轻量、像链条撞击；经 bucketGain 受包络调制。
+    this.bucketGain = new Tone.Gain(this.layerGains.bucket).connect(this.reverb);
+    this.bucketFilter = new Tone.Filter({ frequency: 1600, type: 'bandpass', Q: 1.6 }).connect(this.bucketGain);
+    this.bucketChain = new Tone.NoiseSynth({
+      noise: { type: 'brown' },
+      envelope: { attack: 0.002, decay: 0.22, sustain: 0 }
+    }).connect(this.bucketFilter);
+    this.bucketChain.volume.value = -14;
+
+    // 落地 init 前已注入的包络（AltarScene 期间可能先调用过 applyPhaseEnvelope）
+    this.rampLayerGains(this.layerGains, 0);
     this.isInitialized = true;
   }
 
@@ -139,6 +173,46 @@ class AltarAudioEngine {
   }
 
   /**
+   * #4 翻斗链条：RFC-007 水梯每次死点/翻斗（`handleDiscretePhaseTransitions`）给一记链条声。
+   * 顶死点(黄钟，明亮) / 底死点(林钟，低沉) 用带通中心频率区分音色。
+   */
+  public triggerBucketChain(tone: 'HUANG_ZHONG' | 'LIN_ZHONG' = 'HUANG_ZHONG'): void {
+    if (!this.isInitialized || this.isMuted) return;
+    const now = Tone.now();
+    this.bucketChain?.triggerAttackRelease(0.16, now);
+    this.bucketFilter?.frequency.rampTo(tone === 'HUANG_ZHONG' ? 1750 : 1250, 0.02);
+  }
+
+  /**
+   * #4 五阶段包络：由单一时间轴（`ritualPhaseAt`，经 AltarScene 传入）驱动，
+   * 给三条声链各自 gain。未起声时只缓存目标增益（`getLayerGains` 可读）。
+   */
+  public applyPhaseEnvelope(phase: RitualPhase, secProgress: number): void {
+    const gains = computePhaseEnvelope(phase, secProgress);
+    this.layerGains = gains;
+    if (!this.isInitialized) return;
+    this.rampLayerGains(gains);
+  }
+
+  /** 当前三层包络目标增益（供断言 / 读数）。 */
+  public getLayerGains(): LayerGains {
+    return { ...this.layerGains };
+  }
+
+  /** 把三层增益落到 Tone 节点；ramp<=0 时立即置值（初始化/复位用）。 */
+  private rampLayerGains(g: LayerGains, ramp = 0.25): void {
+    if (ramp <= 0) {
+      if (this.waterGain) this.waterGain.gain.value = g.water;
+      if (this.bucketGain) this.bucketGain.gain.value = g.bucket;
+      if (this.reverbGain) this.reverbGain.gain.value = g.reverb;
+      return;
+    }
+    this.waterGain?.gain.rampTo(g.water, ramp);
+    this.bucketGain?.gain.rampTo(g.bucket, ramp);
+    this.reverbGain?.gain.rampTo(g.reverb, ramp);
+  }
+
+  /**
    * 拆掉这一轮仪式的全部乐器。
    *
    * AltarScene.destroy() 会调用它：Tone.js 的 AudioNode 不会因为对象被 GC
@@ -148,7 +222,7 @@ class AltarAudioEngine {
   public dispose() {
     if (!this.isInitialized) return;
 
-    [this.bellSynth, this.plucker, this.padSynth, this.waterNoise].forEach((synth) => {
+    [this.bellSynth, this.plucker, this.padSynth, this.waterNoise, this.bucketChain].forEach((synth) => {
       try {
         synth?.dispose();
       } catch (err) {
@@ -160,6 +234,10 @@ class AltarAudioEngine {
       this.delay?.dispose();
       this.lowpass?.dispose();
       this.reverb?.dispose();
+      this.bucketFilter?.dispose();
+      this.waterGain?.dispose();
+      this.bucketGain?.dispose();
+      this.reverbGain?.dispose();
     } catch (err) {
       console.warn('音频效果链释放失败：', err);
     }
@@ -168,6 +246,11 @@ class AltarAudioEngine {
     this.plucker = null;
     this.padSynth = null;
     this.waterNoise = null;
+    this.bucketChain = null;
+    this.bucketFilter = null;
+    this.waterGain = null;
+    this.bucketGain = null;
+    this.reverbGain = null;
     this.reverb = null;
     this.delay = null;
     this.lowpass = null;

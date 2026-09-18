@@ -53,6 +53,7 @@ import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
+import { phaseProgress } from '../audio/phaseEnvelope';
 import { AltarWaterLiftEngine } from './AltarWaterLiftEngine';
 import { AltarMaglevLanternEngine } from './AltarMaglevLanternEngine';
 
@@ -64,6 +65,15 @@ const WATER_LIFT_BASE_Y = 2.4;              // 引擎 y=0 对应的世界高度�
 const WATER_LIFT_SCALE = 6.0 / 7.0;         // 7 单位 → 6 世界单位
 const WATER_LIFT_PULLEY_Y = 9.6;            // 顶端定滑轮高度
 const WATER_LIFT_SEP = 1.6;                 // 双桶左右分列（±x）
+
+// ── #4 · 导演 / 工程入口 · 受控回放速率 ──────────────────────────────
+//
+// 公共入口恒 1.0（1800s 全程，**无倍速控件**）。仅导演 / 工程入口可经
+// `setPlaybackRate()` 加速/减速回放，用于讲解与工程复核。
+// 路由隔离归 #5；本轮只提供 API 并保证公共渲染树里查不到任何倍速入口。
+export const RITUAL_PLAYBACK_MIN = 0.25;
+export const RITUAL_PLAYBACK_MAX = 64;
+export const RITUAL_PLAYBACK_DEFAULT = 1;
 
 export class AltarScene {
   private container: HTMLElement;
@@ -109,6 +119,11 @@ export class AltarScene {
   // ── 公共入口 · 1800s 五幕时间轴 ────────────────────────────────────
   /** 仪式已运行秒数（仅在 ritualRunning 时随 dt 推进）。 */
   private ritualElapsed = 0;
+  /**
+   * 时间轴回放速率（#4）。公共入口恒 1.0（1800s 全程）；仅导演/工程入口
+   * 经 setPlaybackRate() 变更，用于加速回放。默认值即公共入口行为。
+   */
+  private ritualPlaybackRate = RITUAL_PLAYBACK_DEFAULT;
   /** 时间轴是否在推进：startRitual() 置真，presentImmediately() 保持假。 */
   private ritualRunning = false;
   /** 上一次结算到的幕次，用于只在边界改写场景（避免每帧重写）。 */
@@ -769,9 +784,11 @@ export class AltarScene {
     this.hollowInteriorGroup.add(group);
     this.waterLiftGroup = group;
 
-    // 相变接线：统一走既有 triggerFountainPulse()，不新造音频 API
+    // 相变接线：既有 triggerFountainPulse()（水花/垫音）+ #4 新增的翻斗链条声。
     this.waterLift.onPhaseTransition = (highBucket, massSkimmed, tone) => {
       altarAudio.triggerFountainPulse();
+      // #4 翻斗链条：RFC-007 死点/翻斗 → 一记链条声（顶死点黄钟 / 底死点林钟）。
+      altarAudio.triggerBucketChain(tone);
       // RFC-007 → RFC-008 联动：双桶撞死点即给外环走马灯一次地脉冲击（0..1），
       // 由 animate 第 9b 段逐帧衰减后喂给 maglev.update(dt, seismic)。
       this.waterLiftSeismic = THREE.MathUtils.clamp(massSkimmed, 0, 1);
@@ -1746,6 +1763,30 @@ export class AltarScene {
   }
 
   /**
+   * #4 导演 / 工程入口 · 受控回放速率（**仅供导演 / 工程入口调用**）。
+   *
+   * 改变时间轴推进速度：`ritualElapsed += dt * rate`。公共入口从不调用本方法，
+   * 故恒为 1.0 ⟹ 1800s 全程、**无倍速控件**。rate 夹到 [MIN, MAX]；
+   * 非有限值回落默认 1.0（与 dt 的 isFinite 兜底同风格）。
+   */
+  public setPlaybackRate(rate: number): number {
+    if (!Number.isFinite(rate)) {
+      this.ritualPlaybackRate = RITUAL_PLAYBACK_DEFAULT;
+    } else {
+      this.ritualPlaybackRate = Math.min(
+        RITUAL_PLAYBACK_MAX,
+        Math.max(RITUAL_PLAYBACK_MIN, rate)
+      );
+    }
+    return this.ritualPlaybackRate;
+  }
+
+  /** 当前回放速率（公共入口恒 1.0）。供导演 / 工程入口读取。 */
+  public get playbackRate(): number {
+    return this.ritualPlaybackRate;
+  }
+
+  /**
    * 每帧推进 1800s 五幕时间轴；仅在仪式运行态生效。
    *
    * 防双写：只在 0 / 180 / 1020 三个边界改写幕次；1440（24:00）与 1751（29:11）
@@ -1757,7 +1798,11 @@ export class AltarScene {
     // dt 兜底：与同文件 setRitualTime 对齐 —— 非有限 dt 一律当 0。
     // 否则一次 NaN 会让 ritualElapsed 永久 NaN，仪式卡死在终幕、再不复位。
     const step = Number.isFinite(dt) ? dt : 0;
-    this.ritualElapsed = Math.min(RITUAL_TOTAL_SEC, this.ritualElapsed + step);
+    // #4 受控回放速率：公共入口 rate=1（1800s 全程）；导演/工程入口可加速。
+    this.ritualElapsed = Math.min(
+      RITUAL_TOTAL_SEC,
+      this.ritualElapsed + step * this.ritualPlaybackRate
+    );
 
     const phase = ritualPhaseAt(this.ritualElapsed);
     if (phase !== this.ritualPhase) {
@@ -1788,6 +1833,10 @@ export class AltarScene {
 
     // 唯一时间注入点：#00 显形（1440）/ 静默（1751）阈值 + extinguishing / silence 幕次。
     this.setRitualTime(this.ritualElapsed);
+
+    // #4 五阶段音频包络：与幕次**同源**（ritualPhaseAt），逐帧落到三条声链
+    // （水声 / 翻斗链条 / 低频空间混响）。silence 幕三层归零（1751→1800 恰 49s）。
+    altarAudio.applyPhaseEnvelope(phase, phaseProgress(this.ritualElapsed));
   }
 
   /**
