@@ -1,0 +1,18 @@
+<html lang="zh-CN" class="dark"><head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'&gt;&lt;text y='.9em' font-size='90'&gt;🌊&lt;/text&gt;&lt;/svg&gt;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>无人值守·自运维·华夏祭坛 | 鲲鹏志</title>
+    <meta name="description" content="三更道场·第十二期《黄道》终卷散场留白交互装置。七级方坛，四十九席，乌兰螺旋，十二平均律。">
+    <!-- Google Fonts for Chinese typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&amp;family=Noto+Serif+SC:wght@300;400;600;700;900&amp;display=swap" rel="stylesheet">
+    <script type="module" crossorigin="" src="/assets/index-C2ApNK4k.js"></script>
+    <link rel="stylesheet" crossorigin="" href="/assets/index-C_XIU56q.css">
+  </head>
+  <body class="bg-[#05070d] text-slate-100 overflow-hidden select-none">
+    <div id="root"><main class="ritual-root" aria-label="华夏祭坛"><div class="ritual-canvas"><canvas data-engine="three.js r174" width="1280" height="800" style="display: block; width: 1280px; height: 800px; touch-action: none;"></canvas><div class="ritual-caption" aria-live="polite" style="">天地未形，混沌如渊。</div></div></main></div>
+  
+
+</body></html>

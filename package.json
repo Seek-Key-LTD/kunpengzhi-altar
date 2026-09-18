@@ -15,6 +15,7 @@
     "test:physics": "node scripts/verify-physics-failure.mjs",
     "test:isolation": "node scripts/verify-entry-isolation.mjs",
     "capture": "node tools/capture/capture.mjs",
+    "audit:entry": "node scripts/qa-audit-public-entry.mjs",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler pages deploy dist --project-name=kunpengzhi-altar"
   },
