@@ -240,7 +240,11 @@ ok(!/type\s*=\s*["']range["']|<input|<button|slider|onChange/i.test(app), '公�
 ok(!/from\s+'\.\/components\//.test(app), '公共 App.tsx 不引任何 UI 组件（无倍速入口可挂）');
 const main = readSrc('src/main.tsx');
 // #5 · 路由两态门控：形式允许「三元」或「lazy 分支 + Suspense」；此处校验语义 + 按需加载证据。
-ok(/route\s*[!=]==\s*'director'/.test(main) && /<App\s*\/>/.test(main), '路由：public → App（公共树=App.tsx）');
+// 关键：必须把 <App/> 绑定到**非 director 分支**（否则 route 分支反接也能蒙混过关）。
+ok(
+  /route\s*===\s*'director'\s*\?\s*<DirectorApp\s*\/>\s*:\s*<App\s*\/>/.test(main) || // 三元：director?DirectorApp:App
+  /route\s*!==\s*'director'[\s\S]{0,60}return\s*<App\s*\/>/.test(main),                 // 早返回：非 director → App
+  '路由：public 分支 → App（非导演分支渲染 App，杜绝分支反接）');
 ok(/lazy\s*\(\s*\(\)\s*=>\s*import\(\s*'\.\/director\/DirectorApp'\s*\)\s*\)/.test(main), '#5：导演路由懒加载（动态 import → 独立 chunk）');
 ok(/<Suspense[\s\S]{0,140}<DirectorApp\s*\/>/.test(main), '#5：Suspense 兜底包裹 DirectorApp（按需拉取）');
 ok(!/'\.\/components\//.test(app), '公共树不含 components 目录组件');
