@@ -17,6 +17,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { auditPublicUiTree, formatHits, componentSpecifiers } from './lib/public-ui-tree.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 let checks = 0;
@@ -237,13 +238,17 @@ eq(clampRate(Infinity), 1, '复算：Infinity → 回落 1');
 const app = readSrc('src/App.tsx');
 ok(!/setPlaybackRate|playbackRate|倍速|播放速度|回放速率|\brate\b/i.test(app), '公共 App.tsx 无任何倍速/回放标识');
 ok(!/type\s*=\s*["']range["']|<input|<button|slider|onChange/i.test(app), '公共 App.tsx 无 input/button/slider/onChange');
-// #7：静默层 `src/components/WebglFallback.tsx` 属**公共侧**纯展示层，单独放行；
-// components/* 其余组件仍一律禁止（下一条改为**实测**该组件零交互控件）。
-ok(!/from\s+'\.\/components\/(?!WebglFallback')/.test(app),
-  '公共 App.tsx 不引任何 UI 组件（#7 静默层 WebglFallback 除外）');
-const veilSrc = readSrc('src/components/WebglFallback.tsx');
-ok(!/<button|<input|<select|<textarea|onChange|onClick|onPointerDown|slider|type\s*=\s*["']range["']/i.test(veilSrc),
-  '#7 静默层零交互控件（无按钮/输入/回调 ⇒ 无处可挂倍速入口）');
+// #7 · 公共 UI 树「**判定为本**」审计 —— 取代「按名字禁 / 按名字放行」的代理规则。
+// 判据是源码内容，不是组件名字：App 引入的每个 components/* + 其 src/ 内 import 传递闭包，
+// 逐行扫交互标记与敏感词，命中即判 fail 并给 file:line ⇒ 新增组件零维护自动覆盖，改名绕不过。
+const ui = await auditPublicUiTree('src/App.tsx');
+ok(ui.roots.length >= 1, `公共引入的 components/* 全部纳入扫描（实测 ${ui.roots.join(', ') || '无'}）`);
+for (const file of ui.files) {
+  const ih = ui.interactions.get(file);
+  ok(ih.length === 0, `公共 UI 树 ${file} 无交互控件/回调（无倍速入口可挂）— 命中: ${ih.length}${ih.length ? ' :: ' + formatHits(file, ih) : ''}`);
+  const wh = ui.words.get(file);
+  ok(wh.length === 0, `公共 UI 树 ${file} 避开 SCAN_WORDS/ADMIN_WORDS/CONSOLE_MARKERS — 命中: ${wh.length}${wh.length ? ' :: ' + formatHits(file, wh) : ''}`);
+}
 const main = readSrc('src/main.tsx');
 // #5 · 路由两态门控：形式允许「三元」或「lazy 分支 + Suspense」；此处校验语义 + 按需加载证据。
 // 关键：必须把 <App/> 绑定到**非 director 分支**（否则 route 分支反接也能蒙混过关）。
@@ -253,8 +258,12 @@ ok(
   '路由：public 分支 → App（非导演分支渲染 App，杜绝分支反接）');
 ok(/lazy\s*\(\s*\(\)\s*=>\s*import\(\s*'\.\/director\/DirectorApp'\s*\)\s*\)/.test(main), '#5：导演路由懒加载（动态 import → 独立 chunk）');
 ok(/<Suspense[\s\S]{0,140}<DirectorApp\s*\/>/.test(main), '#5：Suspense 兜底包裹 DirectorApp（按需拉取）');
-ok(!/'\.\/components\/(?!WebglFallback')/.test(app), '公共树不含 components 目录组件（#7 静默层除外）');
-log('setPlaybackRate 仅 AltarScene 定义、全仓零调用；公共树 App.tsx 无倍速/输入控件');
+// 「这条 import 逃出了闭包」同样不许发生：书写出来的 components 引用数必须等于
+// 实际解析进扫描集的 root 数 —— 不等即说明有引用没被读到（改名/路径错/新写法），fail-closed。
+const uiSpecs = componentSpecifiers('src/App.tsx');
+ok(uiSpecs.length === ui.roots.length,
+  `公共引用的 components/* 全部解析进扫描闭包（书写 ${uiSpecs.length} 条 / 实扫 ${ui.roots.length} 个）`);
+log(`setPlaybackRate 仅 AltarScene 定义、全仓零调用；公共 UI 树 ${ui.files.length} 文件 × ${ui.wordCount} 敏感词逐行审过 0 命中`);
 
 // ──────────────────────────────────────────────────────────────────────
 // 6. 非仪式档不淡出（默认恒 {1,1,1}）

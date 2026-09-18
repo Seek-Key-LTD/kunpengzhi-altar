@@ -16,6 +16,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { auditPublicUiTree, formatHits } from './lib/public-ui-tree.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -214,16 +215,25 @@ ok(/lowpass/.test(audio) && /reverb/.test(audio) && /120/.test(audio), '保留�
 const app = readSrc('src/App.tsx');
 ok(!/setPlaybackRate|playbackRate|倍速|播放速度|回放速率|速率/i.test(app), '公共 App 无任何倍速/回放标识');
 ok(!/type\s*=\s*["']range["']|onChange|<input|<button|slider/i.test(app), '公共 App 无输入/按钮/滑块控件');
-// #7：静默层 `src/components/WebglFallback.tsx` 属**公共侧**纯展示层，单独放行；
-// components/* 其余组件仍一律禁止。放行≠放宽 —— 下一条改为**实测**该组件零交互控件，
-// 比原来「一刀切禁止 components/」更能证明「倍速入口无处可挂」。
-ok(!/from\s+'\.\/components\/(?!WebglFallback')/.test(app),
-  '公共 App 不引任何 UI 组件（#7 静默层 WebglFallback 除外）');
-const veilSrc = readSrc('src/components/WebglFallback.tsx');
-ok(!/<button|<input|<select|<textarea|onChange|onClick|onPointerDown|slider|type\s*=\s*["']range["']/i.test(veilSrc),
-  '#7 静默层零交互控件（无按钮/输入/回调 ⇒ 无处可挂倍速入口）');
+// #7 · 公共 UI 树「**判定为本**」审计 —— 取代原先「按名字禁 / 按名字放行」的代理规则。
+//
+// 代理规则（`App.tsx` 不得出现 `from './components/'`）守的是「倍速入口无处可挂」，
+// 但判据是**名字/目录**；#7 静默层是公共侧组件、必须进 App ⇒ 代理失真。
+// 且名字白名单是把能绕过且不需要动脑的后门（把组件改名成白名单里的名字即可），故不要。
+//
+// 改为：把 App 引入的**每一个** components/* 文件（含其在 src/ 内的本地 import 传递闭包）
+// 真实读源码后逐行扫描 —— 命中交互标记 / 词表即判 fail 并给 file:line。
+// 于是它是**通用不变量**：新增组件零维护自动覆盖，改名也绕不过去。
+const ui = await auditPublicUiTree('src/App.tsx');
+ok(ui.roots.length >= 1, `公共 App 引入的 components/* 已全部纳入扫描（实测 ${ui.roots.join(', ') || '无'}）`);
+for (const file of ui.files) {
+  const ih = ui.interactions.get(file);
+  ok(ih.length === 0, `公共 UI 树 ${file} 无任何交互控件/回调（无倍速入口可挂）— 命中: ${ih.length}${ih.length ? ' :: ' + formatHits(file, ih) : ''}`);
+  const wh = ui.words.get(file);
+  ok(wh.length === 0, `公共 UI 树 ${file} 避开 SCAN_WORDS/ADMIN_WORDS/CONSOLE_MARKERS — 命中: ${wh.length}${wh.length ? ' :: ' + formatHits(file, wh) : ''}`);
+}
 ok(!/startRitual\s*\(\)[\s\S]{0,80}setPlaybackRate/.test(app), '公共 App 从不对 setPlaybackRate 下发');
-log('公共渲染树 = App.tsx（仅 ritual-root/canvas），无倍速/回放/输入控件；速率 API 仅存在于 AltarScene');
+log(`公共渲染树 App.tsx：无倍速/回放/输入控件；UI 树 ${ui.files.length} 个文件逐行审过交互标记与 ${ui.wordCount} 个敏感词（0 命中）；速率 API 仅存在于 AltarScene`);
 
 // ── 复用 #9（不重建）：49 半音断言仍在门禁内 ─────────────────────────
 const runner = readSrc('scripts/run-tests.mjs');
