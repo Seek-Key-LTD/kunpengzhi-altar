@@ -11,6 +11,7 @@
 
 import { AltarScene } from '../../src/three/AltarScene';
 import { INITIAL_SPIRAL_EVENTS } from '../../src/data/spiral_events';
+import { PYRAMID_HALF } from '../../src/data/altarGeometry';
 import { ritualPhaseAt, ritualLitSeatsAt, RITUAL_TOTAL_SEC } from '../../src/types/altar';
 import '../../src/index.css'; // 复用生产字幕样式（.ritual-caption），保证取真画面
 
@@ -27,6 +28,10 @@ interface CaptureApi {
   phaseAt: (sec: number) => string;
   /** 纯函数：sec → 已触发席数。 */
   litSeatsAt: (sec: number) => number;
+  /** #5 · 启用俯视正交取证相机（半宽，默认 PYRAMID_HALF）。 */
+  orthoTopdown: (halfWidth?: number) => number;
+  /** #5 · 关闭正交取证相机。 */
+  clearOrtho: () => void;
   TOTAL: number;
 }
 
@@ -56,6 +61,11 @@ window.__capture = {
   rate: () => altar.playbackRate,
   phaseAt: (sec: number) => ritualPhaseAt(sec),
   litSeatsAt: (sec: number) => ritualLitSeatsAt(sec),
+  orthoTopdown: (halfWidth: number = PYRAMID_HALF) => {
+    const cam = altar.setOrthoTopdown(halfWidth);
+    return cam.top; // 半高（世界单位）—— 供驱动换算
+  },
+  clearOrtho: () => altar.clearOrthoTopdown(),
   TOTAL: RITUAL_TOTAL_SEC
 };
 

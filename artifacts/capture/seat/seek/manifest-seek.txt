@@ -1,0 +1,15 @@
+# 华夏祭坛 · 无头视觉取证清单
+生成时间(UTC): 2026-09-18T03:45:33.547Z
+模式: seek  · 速率: N/A(seek)
+视口: 1280×720  · 实测帧率: 35.1 fps
+GL: webgl2 ✓ · ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+非黑判据: 任一分量 ≥ 8  · 发光判据: 亮度 ≥ 32
+
+字段: 序号 | 幕 | 目标t | 实到t | 席数 | 非黑占比 | 均亮 | 发光像素 | 字幕
+1 | naming(命名) | 197s | 197.15s | lit=1 | nonBlack=4.750% | meanLum=2.21 | bright=18498 | caption="四十九席，逐一点亮；水向外行，音向内收。" | sha256=bb7ad322e80f
+2 | naming(命名) | 610s | 610.2s | lit=25 | nonBlack=5.020% | meanLum=2.45 | bright=20518 | caption="四十九席，逐一点亮；水向外行，音向内收。" | sha256=1994555b12d6
+3 | lanterns(走马灯) | 1300s | 1300.19s | lit=49 | nonBlack=7.520% | meanLum=4.01 | bright=38566 | caption="十七时整，茶灯始转；一周一百二十秒。" | sha256=48f2153c2acc
+
+## 深渊/静默幕 · 「有内容黑」论证
+
+## 结论：✅ 无死黑帧 —— 各幕均有可测内容

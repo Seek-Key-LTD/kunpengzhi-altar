@@ -1,0 +1,66 @@
+{
+  "mode": "seek",
+  "rate": null,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "fps": 35.1,
+  "gl": "webgl2 ✓ · ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "shots": [
+    {
+      "index": 1,
+      "file": "01-naming-t0197.png",
+      "targetSec": 197,
+      "actualSec": 197.15,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "litSeats": 1,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "nonBlackRatio": 0.0475,
+      "meanLum": 2.21,
+      "brightPixels": 18498,
+      "totalPixels": 921600,
+      "sha256": "bb7ad322e80ffb3adac5fcc7038c4f56057c8c4cf15a519e8fbe682b15330846",
+      "hasCaption": true,
+      "deadBlack": false,
+      "contentBlack": false
+    },
+    {
+      "index": 2,
+      "file": "02-naming-t0610.png",
+      "targetSec": 610,
+      "actualSec": 610.2,
+      "phase": "naming",
+      "phaseLabel": "命名",
+      "litSeats": 25,
+      "caption": "四十九席，逐一点亮；水向外行，音向内收。",
+      "nonBlackRatio": 0.0502,
+      "meanLum": 2.45,
+      "brightPixels": 20518,
+      "totalPixels": 921600,
+      "sha256": "1994555b12d6e8e60850550be9851460315f05b773b86ddd62f09e33d7980a3f",
+      "hasCaption": true,
+      "deadBlack": false,
+      "contentBlack": false
+    },
+    {
+      "index": 3,
+      "file": "03-lanterns-t1300.png",
+      "targetSec": 1300,
+      "actualSec": 1300.19,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "litSeats": 49,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "nonBlackRatio": 0.0752,
+      "meanLum": 4.01,
+      "brightPixels": 38566,
+      "totalPixels": 921600,
+      "sha256": "48f2153c2acc280874bbd2aa20182633383a4ffd1b403d147ef14be22a6fd58a",
+      "hasCaption": true,
+      "deadBlack": false,
+      "contentBlack": false
+    }
+  ]
+}

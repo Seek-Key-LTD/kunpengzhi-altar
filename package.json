@@ -12,6 +12,8 @@
     "test:ritual": "node scripts/verify-ritual-timeline.mjs",
     "test:dragon": "node scripts/verify-dual-dragon.mjs",
     "test:audio": "node scripts/verify-audio-envelope.mjs",
+    "test:physics": "node scripts/verify-physics-failure.mjs",
+    "test:isolation": "node scripts/verify-entry-isolation.mjs",
     "capture": "node tools/capture/capture.mjs",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler pages deploy dist --project-name=kunpengzhi-altar"

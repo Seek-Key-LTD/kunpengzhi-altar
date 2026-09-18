@@ -1,0 +1,31 @@
+{
+  "mode": "ortho",
+  "rate": null,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "fps": 39.7,
+  "orthoHalf": 10.5,
+  "gl": "webgl2 ✓ · ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "shots": [
+    {
+      "index": 1,
+      "file": "01-ortho-topdown-t1200.png",
+      "targetSec": 1200,
+      "actualSec": 1200.17,
+      "phase": "lanterns",
+      "phaseLabel": "走马灯",
+      "litSeats": 49,
+      "caption": "十七时整，茶灯始转；一周一百二十秒。",
+      "nonBlackRatio": 0.5103,
+      "meanLum": 6.44,
+      "brightPixels": 33338,
+      "totalPixels": 921600,
+      "sha256": "1d32fd557d968c2bfa625b8f15664197c774c5b133d8b7c4eda1c4cf762b8994",
+      "hasCaption": true,
+      "deadBlack": false,
+      "contentBlack": false
+    }
+  ]
+}

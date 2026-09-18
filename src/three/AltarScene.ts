@@ -103,7 +103,12 @@ export class AltarScene {
   /** 首个物理接管帧只播报一次，避免每帧刷屏 */
   private waterLiftAnnounced = false;
 
-  private numbersPanelEl: HTMLDivElement | null = null;
+  /**
+   * #5 · 7×7 正交取证相机（俯视，沿 -Y 看，丢弃 y）。
+   * 非 null 时 animate 用它渲一帧，供无头取证出「俯视正交截图」；
+   * 公共/导演运行时不设，故对生产零影响。
+   */
+  private orthoTopdownCamera: THREE.OrthographicCamera | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
   private sunLight: THREE.DirectionalLight | null = null;
   private rimLight: THREE.DirectionalLight | null = null;
@@ -2057,6 +2062,39 @@ export class AltarScene {
     }
   }
 
+  /**
+   * #5 · 7×7 正交取证：启用**俯视正交相机**（沿 -Y 看，视口半宽 = `halfWidth`，丢弃 y）。
+   *
+   * 与 `setCameraMode('topdown')` 不同 —— 那是**透视**相机远距离俯视；
+   * 这里给无头取证一个**真正交**投影，使 49 席在屏幕上落在均匀格点，
+   * 与 `scripts/assert-ulam-projection.mjs` 的「e ≤ 1e-4」模型同源（半宽 = PYRAMID_HALF）。
+   * 仅取证用，公共/导演运行时不调用 ⇒ 对生产零影响。返回该相机便于驱动读参数。
+   */
+  public setOrthoTopdown(halfWidth: number = PYRAMID_HALF): THREE.OrthographicCamera {
+    const el = this.renderer.domElement;
+    const aspect = el.height > 0 ? el.width / el.height : 1;
+    const cam = new THREE.OrthographicCamera(
+      -halfWidth * aspect,
+      halfWidth * aspect,
+      halfWidth,
+      -halfWidth,
+      0.1,
+      1000
+    );
+    cam.position.set(0, 200, 0);
+    cam.up.set(0, 0, -1);
+    cam.lookAt(0, 0, 0);
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld(true);
+    this.orthoTopdownCamera = cam;
+    return cam;
+  }
+
+  /** #5 · 关闭正交取证相机，主循环回到透视相机。 */
+  public clearOrthoTopdown(): void {
+    this.orthoTopdownCamera = null;
+  }
+
   /** 鼠标/触摸一次只唤起一条游客既定路线，播放完停在当前位置。 */
   private activateGuestRoutine(): void {
     const routine = GUEST_ROUTINES[this.guestRoutineIndex];
@@ -2272,7 +2310,8 @@ export class AltarScene {
       this.relicRig?.update(dt);
     }
 
-    this.renderer.render(this.scene, this.camera);
+    // #5：取证正交相机存在时以它渲一帧（俯视 7×7），否则走主循环透视相机。
+    this.renderer.render(this.scene, this.orthoTopdownCamera ?? this.camera);
   };
 
   // ── 传国玉玺（T03 接线，只此一段，不碰祭坛其余部分）────────────────
@@ -2401,11 +2440,10 @@ export class AltarScene {
     window.removeEventListener('blur', this.onWindowBlur);
     this.container.removeEventListener('pointerdown', this.onPointerDown);
 
-    // 3. 工程 HUD 的 DOM（数表只属于验收，不属于公共仪式）+ 雾中字幕行
-    [this.numbersPanelEl, this.fogCaptionEl].forEach((el) => {
-      if (el?.parentElement) el.parentElement.removeChild(el);
-    });
-    this.numbersPanelEl = null;
+    // 3. 雾中字幕行（工程 HUD 的 DOM 自始不挂，数表只属于验收、不属于公共仪式）
+    if (this.fogCaptionEl?.parentElement) {
+      this.fogCaptionEl.parentElement.removeChild(this.fogCaptionEl);
+    }
     this.fogCaptionEl = null;
     // 4. 控制器（内部也挂着 DOM 监听）
     this.controls.dispose();

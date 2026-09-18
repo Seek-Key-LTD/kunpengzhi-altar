@@ -46,6 +46,8 @@ const URL = `http://127.0.0.1:${PORT}${CAPTURE_PATH}`;
 const DEFAULT_TARGETS = [90, 600, 1200, 1600, 1780];
 /** 真跑速率：1800 / 64 ≈ 28.1s。 */
 const DEFAULT_RATE = 64;
+/** #5 · 正交取证默认时刻：走马灯幕满席（lit=49），7×7 格点最完整。 */
+const ORTHO_TARGET_SEC = 1200;
 /** 非黑判据：像素任一分量 ≥ 该值即计为「有内容」。 */
 const NONBLACK_LEVEL = 8;
 /** 明显发光判据（Rec.709 亮度）。 */
@@ -84,7 +86,7 @@ const readArg = (name, fallback) => {
   return argv[idx + 1] ?? fallback;
 };
 
-const mode = hasFlag('--run') ? 'run' : 'seek';
+const mode = hasFlag('--ortho') ? 'ortho' : hasFlag('--run') ? 'run' : 'seek';
 const targets = (readArg('--targets', '') || DEFAULT_TARGETS.join(','))
   .split(',')
   .map((s) => Number(s.trim()))
@@ -235,14 +237,22 @@ async function ensureServer() {
   throw new Error(`vite dev server 未就绪（30s 超时）：${URL}`);
 }
 
-/** 等接下来 n 个动画帧渲染完（确保 seek 结果已上屏）。 */
+/** 等接下来 n 个动画帧渲染完（确保 seek 结果已上屏）；rAF 停摆时用 1.5s 兜底防挂死。 */
 async function settleFrames(page, n = 3) {
   await page.evaluate(
     (count) =>
       new Promise((ok) => {
         let left = count;
-        const step = () => (left-- <= 0 ? ok() : requestAnimationFrame(step));
+        let done = false;
+        const finish = () => {
+          if (!done) {
+            done = true;
+            ok();
+          }
+        };
+        const step = () => (left-- <= 0 ? finish() : requestAnimationFrame(step));
         requestAnimationFrame(step);
+        setTimeout(finish, 1500); // 无头 rAF 可能停摆（本仓 isolation 脚本已实测），兜底放行
       }),
     n
   );
@@ -288,6 +298,7 @@ async function main() {
   const shots = [];
   let glInfo = 'unknown';
   let fps = null;
+  let orthoHalf = null;
   try {
     const page = await browser.newPage({ viewport, deviceScaleFactor: 1 });
     page.on('pageerror', (e) => console.error(`[capture][pageerror] ${e.message}`));
@@ -333,16 +344,25 @@ async function main() {
       await page.evaluate(() => window.__capture.seek(0));
       await page.evaluate((r) => window.__capture.start(r), rate);
       console.log(`[capture] 起播 rate=${rate}x（理想全程约 ${(total / rate).toFixed(1)}s；无头实时以实测为准）`);
+    } else if (mode === 'ortho') {
+      // #5 · 7×7 正交取证：默认摆到满席幕（lit=49）再切**俯视正交**相机，单帧取证。
+      const t = hasFlag('--targets') ? (targets[0] ?? ORTHO_TARGET_SEC) : ORTHO_TARGET_SEC;
+      await page.evaluate((sec) => window.__capture.seek(sec), t);
+      orthoHalf = await page.evaluate(() => window.__capture.orthoTopdown());
+      targets.length = 0;
+      targets.push(t);
+      console.log(`[capture] 正交取证：俯视正交相机 半宽=${orthoHalf}（世界单位），t=${t}s`);
     }
 
     for (let i = 0; i < targets.length; i++) {
       const target = targets[i];
-      if (mode === 'seek') {
-        await page.evaluate((t) => window.__capture.seek(t), target);
-        await settleFrames(page, 3);
-      } else {
+      if (mode === 'run') {
         await waitUntilTime(page, target, hardCapMs);
         await settleFrames(page, 2);
+      } else {
+        // seek / ortho：一次性摆位
+        if (mode === 'seek') await page.evaluate((t) => window.__capture.seek(t), target);
+        await settleFrames(page, 3);
       }
       const actual = await page.evaluate(() => window.__capture.time());
       const phase = await page.evaluate((t) => window.__capture.phaseAt(t), actual);
@@ -350,7 +370,8 @@ async function main() {
       const caption = await page.evaluate(
         () => (document.querySelector('.ritual-caption')?.textContent || '').trim()
       );
-      const name = `${String(i + 1).padStart(2, '0')}-${phase}-t${String(Math.round(target)).padStart(4, '0')}.png`;
+      const tag = mode === 'ortho' ? 'ortho-topdown' : phase;
+      const name = `${String(i + 1).padStart(2, '0')}-${tag}-t${String(Math.round(target)).padStart(4, '0')}.png`;
       const file = resolve(outDir, name);
       const buf = await page.screenshot({ path: file });
       const m = analyze(buf);
@@ -397,6 +418,9 @@ async function main() {
   manifestLines.push(`生成时间(UTC): ${new Date().toISOString()}`);
   manifestLines.push(`模式: ${mode}  · 速率: ${mode === 'run' ? `${rate}x` : 'N/A(seek)'}`);
   manifestLines.push(`视口: ${viewport.width}×${viewport.height}  · 实测帧率: ${fps ?? 'N/A'} fps`);
+  if (orthoHalf != null) {
+    manifestLines.push(`正交相机: 俯视(沿 -Y) 正交 · 视口半宽=${orthoHalf}（世界单位，= PYRAMID_HALF）`);
+  }
   manifestLines.push(`GL: ${glInfo}`);
   manifestLines.push(`非黑判据: 任一分量 ≥ ${NONBLACK_LEVEL}  · 发光判据: 亮度 ≥ ${BRIGHT_LEVEL}`);
   manifestLines.push('');
@@ -425,7 +449,7 @@ async function main() {
   writeFileSync(
     resolve(outDir, `manifest-${mode}.json`),
     JSON.stringify(
-      { mode, rate: mode === 'run' ? rate : null, viewport, fps, gl: glInfo, shots: withVerdict },
+      { mode, rate: mode === 'run' ? rate : null, viewport, fps, orthoHalf, gl: glInfo, shots: withVerdict },
       null,
       2
     ) + '\n',

@@ -25,6 +25,65 @@ export type WaterLiftPhaseCallback = (
   tone: 'HUANG_ZHONG' | 'LIN_ZHONG'
 ) => void;
 
+/**
+ * #5 · 单条参数自检结果 —— 明确「哪一环 / 期望 / 实际」。
+ * 供引擎建场时校验，也供受控失败日志样例与门禁断言直接调用。
+ */
+export interface PhysicsParamCheck {
+  /** 环节名（哪一环） */
+  stage: string;
+  ok: boolean;
+  /** 期望（边界表达式） */
+  expected: string;
+  /** 实际（入参值） */
+  actual: string;
+}
+
+/**
+ * #5 · 水梯参数越界自检（纯函数，不建场、不抛）。
+ *
+ * 把「水梯」的物理参数逐项对边界。默认参数（height 7 / bucketMass 5 / initialWater 10）
+ * 全部合格；把任一参数推到越界即成「受控失败」，由构造函数播报并拒绝建场。
+ * 常量取自本模块默认值，避免与构造函数二次漂移。
+ */
+export function checkWaterLiftParams(options?: {
+  height?: number;
+  bucketMass?: number;
+  initialWater?: number;
+  recoilSpeed?: number;
+}): PhysicsParamCheck[] {
+  const H = options?.height ?? 7.0;
+  const m0 = options?.bucketMass ?? 5.0;
+  const w0 = options?.initialWater ?? 10.0;
+  const recoil = options?.recoilSpeed ?? 3.4;
+  return [
+    {
+      stage: '水梯全高 H',
+      ok: Number.isFinite(H) && H > 0 && H <= 100,
+      expected: '0 < H ≤ 100 (m)',
+      actual: `${H}`,
+    },
+    {
+      stage: '空桶净重 m0',
+      ok: Number.isFinite(m0) && m0 > 0,
+      expected: 'm0 > 0 (kg)',
+      actual: `${m0}`,
+    },
+    {
+      stage: '初始水量 m_water',
+      ok: Number.isFinite(w0) && w0 >= 0,
+      expected: 'm_water ≥ 0 (kg)',
+      actual: `${w0}`,
+    },
+    {
+      stage: '神簧反冲速度 v_recoil',
+      ok: Number.isFinite(recoil) && recoil > 0 && recoil <= 50,
+      expected: '0 < v_recoil ≤ 50 (m/s)',
+      actual: `${recoil}`,
+    },
+  ];
+}
+
 export class AltarWaterLiftEngine {
   // 几何与物理常量
   readonly H: number;           // 基准全高 (m)
@@ -59,6 +118,17 @@ export class AltarWaterLiftEngine {
     initialWater?: number;
     recoilSpeed?: number;
   }) {
+    // #5 · 参数越界自检：越界即打印「哪一环/期望/实际」并拒绝建场（受控失败）。
+    const failed = checkWaterLiftParams(options).filter((c) => !c.ok);
+    if (failed.length > 0) {
+      for (const c of failed) {
+        console.error(`[物理自检] 环节=${c.stage} 期望=${c.expected} 实际=${c.actual} 判定=失败`);
+      }
+      throw new Error(
+        `AltarWaterLiftEngine 参数越界（${failed.map((c) => c.stage).join('、')}）：水梯拒绝在越界参数下建场。`
+      );
+    }
+
     this.H = options?.height ?? 7.0;
     this.m0 = options?.bucketMass ?? 5.0;
     this.mRope = 1.2;
