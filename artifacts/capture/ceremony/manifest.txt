@@ -1,0 +1,42 @@
+# 华夏祭坛 · #10 幕次取景取证清单（C 组）
+生成时间(UTC): 2026-09-18T10:23:19.145Z
+HEAD: 0f2451530a3a12377265d78321e186a1860b442a
+视口: 1280×800 · 采样速率: 64x · 主路径: SwiftShader 软栅格
+
+## 关键秒截图（PNG 不入库，仅记录探针）
+- t=90s (actual 90.2s) ceremony-t0090.png sha256=9eec21e8d7e3befa… nonBlack=0.00495 meanLum=0.25
+  pose: {"x":55.27627576632318,"y":43.0124999588478,"z":48.650029872752775,"tx":0,"ty":9.012499958847798,"tz":0,"fov":43.995833347050734}
+- t=600s (actual 600.08s) ceremony-t0600.png sha256=28e30453fc81dcea… nonBlack=0.16415 meanLum=4.90
+  pose: {"x":-39.98708903794926,"y":54.00298214277856,"z":-43.375810169688705,"tx":0,"ty":16.501677455312944,"tz":0,"fov":41.49944084822902}
+- t=1200s (actual 1200.21s) ceremony-t1200.png sha256=afe7e2cec6317ce3… nonBlack=0.15529 meanLum=5.79
+  pose: {"x":48.57763595634772,"y":50.93681339585768,"z":6.027745007177353,"tx":0,"ty":16.574725358343073,"tz":0,"fov":42.21263732082846}
+- t=1600s (actual 1600.23s) ceremony-t1600.png sha256=f8f5c6f6d167c176… nonBlack=0.22265 meanLum=6.50
+  pose: {"x":-35.18106758053268,"y":28.82891757003284,"z":-49.025190911178356,"tx":0,"ty":13.22810990662288,"tz":0,"fov":44.94297252334428}
+- t=1760s (actual 1760s) ceremony-silence-1760.png sha256=4c71287ff6847090… nonBlack=0.00448 meanLum=0.24
+  pose: {"x":-61.86490183821795,"y":26,"z":-22.99421493653691,"tx":0,"ty":17,"tz":0,"fov":44}
+- t=1799s (actual 1799s) ceremony-silence-1799.png sha256=4c71287ff6847090… nonBlack=0.00448 meanLum=0.24
+  pose: {"x":-61.86490183821795,"y":26,"z":-22.99421493653691,"tx":0,"ty":17,"tz":0,"fov":44}
+
+## C-4 真跑采样（rate=64）
+- 目标 90s → t=90.45 Δpos=0.000000 容差=0.000001 ✓
+- 目标 600s → t=600.14 Δpos=0.000000 容差=0.000001 ✓
+- 目标 1200s → t=1201.74 Δpos=0.000000 容差=0.000001 ✓
+- 目标 1600s → t=1601.74 Δpos=0.000000 容差=0.000001 ✓
+- 目标 1780s → t=1780.94 Δpos=0.000000 容差=0.000001 ✓
+
+## 硬断言
+- [✓] C3.history-independent 历史无关：两次到访（600 → 1799 → 600）实拍位姿均逐位落在同一条确定性轨迹 — 到访1 t=600.119 Δpos=0.0e+0 Δfov=0.0e+0；到访2 t=600.200 Δpos=7.1e-15 Δfov=0.0e+0
+- [✓] C5.frames-differ 画面确实在动：4 张关键秒截图两两不同（6/6 对） — 无重复对
+- [✓] C6.silence-frozen silence 全窗静止：1760s vs 1799s — 强口径：两帧 sha256 逐位相同
+- [✓] C4.frame-rate-independent 帧率无关：rate=64 真跑 5 个幕内点实拍位姿 ≈ ceremonyPoseAt(t) — t=90.5 Δpos=7.1e-15≤1.0e-6✓ t=600.1 Δpos=0.0e+0≤1.0e-6✓ t=1201.7 Δpos=0.0e+0≤1.0e-6✓ t=1601.7 Δpos=0.0e+0≤1.0e-6✓ t=1780.9 Δpos=0.0e+0≤1.0e-6✓
+- [✓] C2.no-webgl-ready C-2 禁 WebGL：capture harness 就绪（tier=none 检测生效） — __altarReady=true
+- [✓] C2.no-canvas C-2 禁 WebGL：无画布（不建 3D） — canvas 在场=false
+- [✓] C2.pageerror-zero C-2 禁 WebGL：无未捕获异常（取景空转不抛错） — pageerror=0
+- [✓] C2.console-error-zero C-2 禁 WebGL：console error = 0 — console.error=0
+- [✓] C2.clock-alive C-2 禁 WebGL：时间轴仍在推进（#4 只停画不停时钟） — time 0.05 → 2.06
+- [✓] C2.pose-finite C-2 禁 WebGL：实拍位姿全有限（空转写位姿安全） — {"x":48.00023776151278,"y":40.00008846355108,"z":57.999740340515245,"tx":0,"ty":
+- [✓] C1.pageerror-zero C-1 主路径：无未捕获异常 — pageerror=0
+- [✓] C1.console-error-zero C-1 主路径：console error = 0 — console.error=0
+- [✓] C7.audit-entry-pass C-7 公共入口审计门禁 PASS（camera 等暴露词命中 = 0） — exit=0
+
+结论: PASS
