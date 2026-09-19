@@ -182,12 +182,12 @@ export const SEAL_TRANSMISSION_PRESET = {
   ior: 1.58
 } as const;
 
-/** 黄金补角：真金属，metalness 拉满 */
+/** 金镶玉补角：旧金/氧化后的低饱和金，不是新铸亮金。 */
 export const SEAL_GOLD_MATERIAL = {
-  color: 0xffd27a,
-  metalness: 1.0,
-  roughness: 0.18,
-  envMapIntensity: 1.2
+  color: 0xb58a48,
+  metalness: 0.88,
+  roughness: 0.42,
+  envMapIntensity: 0.72
 } as const;
 
 /** 燕尾槽（阴）：暗、不反光，用来衬金角的亮 */
