@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { SEAL_GOLD_MATERIAL } from './data/sealSpec';
 
 const MODEL_URL = '/models/imperial_seal.glb';
 
@@ -60,6 +61,9 @@ const RelicViewer: React.FC = () => {
           if (mesh.isMesh) {
             mesh.castShadow = false;
             mesh.receiveShadow = false;
+            if (mesh.name.toLowerCase().includes('gold')) {
+              mesh.material = new THREE.MeshStandardMaterial(SEAL_GOLD_MATERIAL);
+            }
           }
         });
         scene.add(model);
