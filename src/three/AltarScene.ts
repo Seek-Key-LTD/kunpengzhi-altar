@@ -6,10 +6,6 @@ import {
   AltarRole,
   AltarCapabilities,
   GUEST_ROUTINES,
-  GUEST_ROUTINE_SECONDS,
-  ROLE_CAPABILITIES,
-  CAMERA_SAFETY_BY_ROLE,
-  CAMERA_DISTANCE_BY_ROLE,
   SEAT_ID_MAX,
   isSeatId,
   WUJI_REVEAL_SEC,
@@ -48,6 +44,7 @@ import {
   RABBIT_HOLE_SEATS
 } from '../data/altarGeometry';
 import { ImperialSealObject } from './relic/ImperialSealObject';
+import { CameraRig } from './CameraRig';
 import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
@@ -103,6 +100,7 @@ export class AltarScene {
   /** #7：无画模式下为 null —— 没有 WebGL 就没有渲染器，也就不该有 canvas。 */
   private renderer: THREE.WebGLRenderer | null = null;
   private controls: OrbitControls;
+  private rig!: CameraRig;
   private animationFrameId: number | null = null;
 
   // ── #7 · 能力三态 / 无画模式 ───────────────────────────────────────
@@ -144,7 +142,6 @@ export class AltarScene {
    * 非 null 时 animate 用它渲一帧，供无头取证出「俯视正交截图」；
    * 公共/导演运行时不设，故对生产零影响。
    */
-  private orthoTopdownCamera: THREE.OrthographicCamera | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
   private sunLight: THREE.DirectionalLight | null = null;
   private rimLight: THREE.DirectionalLight | null = null;
@@ -229,23 +226,6 @@ export class AltarScene {
   // State
   private events: SpiralEvent[] = [];
   private activeSeatId: number | null = 1;
-  private cameraMode: CameraMode = 'orbit';
-  /** 身份：默认游客。未认证即游客，不是"默认给自由" */
-  private role: AltarRole = 'guest';
-  /** 当前身份的能力表 —— 权限判定一律查它，不直接判等角色 */
-  private capabilities: AltarCapabilities = ROLE_CAPABILITIES.guest;
-  /** 当前身份的相机安全边界（游客档与原硬编码同值） */
-  private cameraSafety = CAMERA_SAFETY_BY_ROLE.guest;
-  /** 游客 routine：只有点击/触摸才会启动，绝不后台自动巡游。 */
-  private guestRoutineIndex = 0;
-  private guestRoutineTimer = 0;
-  private guestRoutinePlaying = false;
-  /** Rabbit Hole 不是一个切镜头标签；它是一段由入口 40 穿到出口 28 的实走镜头。 */
-  private rabbitHoleTourActive = false;
-  /** 认证者的 WASD/QE 飞行状态；访客永远不会写入它。 */
-  private pressedKeys = new Set<string>();
-  /** 上一帧的合法相机位（安全边界第 4 条：异常时拉回） */
-  private lastSafeCameraPos = new THREE.Vector3(48, 40, 58);
   private onSeatSelect?: (seatId: number) => void;
   private onLanternSelect?: (chapterIndex: number) => void;
   private onInteriorPoemSelect?: (seasonId: string) => void;
@@ -265,10 +245,6 @@ export class AltarScene {
   private currentProgress = 1;
   private isAutoPatrol = false;
 
-  // Smooth Camera Target
-  private targetCameraPos = new THREE.Vector3(48, 40, 58);
-  private targetControlsTarget = new THREE.Vector3(0, 6, 0);
-  private isCameraTransitioning = false;
 
   constructor(
     container: HTMLElement,
@@ -344,6 +320,7 @@ export class AltarScene {
       this.renderer ? this.renderer.domElement : document.createElement('canvas')
     );
     this.controls.enableDamping = true;
+    this.rig = new CameraRig(this.camera, this.controls);
     this.controls.dampingFactor = 0.05;
     this.controls.minDistance = 0.8;
     this.controls.maxDistance = 220;
@@ -1660,15 +1637,15 @@ export class AltarScene {
 
   private onPointerDown = (event: MouseEvent) => {
     // 访客不是自动播放的被动摄像机：每次鼠标/触摸才唤起一条固定路线。
-    if (this.role === 'guest') {
+    if (this.rig.role === 'guest') {
       this.activateGuestRoutine();
       return;
     }
-    const caps = this.capabilities;
+    const caps = this.rig.caps;
     if (!caps.freeCamera) return;
 
     // 用户一按鼠标，立刻放弃自动机位过渡，别跟人抢镜头
-    this.isCameraTransitioning = false;
+    this.rig.transitioning = false;
 
     const rect = this.container.getBoundingClientRect();
     this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -1740,7 +1717,7 @@ export class AltarScene {
   };
 
   private onKeyDown = (event: KeyboardEvent) => {
-    if (!this.capabilities.freeCamera) return;
+    if (!this.rig.caps.freeCamera) return;
     const key = event.key.toLowerCase();
     if (key === 'r') {
       this.resetCamera();
@@ -1748,15 +1725,15 @@ export class AltarScene {
       return;
     }
     if (!['w', 'a', 's', 'd', 'q', 'e', 'shift'].includes(key)) return;
-    this.pressedKeys.add(key);
+    this.rig.pressedKeys.add(key);
     event.preventDefault();
   };
 
   private onKeyUp = (event: KeyboardEvent) => {
-    this.pressedKeys.delete(event.key.toLowerCase());
+    this.rig.pressedKeys.delete(event.key.toLowerCase());
   };
 
-  private onWindowBlur = () => this.pressedKeys.clear();
+  private onWindowBlur = () => this.rig.pressedKeys.clear();
 
   public setActiveSeat(seatId: number) {
     this.activeSeatId = seatId;
@@ -1767,13 +1744,13 @@ export class AltarScene {
       group.scale.setScalar(isActive ? 1.1 : 0.65);
     });
 
-    if (this.cameraMode === 'patrol') {
+    if (this.rig.cameraMode === 'patrol') {
       const ev = this.events.find(e => e.seat_id === seatId);
       if (ev) {
         const targetPos = this.getSeatWorldPos(ev);
-        this.targetControlsTarget.copy(targetPos);
-        this.targetCameraPos.set(targetPos.x + 6, targetPos.y + 5, targetPos.z + 6);
-        this.isCameraTransitioning = true;
+        this.rig.targetLookAt.copy(targetPos);
+        this.rig.targetPos.set(targetPos.x + 6, targetPos.y + 5, targetPos.z + 6);
+        this.rig.transitioning = true;
       }
     }
   }
@@ -1789,8 +1766,8 @@ export class AltarScene {
     this.isAutoPatrol = false;
     // 游客 routine 的残留倒计时归零：进坛后不再有任何机位硬切。
     // 公共页唯一的镜头运动是 animate() 第 0 段的连续环绕（不受 ritualMode 影响）。
-    this.guestRoutineTimer = 0;
-    this.guestRoutineIndex = 0;
+    this.rig.guestTimer = 0;
+    this.rig.guestIndex = 0;
     this.controls.enabled = false;
     this.scene.background = new THREE.Color(0x000000);
     const isDark = phase === 'abyss' || phase === 'silence';
@@ -2233,7 +2210,7 @@ export class AltarScene {
   }
 
   public focusTeaLantern(chapterIndex: number) {
-    this.cameraMode = 'outer_lanterns';
+    this.rig.cameraMode = 'outer_lanterns';
     this.activeLanternChapter = Math.max(0, Math.min(15, chapterIndex - 1));
     const angle = ((chapterIndex - 1) / 16) * Math.PI * 2;
     const lanternRadius = 23.5;
@@ -2249,9 +2226,9 @@ export class AltarScene {
     const camX = Math.sin(effectiveAngle) * (lanternRadius + camDist);
     const camZ = Math.cos(effectiveAngle) * (lanternRadius + camDist);
 
-    this.targetCameraPos.set(camX, lanternHeight + 0.5, camZ);
-    this.targetControlsTarget.set(x, lanternHeight, z);
-    this.isCameraTransitioning = true;
+    this.rig.targetPos.set(camX, lanternHeight + 0.5, camZ);
+    this.rig.targetLookAt.set(x, lanternHeight, z);
+    this.rig.transitioning = true;
   }
 
   /** 朗诵开始时把镜头锁到当前扇面；章节结束时由播放器推进到下一面。 */
@@ -2278,18 +2255,18 @@ export class AltarScene {
 
   /** 每帧重算当前扇面的世界机位，避免外环转动时镜头脱离门帘。 */
   private syncLanternCameraRail(): void {
-    if (!this.lanternChoreographyActive || this.cameraMode !== 'outer_lanterns') return;
+    if (!this.lanternChoreographyActive || this.rig.cameraMode !== 'outer_lanterns') return;
     const baseAngle = (this.activeLanternChapter / 16) * Math.PI * 2;
     const angle = baseAngle + this.lanternsGroup.rotation.y;
     const panelRadius = 23.5;
     const cameraRadius = 30.5;
-    this.targetCameraPos.set(Math.sin(angle) * cameraRadius, 3.1 + this.lanternsGroup.position.y, Math.cos(angle) * cameraRadius);
-    this.targetControlsTarget.set(Math.sin(angle) * panelRadius, 2.6 + this.lanternsGroup.position.y, Math.cos(angle) * panelRadius);
-    this.isCameraTransitioning = true;
+    this.rig.targetPos.set(Math.sin(angle) * cameraRadius, 3.1 + this.lanternsGroup.position.y, Math.cos(angle) * cameraRadius);
+    this.rig.targetLookAt.set(Math.sin(angle) * panelRadius, 2.6 + this.lanternsGroup.position.y, Math.cos(angle) * panelRadius);
+    this.rig.transitioning = true;
   }
 
   public focusInteriorPoem(seasonId: string) {
-    this.cameraMode = 'interior';
+    this.rig.cameraMode = 'interior';
     const slab = this.interiorStelae.get(seasonId);
     if (!slab) return;
 
@@ -2303,9 +2280,9 @@ export class AltarScene {
     const camPos = p.clone().add(facing.multiplyScalar(5.5));
     camPos.y = 2.2;
 
-    this.targetCameraPos.copy(camPos);
-    this.targetControlsTarget.copy(p);
-    this.isCameraTransitioning = true;
+    this.rig.targetPos.copy(camPos);
+    this.rig.targetLookAt.copy(p);
+    this.rig.transitioning = true;
   }
 
   /**
@@ -2331,12 +2308,12 @@ export class AltarScene {
    * 见 docs/身份与相机权限规范.md §4。
    */
   public setRole(role: AltarRole) {
-    this.role = role;
+    this.rig.role = role;
     this.applyRole();
   }
 
   public getRole(): AltarRole {
-    return this.role;
+    return this.rig.role;
   }
 
   /**
@@ -2347,80 +2324,59 @@ export class AltarScene {
    * controls / 相机边界 / 自动巡礼上。
    */
   private applyRole() {
-    const isGuest = this.role === 'guest';
-    const caps = ROLE_CAPABILITIES[this.role];
-    this.capabilities = caps;
-    this.cameraSafety = CAMERA_SAFETY_BY_ROLE[this.role];
-
-    this.controls.enabled = caps.freeCamera;
-    this.controls.enableRotate = caps.freeCamera;
-    this.controls.enableZoom = caps.freeCamera;
-    this.controls.enablePan = caps.freeCamera;
-
-    // 推拉范围也角色化：玉玺 macro 特写真正卡人的是 minDistance，不是安全边界
-    const distance = CAMERA_DISTANCE_BY_ROLE[this.role];
-    this.controls.minDistance = distance.min;
-    this.controls.maxDistance = distance.max;
-
-    if (isGuest) {
-      this.guestRoutineIndex = 0;
-      this.guestRoutineTimer = 0;
-      this.guestRoutinePlaying = false;
-    } else {
-      // 导演/认证自己掌机，游客 routine 不许抢镜头。
-      this.isAutoPatrol = false;
-    }
+    this.rig.setRole(this.rig.role);
+    if (this.rig.role !== 'guest') this.isAutoPatrol = false;
   }
 
   public getCapabilities(): AltarCapabilities {
-    return this.capabilities;
+    return this.rig.caps;
   }
 
   public setCameraMode(mode: CameraMode) {
-    this.cameraMode = mode;
-    this.isCameraTransitioning = true;
+    this.rig.cameraMode = mode;
+    this.rig.transitioning = true;
 
     if (mode === 'rabbit_hole') {
       // 从 40 号入口起步；真正的穿行由 updateRabbitHoleTour 连续完成，不能硬切进墙里。
-      this.targetCameraPos.set(-CELL * 3 - 2.2, BRICK * 1.5, 0);
-      this.targetControlsTarget.set(-CELL * 3, BRICK * 1.5, 0);
+      this.rig.targetPos.set(-CELL * 3 - 2.2, BRICK * 1.5, 0);
+      this.rig.targetLookAt.set(-CELL * 3, BRICK * 1.5, 0);
     } else if (mode === 'yin') {
       // 入阴：进到中空方锥的下层空腔（5×5×3 单位），略抬头看北壁的青玉碑
-      this.targetCameraPos.set(0, 1.8, 2.5);
-      this.targetControlsTarget.set(0, 2.6, -7.5);
+      this.rig.targetPos.set(0, 1.8, 2.5);
+      this.rig.targetLookAt.set(0, 2.6, -7.5);
     } else if (mode === 'interior') {
-      this.targetCameraPos.set(0, 16, 18);
-      this.targetControlsTarget.set(0, 6, 0);
+      this.rig.targetPos.set(0, 16, 18);
+      this.rig.targetLookAt.set(0, 6, 0);
     } else if (mode === 'outer_lanterns') {
-      this.targetCameraPos.set(0, 6.5, 30.5);
-      this.targetControlsTarget.set(0, 3.5, 23.5);
+      this.rig.targetPos.set(0, 6.5, 30.5);
+      this.rig.targetLookAt.set(0, 3.5, 23.5);
     } else if (mode === 'topdown') {
-      this.targetCameraPos.set(0, 78, 0.1);
-      this.targetControlsTarget.set(0, 0, 0);
+      this.rig.targetPos.set(0, 78, 0.1);
+      this.rig.targetLookAt.set(0, 0, 0);
     } else if (mode === 'fountain') {
-      this.targetCameraPos.set(0, 26, 20);
-      this.targetControlsTarget.set(0, 14, 0);
+      this.rig.targetPos.set(0, 26, 20);
+      this.rig.targetLookAt.set(0, 14, 0);
     } else if (mode === 'cinematic') {
-      this.targetCameraPos.set(52, 26, 52);
-      this.targetControlsTarget.set(0, 5, 0);
+      this.rig.targetPos.set(52, 26, 52);
+      this.rig.targetLookAt.set(0, 5, 0);
     } else if (mode === 'orbit') {
-      this.targetCameraPos.set(48, 40, 58);
-      this.targetControlsTarget.set(0, 6, 0);
+      this.rig.targetPos.set(48, 40, 58);
+      this.rig.targetLookAt.set(0, 6, 0);
     } else if (mode === 'patrol') {
       // 水道巡礼：基线机位 —— 坛体东南上方的外部视角，绝不入壳。
       // 逐席的真实目标由 setActiveSeat() 在该模式下刷新（见其上 patrol 分支）。
-      this.targetCameraPos.set(46, 24, 46);
-      this.targetControlsTarget.set(0, 5, 0);
+      this.rig.targetPos.set(46, 24, 46);
+      this.rig.targetLookAt.set(0, 5, 0);
     } else if (mode === 'relic') {
       // 玉玺机位：数值的唯一真源在玉玺 rig（sealSpec.SEAL_CAMERA_POSES），
       // 这里不复制一份常量，避免两边漂移。rig 未挂载时退回直算。
       const pose = this.relicRig?.getPose('overview');
       if (pose) {
-        this.targetCameraPos.copy(pose.position);
-        this.targetControlsTarget.copy(pose.target);
+        this.rig.targetPos.copy(pose.position);
+        this.rig.targetLookAt.copy(pose.target);
       } else {
-        this.targetCameraPos.set(6.2, SEAL_HOVER_Y + 3.4, 8.6);
-        this.targetControlsTarget.set(0, SEAL_HOVER_Y, 0);
+        this.rig.targetPos.set(6.2, SEAL_HOVER_Y + 3.4, 8.6);
+        this.rig.targetLookAt.set(0, SEAL_HOVER_Y, 0);
       }
     }
   }
@@ -2431,12 +2387,12 @@ export class AltarScene {
     const target = new THREE.Vector3(0, 6, 0);
     this.camera.position.copy(position);
     this.controls.target.copy(target);
-    this.targetCameraPos.copy(position);
-    this.targetControlsTarget.copy(target);
-    this.lastSafeCameraPos.copy(position);
-    this.cameraMode = 'orbit';
-    this.isCameraTransitioning = false;
-    this.pressedKeys.clear();
+    this.rig.targetPos.copy(position);
+    this.rig.targetLookAt.copy(target);
+    this.rig.lastSafe.copy(position);
+    this.rig.cameraMode = 'orbit';
+    this.rig.transitioning = false;
+    this.rig.pressedKeys.clear();
     this.controls.update();
   }
 
@@ -2465,23 +2421,23 @@ export class AltarScene {
     cam.lookAt(0, 0, 0);
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld(true);
-    this.orthoTopdownCamera = cam;
+    this.rig.orthoTopdownCamera = cam;
     return cam;
   }
 
   /** #5 · 关闭正交取证相机，主循环回到透视相机。 */
   public clearOrthoTopdown(): void {
-    this.orthoTopdownCamera = null;
+    this.rig.orthoTopdownCamera = null;
   }
 
   /** 鼠标/触摸一次只唤起一条游客既定路线，播放完停在当前位置。 */
   private activateGuestRoutine(): void {
     // 固定黄金机位（拉格朗日点）：飞过去即停死，不连续钻洞、不后台巡游。
-    const routine = GUEST_ROUTINES[this.guestRoutineIndex];
-    this.guestRoutineIndex = (this.guestRoutineIndex + 1) % GUEST_ROUTINES.length;
-    this.guestRoutineTimer = 0;
-    this.guestRoutinePlaying = false;
-    this.rabbitHoleTourActive = false;
+    const routine = GUEST_ROUTINES[this.rig.guestIndex];
+    this.rig.guestIndex = (this.rig.guestIndex + 1) % GUEST_ROUTINES.length;
+    this.rig.guestTimer = 0;
+    this.rig.guestPlaying = false;
+    this.rig.rabbitActive = false;
     this.setCameraMode(routine);
   }
 
@@ -2489,40 +2445,7 @@ export class AltarScene {
    * 访客的缩放路线：40 口入、28 口出。相机沿洞心移动而非 teleport，
    * 所以洞壁的诗句有阅读时间，也不会发生“镜头穿 Cube”的假象。
    */
-  private updateRabbitHoleTour(progress: number): void {
-    const startX = -CELL * 3 - 1.7;
-    const endX = CELL * 3 + 1.7;
-    const eased = THREE.MathUtils.smootherstep(progress, 0, 1);
-    const x = THREE.MathUtils.lerp(startX, endX, eased);
-    const y = BRICK * 1.5;
-    this.camera.position.set(x, y, 0);
-    this.controls.target.set(Math.min(x + 2.1, endX), y, 0);
-    this.isCameraTransitioning = false;
-  }
 
-  /** 认证者的鼠标看向 + WASD 平面飞行，Q/E 升降，Shift 加速。 */
-  private updateFreeFlight(dt: number): void {
-    if (!this.capabilities.freeCamera || this.pressedKeys.size === 0) return;
-    const forward = new THREE.Vector3();
-    this.camera.getWorldDirection(forward);
-    forward.y = 0;
-    if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
-    forward.normalize();
-    const right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize();
-    const delta = new THREE.Vector3();
-    if (this.pressedKeys.has('w')) delta.add(forward);
-    if (this.pressedKeys.has('s')) delta.sub(forward);
-    if (this.pressedKeys.has('d')) delta.add(right);
-    if (this.pressedKeys.has('a')) delta.sub(right);
-    if (this.pressedKeys.has('e')) delta.y += 1;
-    if (this.pressedKeys.has('q')) delta.y -= 1;
-    if (delta.lengthSq() === 0) return;
-    const speed = this.pressedKeys.has('shift') ? 24 : 8;
-    delta.normalize().multiplyScalar(speed * dt);
-    this.camera.position.add(delta);
-    this.controls.target.add(delta);
-    this.isCameraTransitioning = false;
-  }
 
   public setAutoPatrol(patrol: boolean) {
     this.isAutoPatrol = patrol;
@@ -2547,47 +2470,11 @@ export class AltarScene {
     // 0.2 雾中一句：由时间轴结算后刷新字幕（至多一句）。
     this.syncFogCaption();
 
-    // 0.1 游客路线只由 pointerdown 唤起，绝不在后台自顾自切换。
-    if (this.role === 'guest' && this.guestRoutinePlaying) {
-      this.guestRoutineTimer += dt;
-      if (this.rabbitHoleTourActive) {
-        this.updateRabbitHoleTour(this.guestRoutineTimer / GUEST_ROUTINE_SECONDS);
-      }
-      if (this.guestRoutineTimer >= GUEST_ROUTINE_SECONDS) {
-        this.guestRoutinePlaying = false;
-        this.rabbitHoleTourActive = false;
-      }
-    }
-
     // 0.15 朗诵门帘轨道：目标机位始终跟随当前扇面的世界角度。
     this.syncLanternCameraRail();
 
-    // 1. Smooth Camera Transition
-    if (this.isCameraTransitioning) {
-      this.camera.position.lerp(this.targetCameraPos, 0.05);
-      this.controls.target.lerp(this.targetControlsTarget, 0.05);
-      if (this.camera.position.distanceTo(this.targetCameraPos) < 0.1) {
-        this.isCameraTransitioning = false;
-      }
-    }
-
-    // 1.5 安全边界（见 docs/身份与相机权限规范.md §3.2）
-    //     自由度高 = 出错面大；这几条不是限制自由，是防止自由变成故障。
-    //     阈值已角色化（CAMERA_SAFETY_BY_ROLE）：游客档 = 原硬编码 0.3 / 120，
-    //     一个数字都没动；导演档放宽，否则燕尾槽 macro 特写会被误判拉回。
-    const p = this.camera.position;
-    const finite = Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
-    const tooLow = p.y < this.cameraSafety.minY;
-    const tooFar = p.length() > this.cameraSafety.maxRadius;
-    if (!finite || tooLow || tooFar) {
-      this.camera.position.copy(this.lastSafeCameraPos);
-      this.isCameraTransitioning = false;
-    } else {
-      this.lastSafeCameraPos.copy(p);
-    }
-
-    this.controls.update();
-    this.updateFreeFlight(dt);
+    // 1. 相机子系统（过渡插值 / 安全边界 / 游客机位 / WASD / controls.update）统一由 CameraRig 推进。
+    this.rig.update(dt);
 
     // 2. 外环 16 茶灯的回转改由 RFC-008 引擎驱动（见第 9b 段），此处不再手动累加。
 
@@ -2700,7 +2587,7 @@ export class AltarScene {
     // #7：无画模式 / 上下文已丢失 ⇒ **不画**。只跳过这一次 draw call，
     //     上面的时间轴推进、字幕刷新、音频包络**一字未动**（#4 不变量）。
     if (this.renderer && !this.contextLost) {
-      this.renderer.render(this.scene, this.orthoTopdownCamera ?? this.camera);
+      this.renderer.render(this.scene, this.rig.orthoTopdownCamera ?? this.camera);
     }
   };
 
