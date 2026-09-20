@@ -24,6 +24,7 @@ const SUITES = [
   ['无极天听·抛物面焦距与飞碟布置', 'scripts/verify-wuji-geometry.mjs'],
   ['仪式幕次→视觉显隐纯映射', 'scripts/verify-ceremony-visibility.mjs'],
   ['走马灯章节→机位纯几何', 'scripts/verify-lantern-camera.mjs'],
+  ['导演台机位模式纯数据表', 'scripts/verify-camera-modes.mjs'],
   ['49 半音 C2→C6（Tone）', 'scripts/assert-semitones.mjs'],
   ['7×7 正交投影', 'scripts/assert-ulam-projection.mjs'],
   ['五阶段音频包络（#4）', 'scripts/verify-audio-envelope.mjs'],

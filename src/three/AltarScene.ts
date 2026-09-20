@@ -57,6 +57,7 @@ import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import { saucerLayout } from '../data/wujiGeometry';
 import { ceremonyVisibility } from '../data/ceremonyVisibility';
 import { lanternCameraPose } from '../data/lanternCamera';
+import { CAMERA_MODE_POSES } from '../data/cameraModes';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -2160,37 +2161,10 @@ export class AltarScene {
     this.rig.cameraMode = mode;
     this.rig.transitioning = true;
 
-    if (mode === 'rabbit_hole') {
-      // 从 40 号入口起步；真正的穿行由 updateRabbitHoleTour 连续完成，不能硬切进墙里。
-      this.rig.targetPos.set(-CELL * 3 - 2.2, BRICK * 1.5, 0);
-      this.rig.targetLookAt.set(-CELL * 3, BRICK * 1.5, 0);
-    } else if (mode === 'yin') {
-      // 入阴：进到中空方锥的下层空腔（5×5×3 单位），略抬头看北壁的青玉碑
-      this.rig.targetPos.set(0, 1.8, 2.5);
-      this.rig.targetLookAt.set(0, 2.6, -7.5);
-    } else if (mode === 'interior') {
-      this.rig.targetPos.set(0, 16, 18);
-      this.rig.targetLookAt.set(0, 6, 0);
-    } else if (mode === 'outer_lanterns') {
-      this.rig.targetPos.set(0, 6.5, 30.5);
-      this.rig.targetLookAt.set(0, 3.5, 23.5);
-    } else if (mode === 'topdown') {
-      this.rig.targetPos.set(0, 78, 0.1);
-      this.rig.targetLookAt.set(0, 0, 0);
-    } else if (mode === 'fountain') {
-      this.rig.targetPos.set(0, 26, 20);
-      this.rig.targetLookAt.set(0, 14, 0);
-    } else if (mode === 'cinematic') {
-      this.rig.targetPos.set(52, 26, 52);
-      this.rig.targetLookAt.set(0, 5, 0);
-    } else if (mode === 'orbit') {
-      this.rig.targetPos.set(48, 40, 58);
-      this.rig.targetLookAt.set(0, 6, 0);
-    } else if (mode === 'patrol') {
-      // 水道巡礼：基线机位 —— 坛体东南上方的外部视角，绝不入壳。
-      // 逐席的真实目标由 setActiveSeat() 在该模式下刷新（见其上 patrol 分支）。
-      this.rig.targetPos.set(46, 24, 46);
-      this.rig.targetLookAt.set(0, 5, 0);
+    const pose = CAMERA_MODE_POSES[mode as string];
+    if (pose) {
+      this.rig.targetPos.set(...pose.pos);
+      this.rig.targetLookAt.set(...pose.lookAt);
     } else if (mode === 'relic') {
       // 玉玺机位：数值的唯一真源在玉玺 rig（sealSpec.SEAL_CAMERA_POSES），
       // 这里不复制一份常量，避免两边漂移。rig 未挂载时退回直算。
