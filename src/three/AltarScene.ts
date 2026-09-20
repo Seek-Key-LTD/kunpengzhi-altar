@@ -36,8 +36,6 @@ import {
   SCORPION_BORE_RADIUS,
   SCORPION_CASING_RADIUS,
   scorpionWaterElevation,
-  RIVER_AXIS_SEATS,
-  RIVER_GRAVITY_SEATS,
   RABBIT_HOLE_SEATS
 } from '../data/altarGeometry';
 import { ImperialSealObject } from './relic/ImperialSealObject';
@@ -64,6 +62,7 @@ import { buildSurroundingAtmosphere } from './AtmosphereBuilder';
 import { buildStarships } from './StarshipBuilder';
 import { buildPlinth } from './PlinthBuilder';
 import { buildSeatTrails } from './SeatTrailsBuilder';
+import { buildRiverAxis } from './RiverAxisBuilder';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -982,36 +981,7 @@ export class AltarScene {
    * 1→4→15→34 是阴腔内的重力支路。二者都不得露到阳 Cube 表面。
    */
   private buildRiverAxis() {
-    const bySeat = new Map(this.events.map((event) => [event.seat_id, event]));
-    const axis = RIVER_AXIS_SEATS.map((seatId) => bySeat.get(seatId)).filter((event): event is SpiralEvent => Boolean(event));
-    if (axis.length !== RIVER_AXIS_SEATS.length) {
-      throw new Error('Ulam 河轴缺席：46→23→8→1→4→15→34 必须完整存在');
-    }
-
-    const liftPoints = axis.slice(0, 4).map((event) => new THREE.Vector3(
-      event.grid_x * CELL,
-      scorpionWaterElevation(event.seat_id),
-      event.grid_z * CELL
-    ));
-    const liftCurve = new THREE.CatmullRomCurve3(liftPoints, false, 'centripetal');
-    const liftPipe = new THREE.Mesh(
-      new THREE.TubeGeometry(liftCurve, 48, 0.16, 10, false),
-      new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.34, metalness: 0.82 })
-    );
-    liftPipe.userData = { waterway: '46-23-8-1', mode: 'counterweight-lift' };
-    this.waterworksGroup.add(liftPipe);
-
-    const gravityPoints = RIVER_GRAVITY_SEATS.map((seatId) => {
-      const event = bySeat.get(seatId)!;
-      return new THREE.Vector3(event.grid_x * CELL, scorpionWaterElevation(event.seat_id), event.grid_z * CELL);
-    });
-    const gravityCurve = new THREE.CatmullRomCurve3(gravityPoints, false, 'centripetal');
-    const bed = new THREE.Mesh(
-      new THREE.TubeGeometry(gravityCurve, 36, CELL * 0.18, 10, false),
-      new THREE.MeshStandardMaterial({ color: 0x0f3d56, roughness: 0.12, metalness: 0.72 })
-    );
-    bed.userData = { waterway: '1-4-15-34', mode: 'gravity' };
-    this.waterworksGroup.add(bed);
+    buildRiverAxis(this.events, this.waterworksGroup);
   }
 
   /**
