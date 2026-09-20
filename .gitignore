@@ -8,3 +8,9 @@ dist/
 artifacts/capture/**/*.png
 artifacts/capture/**/*.jpg
 artifacts/capture/**/*.jpeg
+
+# T9 全程录屏与帧样张（体积大，不入库，仅本地取证）
+artifacts/capture/record/video/
+artifacts/capture/record/frames/
+artifacts/capture/record-mobile/video/
+artifacts/capture/record-mobile/frames/

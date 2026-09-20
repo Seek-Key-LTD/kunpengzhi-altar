@@ -10,6 +10,7 @@
     "test:waterway": "node scripts/verify-scorpion-waterway.mjs",
     "test:wuji": "node scripts/verify-wuji-absorber.mjs",
     "test:ritual": "node scripts/verify-ritual-timeline.mjs",
+    "test:ceremony": "node scripts/verify-ceremony-view.mjs",
     "test:dragon": "node scripts/verify-dual-dragon.mjs",
     "test:audio": "node scripts/verify-audio-envelope.mjs",
     "test:physics": "node scripts/verify-physics-failure.mjs",
@@ -19,6 +20,8 @@
     "test:honor-isolation": "node scripts/verify-honor-isolation.mjs",
     "capture": "node tools/capture/capture.mjs",
     "verify:degrade": "node tools/capture/verify-webgl-degradation.mjs",
+    "capture:ceremony": "node tools/capture/verify-ceremony-view.mjs",
+    "record:full": "node tools/capture/record-full.mjs",
     "audit:entry": "node scripts/qa-audit-public-entry.mjs",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler pages deploy dist --project-name=kunpengzhi-altar"

@@ -13,6 +13,7 @@ import { AltarScene } from '../../src/three/AltarScene';
 import { INITIAL_SPIRAL_EVENTS } from '../../src/data/spiral_events';
 import { PYRAMID_HALF } from '../../src/data/altarGeometry';
 import { ritualPhaseAt, ritualLitSeatsAt, RITUAL_TOTAL_SEC } from '../../src/types/altar';
+import { detectWebglTier } from '../../src/three/webglCapability';
 import '../../src/index.css'; // 复用生产字幕样式（.ritual-caption），保证取真画面
 
 interface CaptureApi {
@@ -32,7 +33,20 @@ interface CaptureApi {
   orthoTopdown: (halfWidth?: number) => number;
   /** #5 · 关闭正交取证相机。 */
   clearOrtho: () => void;
+  /** #10 · 实拍位姿读数（真实 camera/controls/fov，非纯函数回显）。 */
+  pose: () => RitualPoseReadout;
   TOTAL: number;
+}
+
+/** #10 · 实拍位姿读出结构。 */
+interface RitualPoseReadout {
+  x: number;
+  y: number;
+  z: number;
+  tx: number;
+  ty: number;
+  tz: number;
+  fov: number;
 }
 
 declare global {
@@ -48,7 +62,11 @@ if (!container) {
   throw new Error('capture-root 容器未找到');
 }
 
-const altar = new AltarScene(container, INITIAL_SPIRAL_EVENTS);
+// #10 C-2：取证 harness 与 #7 同口径 —— 能力探测先行，禁 WebGL 启动时走 tier='none'
+// 无画档。同一条 1800s 时间轴照跑（#4 不变量：只停画、不停时钟），取景空转不抛错。
+const altar = new AltarScene(container, INITIAL_SPIRAL_EVENTS, undefined, undefined, undefined, {
+  tier: detectWebglTier()
+});
 // 导演档：公共仪式同一条 1800s 时间轴；速度/取景均按工程入口放开。
 altar.setRole('director');
 altar.startRitual();
@@ -61,6 +79,24 @@ window.__capture = {
   rate: () => altar.playbackRate,
   phaseAt: (sec: number) => ritualPhaseAt(sec),
   litSeatsAt: (sec: number) => ritualLitSeatsAt(sec),
+  // #10 实拍位姿读数：读的是**真实** camera/controls/fov（applyCeremonyView 每帧整写
+  // 后的落点），不是 ceremonyPoseAt 的纯函数回显 —— 这样 C-3/C-4 才有判别力。
+  // 私有成员经结构化视口读取，仅在本取证 harness 里，不进 dist、不打包进 App。
+  pose: () => {
+    const rig = altar as unknown as {
+      camera: { position: { x: number; y: number; z: number }; fov: number };
+      controls: { target: { x: number; y: number; z: number } };
+    };
+    return {
+      x: rig.camera.position.x,
+      y: rig.camera.position.y,
+      z: rig.camera.position.z,
+      tx: rig.controls.target.x,
+      ty: rig.controls.target.y,
+      tz: rig.controls.target.z,
+      fov: rig.camera.fov
+    };
+  },
   orthoTopdown: (halfWidth: number = PYRAMID_HALF) => {
     const cam = altar.setOrthoTopdown(halfWidth);
     return cam.top; // 半高（世界单位）—— 供驱动换算
