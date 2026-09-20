@@ -42,7 +42,7 @@ import { RitualClock } from './RitualClock';
 import { DualDragonRig } from './DualDragonRig';
 import { StarshipRig } from './StarshipRig';
 import { SeatLotusRig } from './SeatLotusRig';
-import { MechanicsRig, WATER_LIFT_Z, WATER_LIFT_BASE_Y, WATER_LIFT_PULLEY_Y, WATER_LIFT_SEP } from './MechanicsRig';
+import { MechanicsRig } from './MechanicsRig';
 import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
@@ -62,6 +62,7 @@ import { buildRiverAxis } from './RiverAxisBuilder';
 import { buildFrontBead } from './FrontBeadBuilder';
 import { buildScorpionWaterway } from './ScorpionWaterwayBuilder';
 import { buildRabbitHole } from './RabbitHoleBuilder';
+import { buildWaterLift } from './WaterLiftBuilder';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -649,122 +650,13 @@ export class AltarScene {
    * 占位 ≤ 2 CELL，不遮 49 席、不碰坛心玉玺。引擎世界 H=7.0 → 6 世界单位。
    */
   private buildWaterLift(): void {
-    const group = new THREE.Group();
-    group.name = 'rfc007-water-lift';
-    group.position.set(0, 0, WATER_LIFT_Z);
+    const wl = buildWaterLift();
+    this.mech.registerWaterLift(wl.group, wl.bucketA, wl.bucketB, wl.waterA, wl.waterB, wl.ropeA, wl.ropeB);
+    this.hollowInteriorGroup.add(wl.group);
 
-    // 沿用既有暗黑金石调色（与 buildScorpionWaterway 的 casing/water 同色系）
-    const bronzeMat = new THREE.MeshStandardMaterial({
-      color: 0x5c3216,
-      emissive: 0x251006,
-      emissiveIntensity: 0.34,
-      roughness: 0.29,
-      metalness: 0.84
-    });
-    const ropeMat = new THREE.MeshStandardMaterial({
-      color: 0x2a1a0e,
-      emissive: 0x150c05,
-      emissiveIntensity: 0.3,
-      roughness: 0.55,
-      metalness: 0.7
-    });
-    const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
-      emissive: 0x0369a1,
-      emissiveIntensity: 1.1,
-      roughness: 0.04,
-      metalness: 0.62,
-      transparent: true,
-      opacity: 0.88
-    });
-
-    // 台座 + 两根立柱导轨
-    const base = new THREE.Mesh(new THREE.BoxGeometry(WATER_LIFT_SEP * 2 + 1.4, 0.28, 1.2), bronzeMat);
-    base.position.set(0, WATER_LIFT_BASE_Y - 1.15, 0);
-    base.castShadow = true;
-    base.receiveShadow = true;
-    group.add(base);
-
-    const railHeight = WATER_LIFT_PULLEY_Y - (WATER_LIFT_BASE_Y - 1.0);
-    [-1, 1].forEach((sx) => {
-      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, railHeight, 8), bronzeMat);
-      rail.position.set(sx * WATER_LIFT_SEP, WATER_LIFT_BASE_Y - 1.0 + railHeight / 2, 0);
-      group.add(rail);
-    });
-
-    // 顶端定滑轮（一索连两桶的支点）
-    const pulley = new THREE.Mesh(new THREE.TorusGeometry(WATER_LIFT_SEP, 0.16, 12, 40), bronzeMat);
-    pulley.position.set(0, WATER_LIFT_PULLEY_Y, 0);
-    group.add(pulley);
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.5, 10), bronzeMat);
-    hub.rotation.x = Math.PI / 2;
-    hub.position.set(0, WATER_LIFT_PULLEY_Y, 0);
-    group.add(hub);
-
-    // 双桶（敞口圆柱）+ 桶内水柱
-    const makeBucket = (side: -1 | 1): { bucket: THREE.Group; water: THREE.Mesh } => {
-      const bucket = new THREE.Group();
-      bucket.position.set(side * WATER_LIFT_SEP, WATER_LIFT_BASE_Y, 0);
-
-      const wall = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.72, 0.58, 1.0, 14, 1, true),
-        new THREE.MeshStandardMaterial({
-          color: 0x5c3216,
-          emissive: 0x251006,
-          emissiveIntensity: 0.34,
-          roughness: 0.29,
-          metalness: 0.84,
-          side: THREE.DoubleSide
-        })
-      );
-      wall.castShadow = true;
-      bucket.add(wall);
-
-      const bottom = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.58, 0.08, 14), bronzeMat);
-      bottom.position.y = -0.5;
-      bucket.add(bottom);
-
-      // 水面：几何原点挪到底面，scale.y 即水位
-      const waterGeo = new THREE.CylinderGeometry(0.55, 0.5, 1.0, 14, 1, false);
-      waterGeo.translate(0, 0.5, 0);
-      const water = new THREE.Mesh(waterGeo, waterMat);
-      water.position.y = -0.46;
-      water.scale.y = 0.5;
-      bucket.add(water);
-
-      group.add(bucket);
-      return { bucket, water };
-    };
-
-    const a = makeBucket(-1);
-    const b = makeBucket(1);
-
-    // 中空神索：竖索，几何高度 1，逐帧 scale.y 伸缩
-    const ropeGeo = new THREE.CylinderGeometry(0.045, 0.045, 1, 6);
-    const ropeA = new THREE.Mesh(ropeGeo, ropeMat);
-    const ropeB = new THREE.Mesh(ropeGeo, ropeMat);
-    group.add(ropeA, ropeB);
-    this.mech.registerWaterLift(group, a.bucket, b.bucket, a.water, b.water, ropeA, ropeB);
-
-    // 底部神簧：桶底两枚细螺旋
-    [-1, 1].forEach((sx) => {
-      for (let k = 0; k < 4; k++) {
-        const coil = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.045, 6, 18), bronzeMat);
-        coil.position.set(sx * WATER_LIFT_SEP, WATER_LIFT_BASE_Y - 1.05 + k * 0.13, 0);
-        coil.rotation.x = Math.PI / 2;
-        group.add(coil);
-      }
-    });
-
-    this.hollowInteriorGroup.add(group);
-
-    // 相变接线：既有 triggerFountainPulse()（水花/垫音）+ #4 新增的翻斗链条声。
     this.waterLift.onPhaseTransition = (highBucket, massSkimmed, tone) => {
       altarAudio.triggerFountainPulse();
-      // #4 翻斗链条：RFC-007 死点/翻斗 → 一记链条声（顶死点黄钟 / 底死点林钟）。
       altarAudio.triggerBucketChain(tone);
-      // RFC-007 → RFC-008 联动：双桶撞死点即给外环走马灯一次地脉冲击（0..1），
-      // 由 animate 第 9b 段逐帧衰减后喂给 maglev.update(dt, seismic)。
       this.waterLiftSeismic = THREE.MathUtils.clamp(massSkimmed, 0, 1);
       if (this.waterLiftPhaseLogCount < 8) {
         this.waterLiftPhaseLogCount++;
