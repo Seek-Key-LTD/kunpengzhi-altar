@@ -62,6 +62,7 @@ import { pickStelaEvents, stelaPose } from '../data/stelaRing';
 import { seatWorldPos } from '../data/seatWorldPos';
 import { brickLevels } from '../data/brickLevels';
 import { validWedge } from '../data/scorpionTopology';
+import { isPrimeDiagonal } from '../data/primeDiagonal';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -643,9 +644,7 @@ export class AltarScene {
       for (let j = i + 1; j < primes.length; j++) {
         const p1 = primes[i];
         const p2 = primes[j];
-        const dx = Math.abs(p1.grid_x - p2.grid_x);
-        const dz = Math.abs(p1.grid_z - p2.grid_z);
-        if (dx === dz && dx <= 3) {
+        if (isPrimeDiagonal(p1, p2)) {
           const v1 = this.getSeatWorldPos(p1);
           const v2 = this.getSeatWorldPos(p2);
           const geo = new THREE.BufferGeometry().setFromPoints([v1, v2]);
