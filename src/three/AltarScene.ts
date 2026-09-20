@@ -49,6 +49,7 @@ import { DemoDirector } from './DemoDirector';
 import { RitualClock } from './RitualClock';
 import { DualDragonRig } from './DualDragonRig';
 import { StarshipRig } from './StarshipRig';
+import { SeatLotusRig } from './SeatLotusRig';
 import { MechanicsRig, WATER_LIFT_Z, WATER_LIFT_BASE_Y, WATER_LIFT_PULLEY_Y, WATER_LIFT_SEP } from './MechanicsRig';
 import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
@@ -102,6 +103,7 @@ export class AltarScene {
   private mech!: MechanicsRig;
   private dragon!: DualDragonRig;
   private starship!: StarshipRig;
+  private lotus!: SeatLotusRig;
   private animationFrameId: number | null = null;
 
   // ── #7 · 能力三态 / 无画模式 ───────────────────────────────────────
@@ -179,7 +181,6 @@ export class AltarScene {
   /** #00 是吸光体，永远不是第 50 席。 */
   private wujiAbsorber: THREE.Mesh | null = null;
   private seatPads: Map<number, THREE.Mesh> = new Map();
-  private seatLotusMeshes: Map<number, THREE.Group> = new Map();
   private lanternPanels: Map<number, THREE.Mesh> = new Map();
   private interiorStelae: Map<string, THREE.Mesh> = new Map();
 
@@ -295,6 +296,7 @@ export class AltarScene {
     this.mech = new MechanicsRig();
     this.dragon = new DualDragonRig();
     this.starship = new StarshipRig();
+    this.lotus = new SeatLotusRig();
     this.controls.dampingFactor = 0.05;
     this.controls.minDistance = 0.8;
     this.controls.maxDistance = 220;
@@ -618,7 +620,7 @@ export class AltarScene {
       flowerGroup.position.y = 0.22;
       flowerGroup.scale.set(0.65, 0.65, 0.65);
       seatGroup.add(flowerGroup);
-      this.seatLotusMeshes.set(ev.seat_id, flowerGroup);
+      this.lotus.register(ev.seat_id, flowerGroup);
 
       this.outerShellGroup.add(seatGroup);
     });
@@ -1670,10 +1672,7 @@ export class AltarScene {
     this.activeSeatId = seatId;
     this.currentProgress = seatId;
 
-    this.seatLotusMeshes.forEach((group, id) => {
-      const isActive = id === seatId;
-      group.scale.setScalar(isActive ? 1.1 : 0.65);
-    });
+    this.lotus.setFocus(seatId);
 
     if (this.rig.cameraMode === 'patrol') {
       const ev = this.events.find(e => e.seat_id === seatId);
@@ -1731,10 +1730,7 @@ export class AltarScene {
     if (this.relic) this.relic.object3D.visible = false;
     if (this.relicDecal) this.relicDecal.object3D.visible = false;
 
-    this.seatLotusMeshes.forEach((flower, id) => {
-      flower.visible = id <= this.ritualLitSeats && !isDark;
-      flower.scale.setScalar(id === activeSeatId ? 1.12 : 0.7);
-    });
+    this.lotus.setRitual(this.ritualLitSeats, isDark, activeSeatId);
   }
 
   /**
@@ -1815,7 +1811,7 @@ export class AltarScene {
     // 逐席光迹与繁花：点名中递增、逆熄中递减。
     if (this.seatTrailsGroup) this.seatTrailsGroup.visible = lit > 0;
     this.seatTrails.forEach((trail, idx) => { trail.visible = idx + 1 <= lit; });
-    this.seatLotusMeshes.forEach((flower, id) => { flower.visible = id <= lit; });
+    this.lotus.setDemo(lit);
 
     // 双龙线/粒子/前锋珠：沿路径随 lit 追席（见 DualDragonRig.setDemo）。
     this.dragon.setDemo(lit);
@@ -1843,7 +1839,7 @@ export class AltarScene {
     // 直入版：不按幕次演出，49 席光迹一次性全显。
     this.seatTrails.forEach((trail) => { trail.visible = true; });
     if (this.wujiAbsorber) this.wujiAbsorber.visible = true;
-    this.seatLotusMeshes.forEach((flower) => { flower.visible = true; });
+    this.lotus.presentAll();
   }
 
   /** 当前注入的仪式时间（秒）；null = 尚未注入。供导演台 / 工程入口读取。 */
@@ -2350,13 +2346,7 @@ export class AltarScene {
     this.starship.update(elapsedTime);
 
     // 8. Flowers breathing
-    this.seatLotusMeshes.forEach((flower, id) => {
-      const pulse = 1.0 + Math.sin(elapsedTime * 2.5 + id) * 0.04;
-      flower.rotation.y = elapsedTime * 0.2 + id;
-      if (id !== this.activeSeatId) {
-        flower.scale.set(0.65 * pulse, 0.65 * pulse, 0.65 * pulse);
-      }
-    });
+    this.lotus.update(elapsedTime, this.activeSeatId);
 
     // 9. RFC-007 双体水梯：引擎驱动，北坡机关由此获得动力学
     this.waterLift.update(dt);
@@ -2545,7 +2535,7 @@ export class AltarScene {
 
     // 7. 索引表与回调断开，别把整棵场景图挂在闭包上
     this.seatPads.clear();
-    this.seatLotusMeshes.clear();
+    this.lotus.clear();
     this.starship.clear();
     this.lanternPanels.clear();
     this.interiorStelae.clear();
