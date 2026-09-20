@@ -21,6 +21,7 @@ const SUITES = [
   ['1800s 五幕时间轴（#8）', 'scripts/verify-ritual-timeline.mjs'],
   ['#10 幕次取景·纯函数+结构（A/B 组）', 'scripts/verify-ceremony-view.mjs'],
   ['水龙×音龙·49 席双向同源（#2）', 'scripts/verify-dual-dragon.mjs'],
+  ['无极天听·抛物面焦距与飞碟布置', 'scripts/verify-wuji-geometry.mjs'],
   ['49 半音 C2→C6（Tone）', 'scripts/assert-semitones.mjs'],
   ['7×7 正交投影', 'scripts/assert-ulam-projection.mjs'],
   ['五阶段音频包络（#4）', 'scripts/verify-audio-envelope.mjs'],

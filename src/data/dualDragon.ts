@@ -89,10 +89,10 @@ export function waterDragonNode(seatId: number): DragonNode {
 //   · 中心是 #00 无极（r=0）：无中心点、不可占有、永不收至 r=0（绝无第 50 席）。
 export const SOUND_OUTER_RADIUS = 9.6;
 const SOUND_SEMITONES_PER_OCTAVE = 12;
-const SOUND_RISE_BASE = 2; // 增长率底数 = 八度：12-TET 公比 2^(1/12)，整圈频率 ×2
-const SOUND_HEIGHT_START = PYRAMID_TOP + 0.45; // 外圈起点：玉玺之上
+export const SOUND_RISE_BASE = 2; // 增长率底数 = 八度：12-TET 公比 2^(1/12)，整圈频率 ×2
+export const SOUND_HEIGHT_START = PYRAMID_TOP + 0.45; // 外圈起点：玉玺之上
 // 旋转抛物面常数：使终点（r=0.6）落在玉玺上方合理高度（视觉范围 21.45 → ~22.37）。
-const SOUND_PARABOLIC_C = 0.0100;
+export const SOUND_PARABOLIC_C = 0.0100;
 
 const SOUND_NODES: DragonNode[] = Array.from({ length: DRAGON_SEAT_COUNT }, (_, i) => {
   const seatId = i + 1;
