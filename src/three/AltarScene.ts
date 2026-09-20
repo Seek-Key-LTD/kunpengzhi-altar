@@ -63,6 +63,7 @@ import { seatWorldPos } from '../data/seatWorldPos';
 import { brickLevels } from '../data/brickLevels';
 import { validWedge } from '../data/scorpionTopology';
 import { isPrimeDiagonal } from '../data/primeDiagonal';
+import { buildSurroundingAtmosphere } from './AtmosphereBuilder';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -1524,18 +1525,7 @@ export class AltarScene {
   }
 
   private buildSurroundingAtmosphere() {
-    const starCount = 1500;
-    const starGeo = new THREE.BufferGeometry();
-    const starPos = new Float32Array(starCount * 3);
-    for (let i = 0; i < starCount; i++) {
-      starPos[i * 3] = (Math.random() - 0.5) * 300;
-      starPos[i * 3 + 1] = Math.random() * 150;
-      starPos[i * 3 + 2] = (Math.random() - 0.5) * 300;
-    }
-    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-    const starMat = new THREE.PointsMaterial({ size: 0.6, color: 0xffffff, transparent: true, opacity: 0.7 });
-    const stars = new THREE.Points(starGeo, starMat);
-    this.scene.add(stars);
+    buildSurroundingAtmosphere(this.scene);
   }
 
   private onWindowResize = () => {
