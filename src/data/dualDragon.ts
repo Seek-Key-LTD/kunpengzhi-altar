@@ -79,22 +79,30 @@ export function waterDragonNode(seatId: number): DragonNode {
   return WATER_NODES[seatId - 1];
 }
 
-// ── 阴龙（音龙）节点：对数螺线，向内、向上（与阳龙互为反向）──────────
+// ── 阴龙（音龙）节点：底数 2 的等比螺线 × 旋转抛物面（与阳龙互为反向）────
 //
-// 由外缘大半径起步，逐席按 r(t)=R_out·e^{−k·t} 内收，同时以 (R_out − r)
-// 正比抬升 —— 于是“向外向下”的水龙与“向内向上”的音龙构成镜像反向。
+// 几何意图（项目主理人定案）：
+//   · 俯视（无限远、无 Z）⟹ 纯等比螺线：r = R_out · 2^(−半音/12)，
+//     每 12 席（一个八度）半径减半 ⟹ 4 个八度后 r = 9.6/16 = 0.6（16 倍，对上“四次轮回”）；
+//   · 近距离看 Z 轴 ⟹ 贴旋转抛物面 z = start + c·(R_out² − r²)，
+//     r 越小 z 越高：音龙在玉玺之上，从外圈低处盘旋上升，收向坛心；
+//   · 中心是 #00 无极（r=0）：无中心点、不可占有、永不收至 r=0（绝无第 50 席）。
 export const SOUND_OUTER_RADIUS = 9.6;
-export const SOUND_INNER_RADIUS = 1.25;
-const SOUND_LN_SPAN = Math.log(SOUND_OUTER_RADIUS / SOUND_INNER_RADIUS);
-const SOUND_TURNS = 3.0;
-const SOUND_RISE_PER_RADIUS = 0.11;
+const SOUND_SEMITONES_PER_OCTAVE = 12;
+const SOUND_RISE_BASE = 2; // 增长率底数 = 八度：12-TET 公比 2^(1/12)，整圈频率 ×2
+const SOUND_HEIGHT_START = PYRAMID_TOP + 0.45; // 外圈起点：玉玺之上
+// 旋转抛物面常数：使终点（r=0.6）落在玉玺上方合理高度（视觉范围 21.45 → ~22.37）。
+const SOUND_PARABOLIC_C = 0.0100;
 
 const SOUND_NODES: DragonNode[] = Array.from({ length: DRAGON_SEAT_COUNT }, (_, i) => {
   const seatId = i + 1;
-  const t = i / (DRAGON_SEAT_COUNT - 1); // 0..1
-  const radius = SOUND_OUTER_RADIUS * Math.exp(-SOUND_LN_SPAN * t); // 9.6 → 1.25（向内）
-  const angle = -Math.PI / 2 + t * Math.PI * 2 * SOUND_TURNS;
-  const y = PYRAMID_TOP + 0.45 + (SOUND_OUTER_RADIUS - radius) * SOUND_RISE_PER_RADIUS; // 向上
+  const semitones = seatId - 1; // 0..48
+  // 等比螺线（底 2）：r = 9.6 · 2^(−semitones/12)。
+  const radius = SOUND_OUTER_RADIUS * Math.pow(SOUND_RISE_BASE, -semitones / SOUND_SEMITONES_PER_OCTAVE);
+  // 角度：每 12 席（一个八度）转一整圈 ⟹ 4 个八度走 4 圈。
+  const angle = -Math.PI / 2 + (semitones / SOUND_SEMITONES_PER_OCTAVE) * Math.PI * 2;
+  // Z 轴贴旋转抛物面：r 越小 z 越高（从下往上走，收向无极）。
+  const y = SOUND_HEIGHT_START + SOUND_PARABOLIC_C * (SOUND_OUTER_RADIUS * SOUND_OUTER_RADIUS - radius * radius);
   return makeNode(seatId, Math.cos(angle) * radius, y, Math.sin(angle) * radius);
 });
 
