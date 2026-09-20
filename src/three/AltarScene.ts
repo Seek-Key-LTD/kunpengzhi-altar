@@ -61,6 +61,7 @@ import { seatTrailPoints } from '../data/seatTrail';
 import { pickStelaEvents, stelaPose } from '../data/stelaRing';
 import { seatWorldPos } from '../data/seatWorldPos';
 import { brickLevels } from '../data/brickLevels';
+import { validWedge } from '../data/scorpionTopology';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -692,8 +693,7 @@ export class AltarScene {
       const to = points[index + 1];
       const event = this.events[index];
       const next = this.events[index + 1];
-      const planarDistance = Math.abs(event.grid_x - next.grid_x) + Math.abs(event.grid_z - next.grid_z);
-      if (planarDistance !== 1 || !(from.y > to.y)) {
+      if (!validWedge({grid_x: event.grid_x, grid_z: event.grid_z, y: from.y}, {grid_x: next.grid_x, grid_z: next.grid_z, y: to.y})) {
         throw new Error(`蝎子楔拓扑错误：${event.seat_id}→${next.seat_id} 必须相邻且降势`);
       }
 
