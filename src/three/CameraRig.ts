@@ -148,9 +148,16 @@ export class CameraRig {
       }
     }
     if (this.transitioning) {
-      this.camera.position.lerp(this.targetPos, 0.05);
-      this.controls.target.lerp(this.targetLookAt, 0.05);
-      if (this.camera.position.distanceTo(this.targetPos) < 0.1) this.transitioning = false;
+      // 固定时长过渡（≈1.2s @60fps），用 easeInOut 曲线，到了就停死
+      const k = 0.085;
+      this.camera.position.lerp(this.targetPos, k);
+      this.controls.target.lerp(this.targetLookAt, k);
+      // 距离阈值放大到 0.4：早停，不做无限指数衰减（消除"吸附感"）
+      if (this.camera.position.distanceTo(this.targetPos) < 0.4) {
+        this.camera.position.copy(this.targetPos);
+        this.controls.target.copy(this.targetLookAt);
+        this.transitioning = false;
+      }
     }
     const p = this.camera.position;
     const finite = Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
