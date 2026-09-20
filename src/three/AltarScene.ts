@@ -47,6 +47,7 @@ import { ImperialSealObject } from './relic/ImperialSealObject';
 import { CameraRig } from './CameraRig';
 import { DemoDirector } from './DemoDirector';
 import { RitualClock } from './RitualClock';
+import { DualDragonRig } from './DualDragonRig';
 import { MechanicsRig, WATER_LIFT_Z, WATER_LIFT_BASE_Y, WATER_LIFT_PULLEY_Y, WATER_LIFT_SEP } from './MechanicsRig';
 import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
@@ -98,6 +99,7 @@ export class AltarScene {
   private demo!: DemoDirector;
   private ritualClock!: RitualClock;
   private mech!: MechanicsRig;
+  private dragon!: DualDragonRig;
   private animationFrameId: number | null = null;
 
   // ── #7 · 能力三态 / 无画模式 ───────────────────────────────────────
@@ -150,8 +152,6 @@ export class AltarScene {
   /** naming 幕上一帧的 litSeats；-1 表示需要强制刷新。 */
 
   // ── 公共入口 · 自运维演示循环状态 ──────────────────────────────────
-  private waterFrontBead: THREE.Group | null = null;
-  private soundFrontBead: THREE.Group | null = null;
   /** Web Audio 手势兜底是否已武装（避免重复绑定）。 */
   private audioKicked = false;
   private audioResumeHandler: (() => void) | null = null;
@@ -161,13 +161,7 @@ export class AltarScene {
   private activeLanternChapter = 0;
   
   // Interactive Objects & Meshes
-  private waterSpiralPath: THREE.Vector3[] = [];
-  private waterParticles: THREE.Points | null = null;
-  private waterLine: THREE.Line | null = null;
   /** 阴龙：不占席、不承载文字，只把 49 个半音向上卷成可见的气流。 */
-  private soundSpiralPath: THREE.Vector3[] = [];
-  private soundLine: THREE.Line | null = null;
-  private soundParticles: THREE.Points | null = null;
   // ── #2 · 双龙逐席可视化 ──────────────────────────────────────────
   /** 每个已触发席位保留一条随音高收紧的对数螺线光迹（索引 = seatId-1）。 */
   private seatTrailsGroup: THREE.Group | null = null;
@@ -298,6 +292,7 @@ export class AltarScene {
     this.demo = new DemoDirector();
     this.ritualClock = new RitualClock();
     this.mech = new MechanicsRig();
+    this.dragon = new DualDragonRig();
     this.controls.dampingFactor = 0.05;
     this.controls.minDistance = 0.8;
     this.controls.maxDistance = 220;
@@ -665,7 +660,7 @@ export class AltarScene {
       scorpionWaterElevation(event.seat_id),
       event.grid_z * CELL
     ));
-    this.waterSpiralPath = points;
+    this.dragon.setWaterPath(points);
 
     const casingMat = new THREE.MeshStandardMaterial({
       color: 0x5c3216,
@@ -1379,12 +1374,12 @@ export class AltarScene {
     this.fountainGroup.add(this.fountainParticles);
 
     // 水龙沿阴蝎子楔的管芯走；绝不重建成阳面上的顶面水流。
-    if (this.waterSpiralPath.length !== this.events.length) {
+    if (this.dragon.waterPath.length !== this.events.length) {
       throw new Error('水龙未绑定 49 枚蝎子楔');
     }
     const curve = new THREE.CurvePath<THREE.Vector3>();
-    for (let index = 0; index < this.waterSpiralPath.length - 1; index++) {
-      curve.add(new THREE.LineCurve3(this.waterSpiralPath[index], this.waterSpiralPath[index + 1]));
+    for (let index = 0; index < this.dragon.waterPath.length - 1; index++) {
+      curve.add(new THREE.LineCurve3(this.dragon.waterPath[index], this.dragon.waterPath[index + 1]));
     }
     const points = curve.getSpacedPoints(360);
 
@@ -1398,7 +1393,6 @@ export class AltarScene {
     const waterLine = new THREE.Line(lineGeo, lineMat);
     waterLine.geometry.setDrawRange(0, 0);
     this.waterworksGroup.add(waterLine);
-    this.waterLine = waterLine;
 
     const particleCount = 280;
     const particleGeo = new THREE.BufferGeometry();
@@ -1425,8 +1419,8 @@ export class AltarScene {
       blending: THREE.AdditiveBlending
     });
 
-    this.waterParticles = new THREE.Points(particleGeo, particleMat);
-    this.waterworksGroup.add(this.waterParticles);
+    const waterParticles = new THREE.Points(particleGeo, particleMat);
+    this.waterworksGroup.add(waterParticles);
 
     // 阴龙不复制水路。它绕过 #00，由外缘大半径起步、按半音**向内收**，
     // 高度随内收**向上抬升** —— 与水龙“向外向下”互为反向（#2 要求 2/4）。
@@ -1436,7 +1430,7 @@ export class AltarScene {
       const node = soundDragonNode(i + 1);
       soundPoints.push(new THREE.Vector3(node.x, node.y, node.z));
     }
-    this.soundSpiralPath = soundPoints;
+    this.dragon.setSoundPath(soundPoints);
     const soundGeo = new THREE.BufferGeometry().setFromPoints(soundPoints);
     const soundMat = new THREE.LineBasicMaterial({
       color: 0xc4b5fd,
@@ -1448,7 +1442,6 @@ export class AltarScene {
     soundLine.geometry.setDrawRange(0, 0);
     soundLine.visible = false;
     this.scene.add(soundLine);
-    this.soundLine = soundLine;
 
     const soundParticleGeo = new THREE.BufferGeometry();
     const soundParticlePositions = new Float32Array(96 * 3);
@@ -1464,7 +1457,7 @@ export class AltarScene {
     const soundParticles = new THREE.Points(soundParticleGeo, soundParticleMat);
     soundParticles.visible = false;
     this.scene.add(soundParticles);
-    this.soundParticles = soundParticles;
+    this.dragon.registerParticles(waterParticles, waterLine, soundLine, soundParticles);
   }
 
   /**
@@ -1724,20 +1717,8 @@ export class AltarScene {
     this.starshipMeshes.forEach((ship) => { ship.visible = false; });
     this.lanternsGroup.visible = phase === 'lanterns' || phase === 'extinguishing';
     // 回转由 RFC-008 引擎持续驱动，幕次切换不再改写转速（见 animate 第 9b 段）
-    if (this.waterParticles) this.waterParticles.visible = phase === 'naming' || phase === 'lanterns';
     const dualDragonVisible = phase === 'naming' || phase === 'lanterns';
-    if (this.waterLine) {
-      this.waterLine.visible = dualDragonVisible;
-      this.waterLine.geometry.setDrawRange(
-        0,
-        Math.round(this.waterLine.geometry.attributes.position.count * (this.ritualLitSeats / 49))
-      );
-    }
-    if (this.soundLine) {
-      this.soundLine.visible = dualDragonVisible;
-      this.soundLine.geometry.setDrawRange(0, this.ritualLitSeats);
-    }
-    if (this.soundParticles) this.soundParticles.visible = dualDragonVisible;
+    this.dragon.setRitual(this.ritualLitSeats, dualDragonVisible);
     // #2：逐席光迹 —— 只有已触发席位保留光迹（未触发者不可见，绝不预演未来席）。
     if (this.seatTrailsGroup) this.seatTrailsGroup.visible = dualDragonVisible;
     this.seatTrails.forEach((trail, idx) => {
@@ -1792,12 +1773,11 @@ export class AltarScene {
     this.demo.start();
     this.isAutoPatrol = false;
 
-    if (!this.waterFrontBead && this.waterSpiralPath.length > 0) {
-      this.waterFrontBead = this.buildFrontBead(0x38bdf8, 0.72, 0x0b7ab8, 3.2);
-      this.waterworksGroup.add(this.waterFrontBead);
-      this.soundFrontBead = this.buildFrontBead(0xc4b5fd, 0.55, 0x7c5cbf, 2.6);
-      this.scene.add(this.soundFrontBead);
-    }
+    const waterBead = this.buildFrontBead(0x38bdf8, 0.72, 0x0b7ab8, 3.2);
+    this.waterworksGroup.add(waterBead);
+    const soundBead = this.buildFrontBead(0xc4b5fd, 0.55, 0x7c5cbf, 2.6);
+    this.scene.add(soundBead);
+    this.dragon.setFrontBeads(waterBead, soundBead);
     // #00 无极点：演示循环中给一束常驻冷顶光（吸光体做视觉锚点，仍不可占有）。
     if (this.wujiLight) this.wujiLight.intensity = 0.9;
     if (this.wujiAbsorber) this.wujiAbsorber.visible = true;
@@ -1835,39 +1815,8 @@ export class AltarScene {
     this.seatTrails.forEach((trail, idx) => { trail.visible = idx + 1 <= lit; });
     this.seatLotusMeshes.forEach((flower, id) => { flower.visible = id <= lit; });
 
-    // 双龙粒子与线：同 setRitualState 的 drawRange 语义。
-    if (this.waterParticles) this.waterParticles.visible = lit > 0;
-    if (this.waterLine) {
-      this.waterLine.visible = lit > 0;
-      this.waterLine.geometry.setDrawRange(
-        0,
-        Math.round(this.waterLine.geometry.attributes.position.count * (lit / SEAT_ID_MAX))
-      );
-    }
-    if (this.soundLine) {
-      this.soundLine.visible = lit > 0;
-      this.soundLine.geometry.setDrawRange(0, lit);
-    }
-    if (this.soundParticles) this.soundParticles.visible = lit > 0;
-
-    // 前锋珠：水龙珠贴当前点名席（沿水路外行下潜），音龙珠贴对应音龙节点（内收上升）。
-    const waterNode =
-      lit > 0 && this.waterSpiralPath.length > 0
-        ? this.waterSpiralPath[Math.min(lit, this.waterSpiralPath.length) - 1]
-        : null;
-    const soundNode =
-      lit > 0 && this.soundSpiralPath.length > 0
-        ? this.soundSpiralPath[Math.min(lit, this.soundSpiralPath.length) - 1]
-        : null;
-
-    if (this.waterFrontBead) {
-      this.waterFrontBead.visible = waterNode !== null;
-      if (waterNode) this.waterFrontBead.position.copy(waterNode);
-    }
-    if (this.soundFrontBead) {
-      this.soundFrontBead.visible = soundNode !== null;
-      if (soundNode) this.soundFrontBead.position.copy(soundNode);
-    }
+    // 双龙线/粒子/前锋珠：沿路径随 lit 追席（见 DualDragonRig.setDemo）。
+    this.dragon.setDemo(lit);
   }
 
   public presentImmediately() {
@@ -1888,16 +1837,7 @@ export class AltarScene {
     this.waterworksGroup.visible = true;
     this.fountainGroup.visible = true;
     this.lanternsGroup.visible = true;
-    if (this.waterParticles) this.waterParticles.visible = true;
-    if (this.waterLine) {
-      this.waterLine.visible = true;
-      this.waterLine.geometry.setDrawRange(0, this.waterLine.geometry.attributes.position.count);
-    }
-    if (this.soundLine) {
-      this.soundLine.visible = true;
-      this.soundLine.geometry.setDrawRange(0, this.soundLine.geometry.attributes.position.count);
-    }
-    if (this.soundParticles) this.soundParticles.visible = true;
+    this.dragon.presentAll();
     // 直入版：不按幕次演出，49 席光迹一次性全显。
     this.seatTrails.forEach((trail) => { trail.visible = true; });
     if (this.wujiAbsorber) this.wujiAbsorber.visible = true;
@@ -2401,33 +2341,8 @@ export class AltarScene {
     // 6. 阳龙（水龙）：**逐席触发** —— 每个已触发席位一枚水珠，落在该席蝎子楔水芯。
     //    席位未触发前既不显形、也不落珠（唯一驱动源 = ritualLitSeatsAt，不预演未来席）。
     //    方向：沿 Ulam 方形螺旋向外（ring ↑）、向下（y ↓）。
-    if (this.waterParticles && this.waterSpiralPath.length > 0) {
-      const pAttr = this.waterParticles.geometry.attributes.position as THREE.BufferAttribute;
-      const lit = this.dualDragonLitSeats();
-      const visible = Math.min(lit, this.waterSpiralPath.length, pAttr.count);
-      for (let i = 0; i < visible; i++) {
-        const node = this.waterSpiralPath[i];
-        const drift = Math.sin(elapsedTime * 2.4 + i * 0.7) * 0.035;
-        pAttr.setXYZ(i, node.x + drift, node.y + 0.08, node.z + drift * 0.6);
-      }
-      pAttr.needsUpdate = true;
-      this.waterParticles.geometry.setDrawRange(0, visible);
-    }
-
-    // 6b. 阴龙（音龙）：同一触发源的收束段 —— 每个已触发席位一枚音滴，落在该席音龙节点。
-    //     方向与阳龙**互为反向**：向内（radius ↓）、向上（y ↑），按半音逐级回收。
-    if (this.soundParticles && this.soundSpiralPath.length > 0) {
-      const pAttr = this.soundParticles.geometry.attributes.position as THREE.BufferAttribute;
-      const lit = this.dualDragonLitSeats();
-      const visible = Math.min(lit, this.soundSpiralPath.length, pAttr.count);
-      for (let i = 0; i < visible; i++) {
-        const node = this.soundSpiralPath[i];
-        const rise = Math.sin(elapsedTime * 1.8 + i * 0.5) * 0.02;
-        pAttr.setXYZ(i, node.x, node.y + rise, node.z);
-      }
-      pAttr.needsUpdate = true;
-      this.soundParticles.geometry.setDrawRange(0, visible);
-    }
+    // 6/6b. 双龙粒子沿路径逐席 animate（水龙下潜 / 音龙上升），见 DualDragonRig。
+    this.dragon.animateParticles(elapsedTime, this.dualDragonLitSeats());
 
     // 7. Starships floating
     this.starshipMeshes.forEach((ship, id) => {
@@ -2639,13 +2554,9 @@ export class AltarScene {
     // RFC-008 走马灯：引擎是纯数学状态、无场景资源（几何随场景图第 6 步回收），
     // 这里只把 RFC-007→RFC-008 的地脉冲击量归零。
     this.waterLiftSeismic = 0;
-    this.waterSpiralPath = [];
-    this.waterParticles = null;
     // #2：逐席光迹的几何随整棵场景图在第 6 步回收，这里只断开引用。
     this.seatTrails = [];
     this.seatTrailsGroup = null;
-    this.soundSpiralPath = [];
-    this.soundParticles = null;
     this.fountainParticles = null;
     this.ambientLight = null;
     this.sunLight = null;

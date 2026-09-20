@@ -176,10 +176,11 @@ const stripComments = (t) => t
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
 const scene = stripComments(readFileSync(resolve(ROOT, 'src/three/AltarScene.ts'), 'utf8'));
+const rig = stripComments(readFileSync(resolve(ROOT, 'src/three/DualDragonRig.ts'), 'utf8'));
 
 ok(/dualDragonLitSeats\s*\(/.test(scene), '场景以 dualDragonLitSeats 作双龙唯一触发源');
-ok(/waterParticles\.geometry\.setDrawRange\s*\(\s*0\s*,\s*visible\s*\)/.test(scene), '水龙按已触发席数逐席 setDrawRange');
-ok(/soundParticles\.geometry\.setDrawRange\s*\(\s*0\s*,\s*visible\s*\)/.test(scene), '音龙按已触发席数逐席 setDrawRange');
+ok(/waterParticles\.geometry\.setDrawRange\s*\(\s*0\s*,\s*visible\s*\)/.test(rig), '水龙按已触发席数逐席 setDrawRange（DualDragonRig）');
+ok(/soundParticles\.geometry\.setDrawRange\s*\(\s*0\s*,\s*visible\s*\)/.test(rig), '音龙按已触发席数逐席 setDrawRange（DualDragonRig）');
 ok(/updateLanternGate\s*\(/.test(scene), '场景含茶灯门控 updateLanternGate');
 ok(/teaLanternRotationEnabled\s*\(/.test(scene), '门控调用纯判据 teaLanternRotationEnabled');
 ok(/fogCaptionAt\s*\(/.test(scene), '雾中一句调用 fogCaptionAt');
