@@ -77,6 +77,14 @@ export const RITUAL_PLAYBACK_MIN = 0.25;
 export const RITUAL_PLAYBACK_MAX = 64;
 export const RITUAL_PLAYBACK_DEFAULT = 1;
 
+// ── 公共入口 · 自运维演示循环（点名→定格→逆熄→留白→重生）────────────
+// 直入版不是静态模型：装置持续“说话”。访客无需等 30 分钟正典，
+// 也能看到水往下走、音往上升、逐席点名、倒序熄灭的完整仪式。
+export const DEMO_KINDLE_SEC = 1.15; // 点名：每席间隔（秒）
+export const DEMO_HOLD_SEC = 3.2; // 第 49 席定格（秒）
+export const DEMO_EXTINGUISH_SEC = 0.42; // 逆熄：每席熄灭间隔（秒）
+export const DEMO_REST_SEC = 4.0; // 全熄留白（秒）
+
 /**
  * #7 · 构造选项。
  *
@@ -163,6 +171,15 @@ export class AltarScene {
   private ritualPhase: RitualPhase = 'abyss';
   /** naming 幕上一帧的 litSeats；-1 表示需要强制刷新。 */
   private namingLitSeats = -1;
+
+  // ── 公共入口 · 自运维演示循环状态 ──────────────────────────────────
+  private demoActive = false;
+  private demoLitSeats = 0;
+  private demoNextSeat = 1;
+  private demoPhase: 'kindle' | 'hold' | 'extinguish' | 'rest' = 'kindle';
+  private demoTimer = 0;
+  private waterFrontBead: THREE.Group | null = null;
+  private soundFrontBead: THREE.Group | null = null;
   /** Web Audio 手势兜底是否已武装（避免重复绑定）。 */
   private audioKicked = false;
   private audioResumeHandler: (() => void) | null = null;
@@ -972,6 +989,7 @@ export class AltarScene {
    * 非仪式档（导演台 / 直入）恒 49 席。两龙共用此值 ⟹ 同源、不预演未来席。
    */
   private dualDragonLitSeats(): number {
+    if (this.demoActive) return this.demoLitSeats;
     return this.ritualMode ? this.ritualLitSeats : SEAT_ID_MAX;
   }
 
@@ -1310,43 +1328,43 @@ export class AltarScene {
 
   private createTeaLanternSprite(ch: typeof TEA_POEM_16_CHAPTERS[0]): THREE.Sprite {
     const canvas = document.createElement('canvas');
-    canvas.width = 384;
-    canvas.height = 512;
+    canvas.width = 640;
+    canvas.height = 853;
     const ctx = canvas.getContext('2d')!;
 
     ctx.fillStyle = 'rgba(10, 15, 29, 0.94)';
-    ctx.roundRect(10, 10, 364, 492, 16);
+    ctx.roundRect(17, 17, 606, 819, 27);
     ctx.fill();
     ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 7;
     ctx.stroke();
 
     ctx.fillStyle = '#f59e0b';
-    ctx.font = 'bold 30px "Noto Serif SC", serif';
+    ctx.font = 'bold 50px "Noto Serif SC", serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`第 ${ch.chapterIndex} 面 · ${ch.title.split(' · ')[1]}`, 192, 60);
+    ctx.fillText(`第 ${ch.chapterIndex} 面 · ${ch.title.split(' · ')[1]}`, 320, 100);
 
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '16px "Noto Serif SC", serif';
-    ctx.fillText(ch.historicalTheme, 192, 95);
+    ctx.font = '27px "Noto Serif SC", serif';
+    ctx.fillText(ch.historicalTheme, 320, 158);
 
     // 双列是版式，不把“左栏/右栏/起承/转合”等编辑标签烧进门帘纹理。
     // CanvasTexture 不受 CSS 影响，因此 3D 扇面在这里直接按两列排版；
     // HTML 阅读层另由 CSS grid 控制同一份左右数据。
     ctx.fillStyle = '#f1f5f9';
-    ctx.font = '16px "Noto Serif SC", serif';
+    ctx.font = '27px "Noto Serif SC", serif';
     ctx.textAlign = 'left';
     ch.leftColumn.slice(0, 4).forEach((line, i) => {
-      ctx.fillText(line, 24, 145 + i * 32);
+      ctx.fillText(line, 40, 242 + i * 53);
     });
     ch.rightColumn.slice(0, 4).forEach((line, i) => {
-      ctx.fillText(line, 202, 145 + i * 32);
+      ctx.fillText(line, 337, 242 + i * 53);
     });
 
     ctx.fillStyle = '#fbbf24';
-    ctx.font = 'italic 16px sans-serif';
+    ctx.font = 'italic 27px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('【点击展开 16 句全赋】', 192, 470);
+    ctx.fillText('【点击展开 16 句全赋】', 320, 783);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
@@ -1454,15 +1472,15 @@ export class AltarScene {
       positions[i * 3] = p.x;
       positions[i * 3 + 1] = p.y + 0.08;
       positions[i * 3 + 2] = p.z;
-      colors[i * 3] = 0.2;
-      colors[i * 3 + 1] = 0.85;
+      colors[i * 3] = 0.35;
+      colors[i * 3 + 1] = 0.95;
       colors[i * 3 + 2] = 1.0;
     }
 
     particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     const particleMat = new THREE.PointsMaterial({
-      size: 0.28,
+      size: 0.52,
       vertexColors: true,
       transparent: true,
       opacity: 0.9,
@@ -1485,7 +1503,7 @@ export class AltarScene {
     const soundMat = new THREE.LineBasicMaterial({
       color: 0xc4b5fd,
       transparent: true,
-      opacity: 0.48,
+      opacity: 0.72,
       blending: THREE.AdditiveBlending
     });
     const soundLine = new THREE.Line(soundGeo, soundMat);
@@ -1499,7 +1517,7 @@ export class AltarScene {
     soundParticleGeo.setAttribute('position', new THREE.BufferAttribute(soundParticlePositions, 3));
     const soundParticleMat = new THREE.PointsMaterial({
       color: 0xe9d5ff,
-      size: 0.16,
+      size: 0.32,
       transparent: true,
       opacity: 0.72,
       blending: THREE.AdditiveBlending,
@@ -1802,6 +1820,158 @@ export class AltarScene {
    * 非剧本公共入口：一帧即呈现完整祭坛。
    * 不复用 setRitualState('lanterns', …)，因为后者仍是“按幕次演出”的语义。
    */
+  // ── 公共入口 · 自运维演示循环 ──────────────────────────────────────
+
+  /** 双龙前锋珠：水龙珠（外行下潜）+ 音龙珠（内收上升），让点名肉眼可见。 */
+  private buildFrontBead(color: number, radius: number, emissive: number, lightIntensity: number): THREE.Group {
+    const group = new THREE.Group();
+    group.name = 'front-bead';
+    const mat = new THREE.MeshStandardMaterial({
+      color,
+      emissive,
+      emissiveIntensity: 2.6,
+      roughness: 0.3,
+      metalness: 0.1
+    });
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 18, 18), mat);
+    group.add(mesh);
+    // 一束跟随点名珠的光，让“水流抵达”真正照亮周围。
+    const light = new THREE.PointLight(color, lightIntensity, 14, 1.7);
+    group.add(light);
+    return group;
+  }
+
+  /**
+   * 公共入口：启动自运维演示循环。
+   *
+   * 直入版（presentImmediately）全坛常亮；startDemo 在此基础上驱动
+   * 点名（1→49 逐席点亮发声）→ 定格（第 49 席）→ 逆熄（49→1 倒序熄灭）
+   * → 留白 → 重生，周而复始。双龙、光迹、繁花、水线全部由同一
+   * demoLitSeats 驱动（与 ritualLitSeatsAt 同语义，不预演未来席）。
+   */
+  public startDemo(): void {
+    if (this.demoActive) return;
+    this.demoActive = true;
+    this.demoLitSeats = 0;
+    this.demoNextSeat = 1;
+    this.demoPhase = 'kindle';
+    this.demoTimer = 0;
+    this.isAutoPatrol = false;
+
+    if (!this.waterFrontBead && this.waterSpiralPath.length > 0) {
+      this.waterFrontBead = this.buildFrontBead(0x38bdf8, 0.72, 0x0b7ab8, 3.2);
+      this.waterworksGroup.add(this.waterFrontBead);
+      this.soundFrontBead = this.buildFrontBead(0xc4b5fd, 0.55, 0x7c5cbf, 2.6);
+      this.scene.add(this.soundFrontBead);
+    }
+    // #00 无极点：演示循环中给一束常驻冷顶光（吸光体做视觉锚点，仍不可占有）。
+    if (this.wujiLight) this.wujiLight.intensity = 0.9;
+    if (this.wujiAbsorber) this.wujiAbsorber.visible = true;
+
+    this.applyDemoVisuals();
+    this.kickAudio();
+  }
+
+  /** 停掉演示循环（导演/工程入口不需要时）。 */
+  public stopDemo(): void {
+    if (!this.demoActive) return;
+    this.demoActive = false;
+    if (this.wujiLight) this.wujiLight.intensity = 0;
+  }
+
+  /**
+   * 每帧推进演示状态机。点名每席发声一次（水声+编钟+拨弦）；
+   * 未获用户手势时 altarAudio 静默跳过，由 kickAudio 的首次点击兜底。
+   */
+  private updateDemo(dt: number): void {
+    if (!this.demoActive) return;
+    this.demoTimer += Number.isFinite(dt) ? dt : 0;
+
+    if (this.demoPhase === 'kindle') {
+      if (this.demoTimer >= DEMO_KINDLE_SEC) {
+        this.demoTimer -= DEMO_KINDLE_SEC;
+        const next = Math.min(SEAT_ID_MAX, this.demoNextSeat);
+        this.demoNextSeat = next + 1;
+        this.demoLitSeats = next;
+        const ev = this.events.find((e) => e.seat_id === next);
+        if (ev) altarAudio.triggerSeatEvent(ev);
+        if (next === SEAT_ID_MAX) {
+          this.demoPhase = 'hold';
+          this.demoTimer = 0;
+        }
+      }
+    } else if (this.demoPhase === 'hold') {
+      if (this.demoTimer >= DEMO_HOLD_SEC) {
+        this.demoPhase = 'extinguish';
+        this.demoTimer = 0;
+        this.demoNextSeat = SEAT_ID_MAX;
+      }
+    } else if (this.demoPhase === 'extinguish') {
+      if (this.demoTimer >= DEMO_EXTINGUISH_SEC) {
+        this.demoTimer -= DEMO_EXTINGUISH_SEC;
+        this.demoLitSeats = Math.max(0, this.demoNextSeat - 1);
+        this.demoNextSeat = this.demoLitSeats;
+        if (this.demoLitSeats <= 0) {
+          this.demoPhase = 'rest';
+          this.demoTimer = 0;
+        }
+      }
+    } else {
+      if (this.demoTimer >= DEMO_REST_SEC) {
+        this.demoPhase = 'kindle';
+        this.demoTimer = 0;
+        this.demoNextSeat = 1;
+        this.demoLitSeats = 0;
+      }
+    }
+
+    this.applyDemoVisuals();
+  }
+
+  /** 把 demoLitSeats 落到全部演示驱动的视觉上（每帧幂等）。 */
+  private applyDemoVisuals(): void {
+    const lit = this.demoLitSeats;
+
+    // 逐席光迹与繁花：点名中递增、逆熄中递减。
+    if (this.seatTrailsGroup) this.seatTrailsGroup.visible = lit > 0;
+    this.seatTrails.forEach((trail, idx) => { trail.visible = idx + 1 <= lit; });
+    this.seatLotusMeshes.forEach((flower, id) => { flower.visible = id <= lit; });
+
+    // 双龙粒子与线：同 setRitualState 的 drawRange 语义。
+    if (this.waterParticles) this.waterParticles.visible = lit > 0;
+    if (this.waterLine) {
+      this.waterLine.visible = lit > 0;
+      this.waterLine.geometry.setDrawRange(
+        0,
+        Math.round(this.waterLine.geometry.attributes.position.count * (lit / SEAT_ID_MAX))
+      );
+    }
+    if (this.soundLine) {
+      this.soundLine.visible = lit > 0;
+      this.soundLine.geometry.setDrawRange(0, lit);
+    }
+    if (this.soundParticles) this.soundParticles.visible = lit > 0;
+
+    // 前锋珠：水龙珠贴当前点名席（沿水路外行下潜），音龙珠贴对应音龙节点（内收上升）。
+    const waterNode =
+      lit > 0 && this.waterSpiralPath.length > 0
+        ? this.waterSpiralPath[Math.min(lit, this.waterSpiralPath.length) - 1]
+        : null;
+    const soundNode =
+      lit > 0 && this.soundSpiralPath.length > 0
+        ? this.soundSpiralPath[Math.min(lit, this.soundSpiralPath.length) - 1]
+        : null;
+
+    if (this.waterFrontBead) {
+      this.waterFrontBead.visible = waterNode !== null;
+      if (waterNode) this.waterFrontBead.position.copy(waterNode);
+    }
+    if (this.soundFrontBead) {
+      this.soundFrontBead.visible = soundNode !== null;
+      if (soundNode) this.soundFrontBead.position.copy(soundNode);
+    }
+  }
+
   public presentImmediately() {
     this.ritualMode = false;
     this.ritualLitSeats = 49;
@@ -2344,6 +2514,9 @@ export class AltarScene {
 
     // 0. 公共入口 1800s 五幕时间轴（唯一幕次 / 时间驱动源，仅在仪式运行态推进）。
     this.updateRitualTimeline(dt);
+
+    // 0.05 公共入口自运维演示循环：与仪式时间轴互斥（演示只在非 ritual 直入版跑）。
+    this.updateDemo(dt);
 
     // 0.2 雾中一句：由时间轴结算后刷新字幕（至多一句）。
     this.syncFogCaption();

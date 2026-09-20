@@ -4,6 +4,15 @@ import { detectWebglTier, type WebglTier } from './three/webglCapability';
 import { WebglFallback } from './components/WebglFallback';
 import { INITIAL_SPIRAL_EVENTS } from './data/spiral_events';
 
+/**
+ * 公共入口 · 观察席（#5 纯净渲染树）。
+ *
+ * 设计不变量（QA 门禁 verify-audio-envelope / qa-verify-audio-envelope）：
+ * 公共 App 与公共 UI 树**不得**含任何交互控件/回调（无倍速入口可挂、
+ * 公共 DOM 无座次/工程文案）。所有“活”都发生在 3D 场景与声音里：
+ * 自运维演示循环（点名→定格→逆熄→留白→重生）、双龙前锋珠、走马灯巡礼、
+ * 首次手势后的逐席编钟 —— 访客不需要点任何按钮就能看到装置在说话。
+ */
 export const App: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   /**
@@ -21,7 +30,9 @@ export const App: React.FC = () => {
 
     // 以给定档位起坛。抽成局部函数只为让下面两级兜底共用同一段构造代码。
     const raise = (t: WebglTier): AltarScene =>
-      new AltarScene(container, INITIAL_SPIRAL_EVENTS, undefined, undefined, undefined, { tier: t });
+      new AltarScene(container, INITIAL_SPIRAL_EVENTS, undefined, undefined, undefined, {
+        tier: t
+      });
 
     // §2.4：3D 构造**任何**异常都兜进无画档，绝不冒泡成 React 错误边界 / 白屏。
     let altar: AltarScene | null = null;
@@ -43,9 +54,12 @@ export const App: React.FC = () => {
     // 公共入口采用自由观察席：进入即开放鼠标 OrbitControls 与 WASD/QE。
     // 真正 OIDC 接入后由身份层覆写此角色；祭坛本体仍只消费 role，不自行验权。
     altar.setRole('authenticated');
-    // 公共入口不强制启动仪式镜头，避免时间轴接管相机并锁死观察席控制。
-    // 需要演示完整五幕时间轴时，再由导演入口显式调用 startRitual()。
+
+    // 直入版全坛呈现（一帧即亮，不做开场黑场），随后启动自运维演示循环：
+    // 点名（1→49 逐席点亮发声）→ 定格 → 逆熄 → 留白 → 重生。
+    // 30 分钟五幕正典仍由导演入口 startRitual() 提供（#5 隔离），公共页不锁相机。
     altar.presentImmediately();
+    altar.startDemo();
 
     // #7 T5：**只换画面层**。时间轴 / 雾中字幕 / 音频由 AltarScene 的**同一个**
     // animate 循环继续推进 —— 这里不新建第二套时间轴，也不新建计时器（#4 不变量）。
@@ -61,7 +75,7 @@ export const App: React.FC = () => {
     <main className="ritual-root" aria-label="华夏祭坛">
       <div ref={containerRef} className="ritual-canvas" />
       <aside
-        aria-label="相机快捷键提示"
+        aria-label="观察席"
         className="pointer-events-none absolute right-4 top-4 z-20 w-52 rounded-xl border border-slate-700/70 bg-slate-950/75 px-3 py-2.5 text-[11px] leading-5 text-slate-300 shadow-xl backdrop-blur-md"
       >
         <div className="mb-1 font-semibold tracking-wide text-amber-300">观察席快捷键</div>
