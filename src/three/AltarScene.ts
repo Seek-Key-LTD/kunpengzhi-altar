@@ -55,6 +55,7 @@ import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import { saucerLayout } from '../data/wujiGeometry';
+import { ceremonyVisibility } from '../data/ceremonyVisibility';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -1700,37 +1701,36 @@ export class AltarScene {
     this.rig.guestIndex = 0;
     this.controls.enabled = false;
     this.scene.background = new THREE.Color(0x000000);
-    const isDark = phase === 'abyss' || phase === 'silence';
+    const v = ceremonyVisibility(phase);
     // 公共仪式可以暗，不能灰。雾只承担远景吸收，不许把 7×7 Cube 的贴合边界糊掉。
-    this.scene.fog = new THREE.FogExp2(0x000000, isDark ? 0.07 : 0.006);
+    this.scene.fog = new THREE.FogExp2(0x000000, v.fogDensity);
 
-    if (this.ambientLight) this.ambientLight.intensity = isDark ? 0 : 0.18;
-    if (this.sunLight) this.sunLight.intensity = isDark ? 0 : 1.35;
-    if (this.rimLight) this.rimLight.intensity = isDark ? 0 : 0.82;
-    if (this.apexLight) this.apexLight.intensity = isDark ? 0 : 0.62;
-    if (this.wujiLight) this.wujiLight.intensity = phase === 'extinguishing' || phase === 'silence' ? 2.4 : 0;
+    if (this.ambientLight) this.ambientLight.intensity = v.ambientLight;
+    if (this.sunLight) this.sunLight.intensity = v.sunLight;
+    if (this.rimLight) this.rimLight.intensity = v.rimLight;
+    if (this.apexLight) this.apexLight.intensity = v.apexLight;
+    if (this.wujiLight) this.wujiLight.intensity = v.wujiLightIntensity;
 
-    this.outerShellGroup.visible = phase !== 'abyss';
-    this.hollowInteriorGroup.visible = phase !== 'abyss';
-    this.waterworksGroup.visible = !isDark;
-    this.fountainGroup.visible = !isDark;
+    this.outerShellGroup.visible = v.outerShellVisible;
+    this.hollowInteriorGroup.visible = v.outerShellVisible;
+    this.waterworksGroup.visible = v.waterworksVisible;
+    this.fountainGroup.visible = v.waterworksVisible;
     this.primeLinesGroup.visible = false;
     this.starship.hideAll();
-    this.lanternsGroup.visible = phase === 'lanterns' || phase === 'extinguishing';
+    this.lanternsGroup.visible = v.lanternsVisible;
     // 回转由 RFC-008 引擎持续驱动，幕次切换不再改写转速（见 animate 第 9b 段）
-    const dualDragonVisible = phase === 'naming' || phase === 'lanterns';
-    this.dragon.setRitual(this.ritualLitSeats, dualDragonVisible);
+    this.dragon.setRitual(this.ritualLitSeats, v.dualDragonVisible);
     // #2：逐席光迹 —— 只有已触发席位保留光迹（未触发者不可见，绝不预演未来席）。
-    if (this.seatTrailsGroup) this.seatTrailsGroup.visible = dualDragonVisible;
+    if (this.seatTrailsGroup) this.seatTrailsGroup.visible = v.dualDragonVisible;
     this.seatTrails.forEach((trail, idx) => {
-      trail.visible = dualDragonVisible && idx + 1 <= this.ritualLitSeats;
+      trail.visible = v.dualDragonVisible && idx + 1 <= this.ritualLitSeats;
     });
-    if (this.wujiAbsorber) this.wujiAbsorber.visible = phase !== 'abyss';
+    if (this.wujiAbsorber) this.wujiAbsorber.visible = v.wujiAbsorberVisible;
     // 玉玺属于导演台的器物层；公共仪式中不能让它与 #00 争中心。
     if (this.relic) this.relic.object3D.visible = false;
     if (this.relicDecal) this.relicDecal.object3D.visible = false;
 
-    this.lotus.setRitual(this.ritualLitSeats, isDark, activeSeatId);
+    this.lotus.setRitual(this.ritualLitSeats, v.isDark, activeSeatId);
   }
 
   /**
