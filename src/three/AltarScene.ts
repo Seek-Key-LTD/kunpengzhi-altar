@@ -47,6 +47,7 @@ import { ImperialSealObject } from './relic/ImperialSealObject';
 import { CameraRig } from './CameraRig';
 import { DemoDirector } from './DemoDirector';
 import { RitualClock } from './RitualClock';
+import { MechanicsRig, WATER_LIFT_Z, WATER_LIFT_BASE_Y, WATER_LIFT_PULLEY_Y, WATER_LIFT_SEP } from './MechanicsRig';
 import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
@@ -61,11 +62,6 @@ import type { WebglTier } from './webglCapability';
 // ── RFC-007 双体水梯 → 场景的映射常数 ──────────────────────────────
 // 引擎世界：H=7.0、桶行程 z∈[-3.5,3.5]。这里把 7 单位行程映射成 6 个世界单位
 // （= 2 个 CELL），整机占位远小于 3 CELL，立在北坡台基上，不遮 49 席与坛心玉玺。
-const WATER_LIFT_Z = -(PYRAMID_HALF + 1.7); // 北坡：坛体北面之外、台基之上
-const WATER_LIFT_BASE_Y = 2.4;              // 引擎 y=0 对应的世界高度（桶心）
-const WATER_LIFT_SCALE = 6.0 / 7.0;         // 7 单位 → 6 世界单位
-const WATER_LIFT_PULLEY_Y = 9.6;            // 顶端定滑轮高度
-const WATER_LIFT_SEP = 1.6;                 // 双桶左右分列（±x）
 
 // ── #4 · 导演 / 工程入口 · 受控回放速率 ──────────────────────────────
 //
@@ -101,6 +97,7 @@ export class AltarScene {
   private rig!: CameraRig;
   private demo!: DemoDirector;
   private ritualClock!: RitualClock;
+  private mech!: MechanicsRig;
   private animationFrameId: number | null = null;
 
   // ── #7 · 能力三态 / 无画模式 ───────────────────────────────────────
@@ -127,15 +124,6 @@ export class AltarScene {
 
   // 水利机关：RFC-007 双体水梯（中空神索 · 双体变质量阿特伍德振子）
   private waterLift = new AltarWaterLiftEngine({ height: 7.0, bucketMass: 5.0, initialWater: 10.0 });
-  private waterLiftGroup: THREE.Group | null = null;
-  private waterLiftBucketA: THREE.Group | null = null;
-  private waterLiftBucketB: THREE.Group | null = null;
-  private waterLiftWaterA: THREE.Mesh | null = null;
-  private waterLiftWaterB: THREE.Mesh | null = null;
-  private waterLiftRopeA: THREE.Mesh | null = null;
-  private waterLiftRopeB: THREE.Mesh | null = null;
-  /** 首个物理接管帧只播报一次，避免每帧刷屏 */
-  private waterLiftAnnounced = false;
 
   /**
    * #5 · 7×7 正交取证相机（俯视，沿 -Y 看，丢弃 y）。
@@ -225,7 +213,6 @@ export class AltarScene {
   private maglev = new AltarMaglevLanternEngine({ radius: 23.5 });
   /** 北坡双桶撞簧 → 走马灯的地脉震颤 [0,1]：由 waterLift.onPhaseTransition 注入、逐帧衰减 */
   private waterLiftSeismic = 0;
-  private maglevAnnounced = false;
   /** QA 节奏日志上限：相变/击发各打前 8 条以证明「周期发生」，之后静默避免刷屏 */
   private waterLiftPhaseLogCount = 0;
   private maglevStrumLogCount = 0;
@@ -310,6 +297,7 @@ export class AltarScene {
     this.rig = new CameraRig(this.camera, this.controls);
     this.demo = new DemoDirector();
     this.ritualClock = new RitualClock();
+    this.mech = new MechanicsRig();
     this.controls.dampingFactor = 0.05;
     this.controls.minDistance = 0.8;
     this.controls.maxDistance = 220;
@@ -321,6 +309,7 @@ export class AltarScene {
     this.outerShellGroup = new THREE.Group();
     this.hollowInteriorGroup = new THREE.Group();
     this.lanternsGroup = new THREE.Group();
+    this.mech.registerLanterns(this.lanternsGroup);
     this.primeLinesGroup = new THREE.Group();
     this.fountainGroup = new THREE.Group();
     this.waterworksGroup = new THREE.Group();
@@ -845,18 +834,13 @@ export class AltarScene {
 
     const a = makeBucket(-1);
     const b = makeBucket(1);
-    this.waterLiftBucketA = a.bucket;
-    this.waterLiftBucketB = b.bucket;
-    this.waterLiftWaterA = a.water;
-    this.waterLiftWaterB = b.water;
 
     // 中空神索：竖索，几何高度 1，逐帧 scale.y 伸缩
     const ropeGeo = new THREE.CylinderGeometry(0.045, 0.045, 1, 6);
     const ropeA = new THREE.Mesh(ropeGeo, ropeMat);
     const ropeB = new THREE.Mesh(ropeGeo, ropeMat);
     group.add(ropeA, ropeB);
-    this.waterLiftRopeA = ropeA;
-    this.waterLiftRopeB = ropeB;
+    this.mech.registerWaterLift(group, a.bucket, b.bucket, a.water, b.water, ropeA, ropeB);
 
     // 底部神簧：桶底两枚细螺旋
     [-1, 1].forEach((sx) => {
@@ -869,7 +853,6 @@ export class AltarScene {
     });
 
     this.hollowInteriorGroup.add(group);
-    this.waterLiftGroup = group;
 
     // 相变接线：既有 triggerFountainPulse()（水花/垫音）+ #4 新增的翻斗链条声。
     this.waterLift.onPhaseTransition = (highBucket, massSkimmed, tone) => {
@@ -896,36 +879,7 @@ export class AltarScene {
    *   · 中空神索随桶顶与滑轮之间的距离逐帧伸缩。
    */
   private syncWaterLiftVisual(): void {
-    if (!this.waterLiftGroup) return;
-    const { yA, yB, mA, mB } = this.waterLift.state;
-
-    const centerA = WATER_LIFT_BASE_Y + yA * WATER_LIFT_SCALE;
-    const centerB = WATER_LIFT_BASE_Y + yB * WATER_LIFT_SCALE;
-
-    if (this.waterLiftBucketA) this.waterLiftBucketA.position.y = centerA;
-    if (this.waterLiftBucketB) this.waterLiftBucketB.position.y = centerB;
-
-    // 水柱高度 ∝ 质量（参考满量 ~15kg，夹到 [0.02, 1]）
-    if (this.waterLiftWaterA) this.waterLiftWaterA.scale.y = THREE.MathUtils.clamp(mA / 15, 0.02, 1);
-    if (this.waterLiftWaterB) this.waterLiftWaterB.scale.y = THREE.MathUtils.clamp(mB / 15, 0.02, 1);
-
-    // 神索：竖索长度 = 滑轮高度 − 桶顶高度
-    const ropeLenA = Math.max(0.05, WATER_LIFT_PULLEY_Y - (centerA + 0.5));
-    const ropeLenB = Math.max(0.05, WATER_LIFT_PULLEY_Y - (centerB + 0.5));
-    if (this.waterLiftRopeA) {
-      this.waterLiftRopeA.scale.y = ropeLenA;
-      this.waterLiftRopeA.position.set(-WATER_LIFT_SEP, WATER_LIFT_PULLEY_Y - ropeLenA / 2, 0);
-    }
-    if (this.waterLiftRopeB) {
-      this.waterLiftRopeB.scale.y = ropeLenB;
-      this.waterLiftRopeB.position.set(WATER_LIFT_SEP, WATER_LIFT_PULLEY_Y - ropeLenB / 2, 0);
-    }
-
-    // 首个物理接管帧播报一次，便于 QA 验证
-    if (!this.waterLiftAnnounced) {
-      this.waterLiftAnnounced = true;
-      console.log(`[水梯] RFC-007 引擎接管 z=${this.waterLift.state.z.toFixed(3)}`);
-    }
+    this.mech.syncWaterLift(this.waterLift.state);
   }
 
   /**
@@ -938,14 +892,7 @@ export class AltarScene {
     if (!this.lanternsGroup) return;
     // #2 茶灯门控：仅当门开（ritualMode 下 ≥1020s，或非仪式档）才让茶灯转动。
     // 引擎与地脉耦合（seismic）保持原样 —— 这里只门控**视觉转角**，不碰动力学。
-    const raw = this.maglev.state.theta;
-    this.lanternsGroup.rotation.y = this.lanternGateOpen ? raw - this.lanternRotationTheta0 : 0;
-    this.lanternsGroup.position.y = this.maglev.state.z;
-
-    if (!this.maglevAnnounced) {
-      this.maglevAnnounced = true;
-      console.log(`[走马灯] RFC-008 引擎接管 theta=${this.maglev.state.theta.toFixed(4)}`);
-    }
+    this.mech.syncMaglev(this.maglev.state, this.lanternGateOpen, this.lanternRotationTheta0);
   }
 
   /**
@@ -2689,13 +2636,6 @@ export class AltarScene {
     this.lanternPanels.clear();
     this.interiorStelae.clear();
     // RFC-007 双体水梯：几何随整棵场景图在第 6 步回收，这里只断开引用
-    this.waterLiftGroup = null;
-    this.waterLiftBucketA = null;
-    this.waterLiftBucketB = null;
-    this.waterLiftWaterA = null;
-    this.waterLiftWaterB = null;
-    this.waterLiftRopeA = null;
-    this.waterLiftRopeB = null;
     // RFC-008 走马灯：引擎是纯数学状态、无场景资源（几何随场景图第 6 步回收），
     // 这里只把 RFC-007→RFC-008 的地脉冲击量归零。
     this.waterLiftSeismic = 0;
