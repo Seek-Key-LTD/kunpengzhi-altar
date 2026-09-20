@@ -33,9 +33,6 @@ import {
   CELL,
   PYRAMID_HALF,
   PYRAMID_TOP,
-  SCORPION_BORE_RADIUS,
-  SCORPION_CASING_RADIUS,
-  scorpionWaterElevation,
   RABBIT_HOLE_SEATS
 } from '../data/altarGeometry';
 import { ImperialSealObject } from './relic/ImperialSealObject';
@@ -56,7 +53,6 @@ import { CAMERA_MODE_POSES } from '../data/cameraModes';
 import { pickStelaEvents, stelaPose } from '../data/stelaRing';
 import { seatWorldPos } from '../data/seatWorldPos';
 import { brickLevels } from '../data/brickLevels';
-import { validWedge } from '../data/scorpionTopology';
 import { isPrimeDiagonal } from '../data/primeDiagonal';
 import { buildSurroundingAtmosphere } from './AtmosphereBuilder';
 import { buildStarships } from './StarshipBuilder';
@@ -64,6 +60,7 @@ import { buildPlinth } from './PlinthBuilder';
 import { buildSeatTrails } from './SeatTrailsBuilder';
 import { buildRiverAxis } from './RiverAxisBuilder';
 import { buildFrontBead } from './FrontBeadBuilder';
+import { buildScorpionWaterway } from './ScorpionWaterwayBuilder';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -635,75 +632,7 @@ export class AltarScene {
    * 阳 Cube 没有槽、没有坡、没有水滴碰撞面；所以水无从跑到坛外。
    */
   private buildScorpionWaterway() {
-    const points = this.events.map((event) => new THREE.Vector3(
-      event.grid_x * CELL,
-      scorpionWaterElevation(event.seat_id),
-      event.grid_z * CELL
-    ));
-    this.dragon.setWaterPath(points);
-
-    const casingMat = new THREE.MeshStandardMaterial({
-      color: 0x5c3216,
-      emissive: 0x251006,
-      emissiveIntensity: 0.34,
-      roughness: 0.29,
-      metalness: 0.84
-    });
-    const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
-      emissive: 0x0369a1,
-      emissiveIntensity: 1.1,
-      roughness: 0.04,
-      metalness: 0.62,
-      transparent: true,
-      opacity: 0.88
-    });
-
-    for (let index = 0; index < points.length - 1; index++) {
-      const from = points[index];
-      const to = points[index + 1];
-      const event = this.events[index];
-      const next = this.events[index + 1];
-      if (!validWedge({grid_x: event.grid_x, grid_z: event.grid_z, y: from.y}, {grid_x: next.grid_x, grid_z: next.grid_z, y: to.y})) {
-        throw new Error(`蝎子楔拓扑错误：${event.seat_id}→${next.seat_id} 必须相邻且降势`);
-      }
-
-      const centerline = new THREE.LineCurve3(from, to);
-      const casing = new THREE.Mesh(
-        new THREE.TubeGeometry(centerline, 12, SCORPION_CASING_RADIUS, 12, false),
-        casingMat
-      );
-      casing.userData = {
-        type: 'scorpion_wedge',
-        fromSeat: event.seat_id,
-        toSeat: next.seat_id,
-        sealed: true,
-        exposedOnYangCube: false
-      };
-      this.waterworksGroup.add(casing);
-
-      const waterCore = new THREE.Mesh(
-        new THREE.TubeGeometry(centerline, 12, SCORPION_BORE_RADIUS, 10, false),
-        waterMat
-      );
-      waterCore.userData = {
-        type: 'scorpion_water_core',
-        fromSeat: event.seat_id,
-        toSeat: next.seat_id,
-        sealed: true,
-        exposedOnYangCube: false
-      };
-      this.waterworksGroup.add(waterCore);
-
-      // 每个转接心脏留一枚圆滑“蝎节”，把直段锁在 Cube 的腹腔里。
-      const joint = new THREE.Mesh(
-        new THREE.SphereGeometry(SCORPION_CASING_RADIUS * 1.08, 12, 10),
-        casingMat
-      );
-      joint.position.copy(from);
-      joint.userData = { type: 'scorpion_joint', seatId: event.seat_id, exposedOnYangCube: false };
-      this.waterworksGroup.add(joint);
-    }
+    buildScorpionWaterway(this.events, this.waterworksGroup, (pts) => this.dragon.setWaterPath(pts));
   }
 
   /**
