@@ -58,6 +58,7 @@ import { ceremonyVisibility } from '../data/ceremonyVisibility';
 import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
 import { seatTrailPoints } from '../data/seatTrail';
+import { pickStelaEvents, stelaPose } from '../data/stelaRing';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -1106,11 +1107,7 @@ export class AltarScene {
    */
   /** 后置展示层：结构验收通过后才由显式调用启用。 */
   public buildInnerStelaeRing() {
-    const outer = this.events
-      .filter((ev) => Math.max(Math.abs(ev.grid_x), Math.abs(ev.grid_z)) === 3)
-      .sort((a, b) => a.seat_id - b.seat_id);
-
-    const picks = outer.filter((_, i) => i % 2 === 0).slice(0, SEASON1_POEMS.length);
+    const picks = pickStelaEvents(this.events, SEASON1_POEMS.length);
 
     const slabMat = new THREE.MeshStandardMaterial({
       color: 0x0f172a,
@@ -1135,14 +1132,8 @@ export class AltarScene {
     picks.forEach((ev, i) => {
       const poem = SEASON1_POEMS[i % SEASON1_POEMS.length];
 
-      let nx = 0;
-      let nz = 0;
-      if (Math.abs(ev.grid_x) === 3) nx = Math.sign(ev.grid_x);
-      else nz = Math.sign(ev.grid_z);
-
-      const cx = ev.grid_x * CELL + nx * (CELL / 2 + 0.08);
-      const cz = ev.grid_z * CELL + nz * (CELL / 2 + 0.08);
-      const cy = ev.elevation + stelaH / 2 - BRICK * 0.1;
+      const sp = stelaPose(ev, CELL, BRICK, stelaH);
+      const { x: cx, y: cy, z: cz, nx, nz } = sp;
 
       const stelaGroup = new THREE.Group();
       stelaGroup.position.set(cx, cy, cz);
