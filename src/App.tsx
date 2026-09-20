@@ -40,12 +40,12 @@ export const App: React.FC = () => {
       return;
     }
 
-    // 当前直入版本不开放游客档：进入即为已认证的观察席，WASD/QE 立刻可用。
+    // 公共入口采用自由观察席：进入即开放鼠标 OrbitControls 与 WASD/QE。
     // 真正 OIDC 接入后由身份层覆写此角色；祭坛本体仍只消费 role，不自行验权。
     altar.setRole('authenticated');
-    // #8：公共入口改由 1800s 五幕时间轴驱动（abyss→naming→lanterns→extinguishing→silence）。
-    // presentImmediately() 保留不删，供导演 / 直入路径（#5）另用。
-    altar.startRitual();
+    // 公共入口不强制启动仪式镜头，避免时间轴接管相机并锁死观察席控制。
+    // 需要演示完整五幕时间轴时，再由导演入口显式调用 startRitual()。
+    altar.presentImmediately();
 
     // #7 T5：**只换画面层**。时间轴 / 雾中字幕 / 音频由 AltarScene 的**同一个**
     // animate 循环继续推进 —— 这里不新建第二套时间轴，也不新建计时器（#4 不变量）。
@@ -60,6 +60,23 @@ export const App: React.FC = () => {
   return (
     <main className="ritual-root" aria-label="华夏祭坛">
       <div ref={containerRef} className="ritual-canvas" />
+      <aside
+        aria-label="相机快捷键提示"
+        className="pointer-events-none absolute right-4 top-4 z-20 w-52 rounded-xl border border-slate-700/70 bg-slate-950/75 px-3 py-2.5 text-[11px] leading-5 text-slate-300 shadow-xl backdrop-blur-md"
+      >
+        <div className="mb-1 font-semibold tracking-wide text-amber-300">观察席快捷键</div>
+        <div className="grid grid-cols-2 gap-x-3">
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">W</kbd> 前进</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">S</kbd> 后退</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">A</kbd> 左移</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">D</kbd> 右移</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">Q</kbd> 下降</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">E</kbd> 上升</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">Shift</kbd> 加速</span>
+          <span><kbd className="rounded bg-slate-800 px-1 font-mono text-amber-200">R</kbd> 复位</span>
+        </div>
+        <div className="mt-1 border-t border-slate-800 pt-1 text-slate-400">鼠标拖拽旋转 · 滚轮缩放 · 右键拖拽平移</div>
+      </aside>
       {veiled && <WebglFallback />}
     </main>
   );

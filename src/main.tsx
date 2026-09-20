@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import RelicViewer from './RelicViewer';
 import './index.css';
 
 // ── 路由：hash，不用 query ───────────────────────────────────────────
@@ -20,6 +21,7 @@ function currentRoute(): 'director' | 'public' {
 }
 
 const Root: React.FC = () => {
+  if (window.location.pathname === '/relic-viewer') return <RelicViewer />;
   const [route, setRoute] = React.useState(currentRoute);
 
   React.useEffect(() => {

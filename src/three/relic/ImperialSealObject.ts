@@ -1,8 +1,8 @@
 // 传国玉玺 · 主体（程序化占位实现 + GLB 接管接口）
 //
 // ── 为什么是程序化几何 ──────────────────────────────────────────────
-// 美术的高精 imperial_seal.glb **尚未产出**。为了不把整条链路堵死，
-// 这里先用 Three.js 基础几何（Extrude / Lathe / Tube / Box）拼一尊
+// 仓库内已有高精 public/models/imperial_seal.glb。为了网络加载失败时仍可验收，
+// 这里保留 Three.js 基础几何（Extrude / Lathe / Tube / Box）作为失败回退，
 // 「方圆四寸玉体 + 简化五龙钮 + 金镶玉缺角」的占位玉玺：
 //   · 尺寸严格按 sealSpec（方四寸 = 3.0 = 一格，通高 2.7）
 //   · 微雕细节一律走 Normal 贴图，不建几何（守住 150K tris 预算）
@@ -377,6 +377,8 @@ export class ImperialSealObject {
     this.root.name = 'imperial_seal';
     this.root.userData.relic_id = 'imperial_seal';
     this.root.userData.is_relic = true;
+    // 资产加载完成前不展示程序化回退，避免观众把加载中的钮座误认成玉玺成品。
+    this.root.visible = false;
     this.root.position.set(0, SEAL_HOVER_Y, 0);
     this.root.add(this.placeholder);
 
@@ -1080,6 +1082,7 @@ export class ImperialSealObject {
       model.userData.relic_id = 'imperial_seal';
       this.root.add(model);
       this.glbLoaded = true;
+      this.root.visible = true;
 
       // 登记各部件：拆解位移、LOD、断代过滤都要用到它们
       this.registerGlbParts(model);
@@ -1097,6 +1100,7 @@ export class ImperialSealObject {
       return true;
     } catch (err) {
       console.warn('[玉玺] GLB 加载失败，保留程序化占位几何：', err);
+      this.root.visible = true;
       return false;
     } finally {
       // 解码器只在加载期间需要，用完即弃
