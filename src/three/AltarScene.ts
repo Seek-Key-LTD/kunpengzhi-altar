@@ -45,6 +45,7 @@ import {
 } from '../data/altarGeometry';
 import { ImperialSealObject } from './relic/ImperialSealObject';
 import { CameraRig } from './CameraRig';
+import { DemoDirector } from './DemoDirector';
 import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
@@ -77,10 +78,6 @@ export const RITUAL_PLAYBACK_DEFAULT = 1;
 // ── 公共入口 · 自运维演示循环（点名→定格→逆熄→留白→重生）────────────
 // 直入版不是静态模型：装置持续“说话”。访客无需等 30 分钟正典，
 // 也能看到水往下走、音往上升、逐席点名、倒序熄灭的完整仪式。
-export const DEMO_KINDLE_SEC = 1.15; // 点名：每席间隔（秒）
-export const DEMO_HOLD_SEC = 3.2; // 第 49 席定格（秒）
-export const DEMO_EXTINGUISH_SEC = 0.42; // 逆熄：每席熄灭间隔（秒）
-export const DEMO_REST_SEC = 4.0; // 全熄留白（秒）
 
 /**
  * #7 · 构造选项。
@@ -101,6 +98,7 @@ export class AltarScene {
   private renderer: THREE.WebGLRenderer | null = null;
   private controls: OrbitControls;
   private rig!: CameraRig;
+  private demo!: DemoDirector;
   private animationFrameId: number | null = null;
 
   // ── #7 · 能力三态 / 无画模式 ───────────────────────────────────────
@@ -170,11 +168,6 @@ export class AltarScene {
   private namingLitSeats = -1;
 
   // ── 公共入口 · 自运维演示循环状态 ──────────────────────────────────
-  private demoActive = false;
-  private demoLitSeats = 0;
-  private demoNextSeat = 1;
-  private demoPhase: 'kindle' | 'hold' | 'extinguish' | 'rest' = 'kindle';
-  private demoTimer = 0;
   private waterFrontBead: THREE.Group | null = null;
   private soundFrontBead: THREE.Group | null = null;
   /** Web Audio 手势兜底是否已武装（避免重复绑定）。 */
@@ -321,6 +314,7 @@ export class AltarScene {
     );
     this.controls.enableDamping = true;
     this.rig = new CameraRig(this.camera, this.controls);
+    this.demo = new DemoDirector();
     this.controls.dampingFactor = 0.05;
     this.controls.minDistance = 0.8;
     this.controls.maxDistance = 220;
@@ -991,7 +985,7 @@ export class AltarScene {
    * 非仪式档（导演台 / 直入）恒 49 席。两龙共用此值 ⟹ 同源、不预演未来席。
    */
   private dualDragonLitSeats(): number {
-    if (this.demoActive) return this.demoLitSeats;
+    if (this.demo.isActive) return this.demo.lit;
     return this.ritualMode ? this.ritualLitSeats : SEAT_ID_MAX;
   }
 
@@ -1852,12 +1846,8 @@ export class AltarScene {
    * demoLitSeats 驱动（与 ritualLitSeatsAt 同语义，不预演未来席）。
    */
   public startDemo(): void {
-    if (this.demoActive) return;
-    this.demoActive = true;
-    this.demoLitSeats = 0;
-    this.demoNextSeat = 1;
-    this.demoPhase = 'kindle';
-    this.demoTimer = 0;
+    if (this.demo.isActive) return;
+    this.demo.start();
     this.isAutoPatrol = false;
 
     if (!this.waterFrontBead && this.waterSpiralPath.length > 0) {
@@ -1876,8 +1866,8 @@ export class AltarScene {
 
   /** 停掉演示循环（导演/工程入口不需要时）。 */
   public stopDemo(): void {
-    if (!this.demoActive) return;
-    this.demoActive = false;
+    if (!this.demo.isActive) return;
+    this.demo.stop();
     if (this.wujiLight) this.wujiLight.intensity = 0;
   }
 
@@ -1886,53 +1876,17 @@ export class AltarScene {
    * 未获用户手势时 altarAudio 静默跳过，由 kickAudio 的首次点击兜底。
    */
   private updateDemo(dt: number): void {
-    if (!this.demoActive) return;
-    this.demoTimer += Number.isFinite(dt) ? dt : 0;
-
-    if (this.demoPhase === 'kindle') {
-      if (this.demoTimer >= DEMO_KINDLE_SEC) {
-        this.demoTimer -= DEMO_KINDLE_SEC;
-        const next = Math.min(SEAT_ID_MAX, this.demoNextSeat);
-        this.demoNextSeat = next + 1;
-        this.demoLitSeats = next;
-        const ev = this.events.find((e) => e.seat_id === next);
-        if (ev) altarAudio.triggerSeatEvent(ev);
-        if (next === SEAT_ID_MAX) {
-          this.demoPhase = 'hold';
-          this.demoTimer = 0;
-        }
-      }
-    } else if (this.demoPhase === 'hold') {
-      if (this.demoTimer >= DEMO_HOLD_SEC) {
-        this.demoPhase = 'extinguish';
-        this.demoTimer = 0;
-        this.demoNextSeat = SEAT_ID_MAX;
-      }
-    } else if (this.demoPhase === 'extinguish') {
-      if (this.demoTimer >= DEMO_EXTINGUISH_SEC) {
-        this.demoTimer -= DEMO_EXTINGUISH_SEC;
-        this.demoLitSeats = Math.max(0, this.demoNextSeat - 1);
-        this.demoNextSeat = this.demoLitSeats;
-        if (this.demoLitSeats <= 0) {
-          this.demoPhase = 'rest';
-          this.demoTimer = 0;
-        }
-      }
-    } else {
-      if (this.demoTimer >= DEMO_REST_SEC) {
-        this.demoPhase = 'kindle';
-        this.demoTimer = 0;
-        this.demoNextSeat = 1;
-        this.demoLitSeats = 0;
-      }
-    }
-
+    if (!this.demo.isActive) return;
+    this.demo.update(dt, (seatId) => {
+      const ev = this.events.find((e) => e.seat_id === seatId);
+      if (ev) altarAudio.triggerSeatEvent(ev);
+    });
     this.applyDemoVisuals();
   }
 
   /** 把 demoLitSeats 落到全部演示驱动的视觉上（每帧幂等）。 */
   private applyDemoVisuals(): void {
-    const lit = this.demoLitSeats;
+    const lit = this.demo.lit;
 
     // 逐席光迹与繁花：点名中递增、逆熄中递减。
     if (this.seatTrailsGroup) this.seatTrailsGroup.visible = lit > 0;
