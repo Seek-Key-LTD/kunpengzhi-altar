@@ -55,7 +55,6 @@ import { saucerLayout } from '../data/wujiGeometry';
 import { ceremonyVisibility } from '../data/ceremonyVisibility';
 import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
-import { seatTrailPoints } from '../data/seatTrail';
 import { pickStelaEvents, stelaPose } from '../data/stelaRing';
 import { seatWorldPos } from '../data/seatWorldPos';
 import { brickLevels } from '../data/brickLevels';
@@ -64,6 +63,7 @@ import { isPrimeDiagonal } from '../data/primeDiagonal';
 import { buildSurroundingAtmosphere } from './AtmosphereBuilder';
 import { buildStarships } from './StarshipBuilder';
 import { buildPlinth } from './PlinthBuilder';
+import { buildSeatTrails } from './SeatTrailsBuilder';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -1437,26 +1437,9 @@ export class AltarScene {
    * 未触发者恒不可见 —— 绝不预演未来席。
    */
   private buildSeatTrails(): void {
-    const group = new THREE.Group();
-    group.name = 'dual-dragon-seat-trails';
-    // 49 条光迹共用一份材质（disposeSceneResources 以 Set 去重，不会重复回收）。
-    const mat = new THREE.LineBasicMaterial({
-      color: 0xe9d5ff,
-      transparent: true,
-      opacity: 0.5,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-    for (let seatId = 1; seatId <= DRAGON_SEAT_COUNT; seatId++) {
-      const pts = seatTrailPoints(seatId).map(p => new THREE.Vector3(p.x, p.y, p.z));
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
-      line.visible = false;
-      line.userData = { type: 'seat_trail', seatId };
-      this.seatTrails.push(line);
-      group.add(line);
-    }
+    const { group, lines } = buildSeatTrails(this.scene);
     this.seatTrailsGroup = group;
-    this.scene.add(group);
+    this.seatTrails.push(...lines);
   }
 
   private buildStarships() {
