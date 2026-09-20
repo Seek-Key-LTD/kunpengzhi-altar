@@ -64,6 +64,7 @@ import { brickLevels } from '../data/brickLevels';
 import { validWedge } from '../data/scorpionTopology';
 import { isPrimeDiagonal } from '../data/primeDiagonal';
 import { buildSurroundingAtmosphere } from './AtmosphereBuilder';
+import { buildStarships } from './StarshipBuilder';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -1489,39 +1490,7 @@ export class AltarScene {
   }
 
   private buildStarships() {
-    this.events.forEach((ev) => {
-      if (ev.seat_status === 'reserved' || ev.seat_id === 49) {
-        const shipGroup = new THREE.Group();
-        const basePos = this.getSeatWorldPos(ev);
-        shipGroup.position.set(basePos.x, basePos.y + 4.5, basePos.z);
-
-        const hullGeo = new THREE.ConeGeometry(0.4, 2.2, 4);
-        hullGeo.rotateX(Math.PI / 2);
-        const hullMat = new THREE.MeshStandardMaterial({
-          color: 0x1e293b,
-          metalness: 0.9,
-          roughness: 0.2,
-          emissive: 0x38bdf8,
-          emissiveIntensity: 0.3
-        });
-        const hull = new THREE.Mesh(hullGeo, hullMat);
-        shipGroup.add(hull);
-
-        const wingGeo = new THREE.BoxGeometry(2.0, 0.05, 0.8);
-        const wingMat = new THREE.MeshStandardMaterial({
-          color: 0xd97706,
-          metalness: 0.8,
-          roughness: 0.3
-        });
-        const wings = new THREE.Mesh(wingGeo, wingMat);
-        wings.position.set(0, 0, 0.2);
-        shipGroup.add(wings);
-
-        shipGroup.scale.set(0.65, 0.65, 0.65);
-        this.starship.register(ev.seat_id, shipGroup);
-        this.outerShellGroup.add(shipGroup);
-      }
-    });
+    buildStarships(this.events, (ev) => { const p = this.getSeatWorldPos(ev); return { x: p.x, y: p.y, z: p.z }; }, this.starship, this.outerShellGroup);
   }
 
   private buildSurroundingAtmosphere() {
