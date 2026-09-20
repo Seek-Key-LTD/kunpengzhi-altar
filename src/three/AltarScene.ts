@@ -442,11 +442,36 @@ export class AltarScene {
     this.scene.add(apexLight);
     this.apexLight = apexLight;
 
-    const wujiLight = new THREE.SpotLight(0xbfe8ff, 0, 45, 0.12, 0.65, 1.4);
-    wujiLight.position.set(0, 42, 0);
-    wujiLight.target.position.set(0, PYRAMID_TOP, 0);
+    // #00 无极具象：飞碟悬于坛顶上方中央，向下一束冷光罩住玉玺（SEAL_HOVER_Y）。
+    // 抛物面 z=22.42−0.01·r² 焦距 f=1/(4·0.01)=25，数学焦点在顶点下方 z=−2.58（坛底）；
+    // 此处取仪式化布置：飞碟即天听，光柱垂直下落，落点压在玉玺印面之上。
+    const FLYSAUCER_Y = SEAL_HOVER_Y + 4.3;
+    const wujiLight = new THREE.SpotLight(0xbfe8ff, 0, 30, 0.10, 0.55, 1.4);
+    wujiLight.position.set(0, FLYSAUCER_Y, 0);
+    wujiLight.target.position.set(0, SEAL_HOVER_Y, 0);
     this.scene.add(wujiLight, wujiLight.target);
     this.wujiLight = wujiLight;
+    // 飞碟本体（扁圆盘 + 底部发光核心）
+    const saucer = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.7, 1.7, 0.32, 48, 1, false),
+      new THREE.MeshStandardMaterial({ color: 0xdfeff5, emissive: 0xbfe8ff, emissiveIntensity: 1.6, roughness: 0.35, metalness: 0.1 })
+    );
+    saucer.position.set(0, FLYSAUCER_Y, 0);
+    this.scene.add(saucer);
+    const saucerCore = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 24, 16),
+      new THREE.MeshBasicMaterial({ color: 0xeaf9ff })
+    );
+    saucerCore.position.set(0, FLYSAUCER_Y - 0.25, 0);
+    this.scene.add(saucerCore);
+    // 可见光柱：从飞碟垂直下落到玉玺（半透明锥柱，上窄下宽罩住玉玺）
+    const beamLen = FLYSAUCER_Y - SEAL_HOVER_Y;
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.9, 1.9, beamLen, 24, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })
+    );
+    beam.position.set(0, (FLYSAUCER_Y + SEAL_HOVER_Y) / 2, 0);
+    this.scene.add(beam);
 
     // 阴锥内腔照明（空腔是封闭的，光必须留在里面）
     const yinLightA = new THREE.PointLight(0x38bdf8, 3.0, 26, 1.2);
