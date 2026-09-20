@@ -60,6 +60,7 @@ import { CAMERA_MODE_POSES } from '../data/cameraModes';
 import { seatTrailPoints } from '../data/seatTrail';
 import { pickStelaEvents, stelaPose } from '../data/stelaRing';
 import { seatWorldPos } from '../data/seatWorldPos';
+import { brickLevels } from '../data/brickLevels';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -516,7 +517,7 @@ export class AltarScene {
     // 这一步让「#00 混进第 50 席」在结构上不可能发生，而不是靠约定。
     const seatEvents = this.events.filter((ev) => isSeatId(ev.seat_id));
     seatEvents.forEach((ev) => {
-      const levels = Math.max(1, Math.round(ev.elevation / BRICK));
+      const levels = brickLevels(ev.elevation, BRICK);
       for (let i = 0; i < levels; i++) {
         // 横轴 40→19→6→1→2→11→28：只抽第二层的同尺寸 Cube。
         // 顶面仍然由上层 Cube 封住；入口/出口则在两端自然开口。
