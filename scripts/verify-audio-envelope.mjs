@@ -202,7 +202,8 @@ ok(/ritualPhaseAt\s*\(/.test(scene), 'AltarScene 包络由 ritualPhaseAt 驱动�
 ok(/onPhaseTransition[\s\S]{0,400}altarAudio\.triggerBucketChain\s*\(/.test(scene),
   '水梯死点相变回调调用 triggerBucketChain（翻斗链条声源）');
 ok(/public\s+setPlaybackRate\s*\(/.test(scene), 'AltarScene 提供 setPlaybackRate API');
-ok(/step\s*\*\s*this\.ritualPlaybackRate/.test(scene), '时间轴推进乘 ritualPlaybackRate');
+const clock = readSrc('src/three/RitualClock.ts');
+ok(/\*\s*this\.rate/.test(clock), '时间轴推进乘 playbackRate（RitualClock.tick）');
 ok(/RITUAL_PLAYBACK_DEFAULT\s*=\s*1\b/.test(scene), '回放速率默认 = 1（公共恒定）');
 
 const audio = readSrc('src/audio/altarAudio.ts');

@@ -46,6 +46,7 @@ import {
 import { ImperialSealObject } from './relic/ImperialSealObject';
 import { CameraRig } from './CameraRig';
 import { DemoDirector } from './DemoDirector';
+import { RitualClock } from './RitualClock';
 import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
@@ -99,6 +100,7 @@ export class AltarScene {
   private controls: OrbitControls;
   private rig!: CameraRig;
   private demo!: DemoDirector;
+  private ritualClock!: RitualClock;
   private animationFrameId: number | null = null;
 
   // ── #7 · 能力三态 / 无画模式 ───────────────────────────────────────
@@ -147,25 +149,17 @@ export class AltarScene {
   private wujiLight: THREE.SpotLight | null = null;
   private ritualMode = false;
   private ritualLitSeats = 0;
-  /** 仪式时间（秒）。null = 未注入 —— 直入版公共页不驱动三十分钟时间轴。 */
-  private ritualTimeSec: number | null = null;
   /** #00 显形档位：hidden(<24:00) / revealed(≥24:00) / silent(≥29:11)。用于幂等与一次性播报。 */
   private wujiRevealState: WujiRevealState = 'hidden';
 
   // ── 公共入口 · 1800s 五幕时间轴 ────────────────────────────────────
   /** 仪式已运行秒数（仅在 ritualRunning 时随 dt 推进）。 */
-  private ritualElapsed = 0;
   /**
    * 时间轴回放速率（#4）。公共入口恒 1.0（1800s 全程）；仅导演/工程入口
    * 经 setPlaybackRate() 变更，用于加速回放。默认值即公共入口行为。
    */
-  private ritualPlaybackRate = RITUAL_PLAYBACK_DEFAULT;
   /** 时间轴是否在推进：startRitual() 置真，presentImmediately() 保持假。 */
-  private ritualRunning = false;
-  /** 上一次结算到的幕次，用于只在边界改写场景（避免每帧重写）。 */
-  private ritualPhase: RitualPhase = 'abyss';
   /** naming 幕上一帧的 litSeats；-1 表示需要强制刷新。 */
-  private namingLitSeats = -1;
 
   // ── 公共入口 · 自运维演示循环状态 ──────────────────────────────────
   private waterFrontBead: THREE.Group | null = null;
@@ -315,6 +309,7 @@ export class AltarScene {
     this.controls.enableDamping = true;
     this.rig = new CameraRig(this.camera, this.controls);
     this.demo = new DemoDirector();
+    this.ritualClock = new RitualClock();
     this.controls.dampingFactor = 0.05;
     this.controls.minDistance = 0.8;
     this.controls.maxDistance = 220;
@@ -960,7 +955,7 @@ export class AltarScene {
    * 非仪式档（导演台 / 直入）不设门，保持既有行为。
    */
   private updateLanternGate(): void {
-    const open = !this.ritualMode || teaLanternRotationEnabled(this.ritualElapsed);
+    const open = !this.ritualMode || teaLanternRotationEnabled(this.ritualClock.elapsed);
     if (open === this.lanternGateOpen) return;
     this.lanternGateOpen = open;
     if (open) {
@@ -970,9 +965,9 @@ export class AltarScene {
       // 首帧早于 App.startRitual()，此时 ritualMode 仍为 false（!ritualMode 分支开门），
       // 若在此打印会给出「门控开放 @ 0s ≥ 1020s(17:00)」这类**误导审计**的日志。
       // 门控行为本身不变（开门/关门照旧），只收敛日志。
-      if (this.ritualRunning && this.ritualMode) {
+      if (this.ritualClock.running && this.ritualMode) {
         console.log(
-          `[走马灯] 门控开放 @ ${this.ritualElapsed.toFixed(0)}s ≥ ${RITUAL_NAMING_END_SEC}s(17:00)：` +
+          `[走马灯] 门控开放 @ ${this.ritualClock.elapsed.toFixed(0)}s ≥ ${RITUAL_NAMING_END_SEC}s(17:00)：` +
             `茶灯始转（maxOmega ⇒ ${TEA_LANTERN_REV_SEC}s/圈）`
         );
       }
@@ -996,7 +991,7 @@ export class AltarScene {
    */
   private syncFogCaption(): void {
     if (!this.fogCaptionEl) return;
-    const line = this.ritualMode ? fogCaptionAt(this.ritualElapsed) : null;
+    const line = this.ritualMode ? fogCaptionAt(this.ritualClock.elapsed) : null;
     const text = line ?? '';
     if (text === this.fogCaptionText) return;
     this.fogCaptionText = text;
@@ -1964,7 +1959,7 @@ export class AltarScene {
 
   /** 当前注入的仪式时间（秒）；null = 尚未注入。供导演台 / 工程入口读取。 */
   public get currentRitualTime(): number | null {
-    return this.ritualTimeSec;
+    return this.ritualClock.timeSec;
   }
 
   /**
@@ -1982,7 +1977,7 @@ export class AltarScene {
    */
   public setRitualTime(sec: number) {
     const t = Number.isFinite(sec) ? Math.max(0, sec) : 0;
-    this.ritualTimeSec = t;
+    this.ritualClock.timeSec = t;
 
     const next: WujiRevealState = wujiRevealStateAt(t);
     const changed = next !== this.wujiRevealState;
@@ -2022,10 +2017,10 @@ export class AltarScene {
    * presentImmediately() 保留不删；导演路径（#5）自行决定用哪条。
    */
   public startRitual() {
-    this.ritualRunning = true;
-    this.ritualElapsed = 0;
-    this.ritualPhase = 'abyss';
-    this.namingLitSeats = -1;
+    this.ritualClock.running = true;
+    this.ritualClock.elapsed = 0;
+    this.ritualClock.phase = 'abyss';
+    this.ritualClock.namingLitSeats = -1;
     // 先归到 #00「未显形」档（<24:00），再落到初幕 abyss（黑场、litSeats=0）。
     this.setRitualTime(0);
     this.setRitualState('abyss', 0, null);
@@ -2041,19 +2036,19 @@ export class AltarScene {
    */
   public setPlaybackRate(rate: number): number {
     if (!Number.isFinite(rate)) {
-      this.ritualPlaybackRate = RITUAL_PLAYBACK_DEFAULT;
+      this.ritualClock.rate = RITUAL_PLAYBACK_DEFAULT;
     } else {
-      this.ritualPlaybackRate = Math.min(
+      this.ritualClock.rate = Math.min(
         RITUAL_PLAYBACK_MAX,
         Math.max(RITUAL_PLAYBACK_MIN, rate)
       );
     }
-    return this.ritualPlaybackRate;
+    return this.ritualClock.rate;
   }
 
   /** 当前回放速率（公共入口恒 1.0）。供导演 / 工程入口读取。 */
   public get playbackRate(): number {
-    return this.ritualPlaybackRate;
+    return this.ritualClock.rate;
   }
 
   /**
@@ -2067,11 +2062,11 @@ export class AltarScene {
    */
   public seekTo(sec: number): number {
     const t = Number.isFinite(sec) ? Math.max(0, Math.min(RITUAL_TOTAL_SEC, sec)) : 0;
-    this.ritualElapsed = t;
+    this.ritualClock.elapsed = t;
     const phase = ritualPhaseAt(t);
-    this.ritualPhase = phase;
+    this.ritualClock.phase = phase;
     const litSeats = ritualLitSeatsAt(t);
-    this.namingLitSeats = litSeats;
+    this.ritualClock.namingLitSeats = litSeats;
     if (isTimelineDrivenPhase(phase)) {
       this.setRitualState(phase, litSeats, null);
     }
@@ -2088,49 +2083,49 @@ export class AltarScene {
    * setRitualState('extinguishing' | 'silence')。
    */
   private updateRitualTimeline(dt: number) {
-    if (!this.ritualRunning) return;
+    if (!this.ritualClock.running) return;
     // dt 兜底：与同文件 setRitualTime 对齐 —— 非有限 dt 一律当 0。
     // 否则一次 NaN 会让 ritualElapsed 永久 NaN，仪式卡死在终幕、再不复位。
     const step = Number.isFinite(dt) ? dt : 0;
     // #4 受控回放速率：公共入口 rate=1（1800s 全程）；导演/工程入口可加速。
-    this.ritualElapsed = Math.min(
+    this.ritualClock.elapsed = Math.min(
       RITUAL_TOTAL_SEC,
-      this.ritualElapsed + step * this.ritualPlaybackRate
+      this.ritualClock.elapsed + step * this.ritualClock.rate
     );
 
-    const phase = ritualPhaseAt(this.ritualElapsed);
-    if (phase !== this.ritualPhase) {
-      const prev = this.ritualPhase;
-      this.ritualPhase = phase;
+    const phase = ritualPhaseAt(this.ritualClock.elapsed);
+    if (phase !== this.ritualClock.phase) {
+      const prev = this.ritualClock.phase;
+      this.ritualClock.phase = phase;
       // 只有早段三幕在此改写；extinguishing / silence 交给 setRitualTime（契约：互斥、覆盖五幕）。
       if (isTimelineDrivenPhase(phase)) {
         if (phase === 'abyss') {
           this.setRitualState('abyss', 0, null);
         } else if (phase === 'naming') {
-          this.namingLitSeats = -1; // 强制刷新首个 litSeats
+          this.ritualClock.namingLitSeats = -1; // 强制刷新首个 litSeats
           this.setRitualState('naming', 0, this.activeSeatId);
         } else {
           this.setRitualState('lanterns', SEAT_ID_MAX, this.activeSeatId);
         }
       }
-      console.log(`[仪式] 幕次 ${prev} → ${phase} @ ${this.ritualElapsed.toFixed(0)}s / 1800s`);
+      console.log(`[仪式] 幕次 ${prev} → ${phase} @ ${this.ritualClock.elapsed.toFixed(0)}s / 1800s`);
     }
 
     // naming 幕：litSeats 由 0 线性升到 49（仅在整席台阶变化时重算，避免每帧重写）。
     if (phase === 'naming') {
-      const litSeats = ritualLitSeatsAt(this.ritualElapsed);
-      if (litSeats !== this.namingLitSeats) {
-        this.namingLitSeats = litSeats;
+      const litSeats = ritualLitSeatsAt(this.ritualClock.elapsed);
+      if (litSeats !== this.ritualClock.namingLitSeats) {
+        this.ritualClock.namingLitSeats = litSeats;
         this.setRitualState('naming', litSeats, this.activeSeatId);
       }
     }
 
     // 唯一时间注入点：#00 显形（1440）/ 静默（1751）阈值 + extinguishing / silence 幕次。
-    this.setRitualTime(this.ritualElapsed);
+    this.setRitualTime(this.ritualClock.elapsed);
 
     // #4 五阶段音频包络：与幕次**同源**（ritualPhaseAt），逐帧落到三条声链
     // （水声 / 翻斗链条 / 低频空间混响）。silence 幕三层归零（1751→1800 恰 49s）。
-    altarAudio.applyPhaseEnvelope(phase, phaseProgress(this.ritualElapsed));
+    altarAudio.applyPhaseEnvelope(phase, phaseProgress(this.ritualClock.elapsed));
   }
 
   /**
@@ -2740,7 +2735,7 @@ export class AltarScene {
     this.onDegrade = undefined;
 
     // 8b. 公共入口 1800s 时间轴 / Web Audio 手势兜底：停推进，摘掉 window 监听。
-    this.ritualRunning = false;
+    this.ritualClock.running = false;
     if (this.audioResumeHandler) {
       window.removeEventListener('pointerdown', this.audioResumeHandler);
       window.removeEventListener('keydown', this.audioResumeHandler);

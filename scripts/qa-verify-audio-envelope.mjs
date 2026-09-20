@@ -226,7 +226,8 @@ eq(spCalls, 0, '全仓无 setPlaybackRate 调用者（公共从不改速率）')
 ok(/RITUAL_PLAYBACK_MIN\s*=\s*0\.25/.test(scene), 'RITUAL_PLAYBACK_MIN = 0.25');
 ok(/RITUAL_PLAYBACK_MAX\s*=\s*64\b/.test(scene), 'RITUAL_PLAYBACK_MAX = 64');
 ok(/RITUAL_PLAYBACK_DEFAULT\s*=\s*1\b/.test(scene), 'RITUAL_PLAYBACK_DEFAULT = 1（公共恒定）');
-ok(/step\s*\*\s*this\.ritualPlaybackRate/.test(scene), '时间轴推进 = step × ritualPlaybackRate');
+const clock = readSrc('src/three/RitualClock.ts');
+ok(/\*\s*this\.rate/.test(clock), '时间轴推进 = step × playbackRate（RitualClock.tick）');
 // 契约复算（源码无 DOM 依赖可导入，故按源码语义复算）
 const clampRate = (r) => (Number.isFinite(r) ? Math.min(64, Math.max(0.25, r)) : 1);
 eq(clampRate(0), 0.25, '复算：0 → 夹到 MIN 0.25');
@@ -280,10 +281,10 @@ const sceneCalls = (scene.match(/altarAudio\.applyPhaseEnvelope\s*\(/g) || []).l
 eq(sceneCalls, 1, 'AltarScene 仅 1 处 altarAudio.applyPhaseEnvelope');
 // 该调用点必须在 updateRitualTimeline 体内，且置于 `if (!this.ritualRunning) return;` 之后
 const utlStart = scene.indexOf('updateRitualTimeline(');
-const utlGuard = scene.indexOf('if (!this.ritualRunning) return;', utlStart);
+const utlGuard = scene.indexOf('if (!this.ritualClock.running) return;', utlStart);
 const envCall = scene.indexOf('altarAudio.applyPhaseEnvelope(', utlStart);
 const utlEnd = scene.indexOf('\n  }', utlStart + 10);
-ok(utlStart >= 0 && utlGuard > utlStart, 'updateRitualTimeline 以 `if (!this.ritualRunning) return;` 开头');
+ok(utlStart >= 0 && utlGuard > utlStart, 'updateRitualTimeline 以 `if (!this.ritualClock.running) return;` 开头');
 ok(envCall > utlGuard && envCall < utlEnd + 2, 'applyPhaseEnvelope 在守卫之后、方法体内（非运行态不执行）');
 // 非仪式档（未调 setPlaybackRate / 未 startRitual）不会触达该调用 ⟹ 包络不被下发
 eq(typeof audio.applyPhaseEnvelope, 'function', 'altarAudio.applyPhaseEnvelope 存在（仅仪式态被调用）');
