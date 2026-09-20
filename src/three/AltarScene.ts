@@ -56,6 +56,7 @@ import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import { saucerLayout } from '../data/wujiGeometry';
 import { ceremonyVisibility } from '../data/ceremonyVisibility';
+import { lanternCameraPose } from '../data/lanternCamera';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -2046,22 +2047,11 @@ export class AltarScene {
   public focusTeaLantern(chapterIndex: number) {
     this.rig.cameraMode = 'outer_lanterns';
     this.activeLanternChapter = Math.max(0, Math.min(15, chapterIndex - 1));
-    const angle = ((chapterIndex - 1) / 16) * Math.PI * 2;
-    const lanternRadius = 23.5;
-    const lanternHeight = 2.6;
-
     const currentGroupAngle = this.lanternsGroup.rotation.y;
-    const effectiveAngle = angle + currentGroupAngle;
+    const pose = lanternCameraPose(chapterIndex, currentGroupAngle);
 
-    const x = Math.sin(effectiveAngle) * lanternRadius;
-    const z = Math.cos(effectiveAngle) * lanternRadius;
-
-    const camDist = 6.2;
-    const camX = Math.sin(effectiveAngle) * (lanternRadius + camDist);
-    const camZ = Math.cos(effectiveAngle) * (lanternRadius + camDist);
-
-    this.rig.targetPos.set(camX, lanternHeight + 0.5, camZ);
-    this.rig.targetLookAt.set(x, lanternHeight, z);
+    this.rig.targetPos.set(pose.camX, pose.camY, pose.camZ);
+    this.rig.targetLookAt.set(pose.targetX, pose.targetY, pose.targetZ);
     this.rig.transitioning = true;
   }
 
