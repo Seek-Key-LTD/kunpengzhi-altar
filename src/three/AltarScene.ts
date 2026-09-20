@@ -61,6 +61,7 @@ import { buildSeatTrails } from './SeatTrailsBuilder';
 import { buildRiverAxis } from './RiverAxisBuilder';
 import { buildFrontBead } from './FrontBeadBuilder';
 import { buildScorpionWaterway } from './ScorpionWaterwayBuilder';
+import { buildRabbitHole } from './RabbitHoleBuilder';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -922,51 +923,7 @@ export class AltarScene {
    * 经文挂在洞壁，故只有入内才看见，绝不成为外立面的装饰卡片。
    */
   private buildRabbitHole() {
-    const bySeat = new Map(this.events.map((event) => [event.seat_id, event]));
-    const axis = RABBIT_HOLE_SEATS.map((seatId) => bySeat.get(seatId));
-    if (axis.some((event) => !event) || axis.some((event) => event!.grid_z !== 0)) {
-      throw new Error('Rabbit Hole 必须是横轴 40→19→6→1→2→11→28（z=0）');
-    }
-
-    const group = new THREE.Group();
-    group.name = 'rabbit-hole-40-19-6-1-2-11-28';
-    const tunnelY = BRICK * 1.5;
-    const tunnelLength = CELL * 7 - 0.12;
-
-    // BackSide 只在镜头缩小、进入洞内时显影；外部仍是一座严丝合缝的方坛。
-    const lining = new THREE.Mesh(
-      new THREE.BoxGeometry(tunnelLength, BRICK - 0.16, BRICK - 0.16),
-      new THREE.MeshStandardMaterial({
-        color: 0x071827,
-        emissive: 0x0b3150,
-        emissiveIntensity: 0.48,
-        roughness: 0.46,
-        metalness: 0.38,
-        side: THREE.BackSide
-      })
-    );
-    lining.position.set(0, tunnelY, 0);
-    lining.userData = { type: 'rabbit_hole_lining', axis: [...RABBIT_HOLE_SEATS] };
-    group.add(lining);
-
-    const portalMat = new THREE.MeshStandardMaterial({
-      color: 0xd6a54a,
-      emissive: 0x7c4b0e,
-      emissiveIntensity: 0.7,
-      roughness: 0.22,
-      metalness: 0.84
-    });
-    [-1, 1].forEach((side) => {
-      const portal = new THREE.Mesh(new THREE.TorusGeometry(BRICK * 0.37, 0.075, 10, 36), portalMat);
-      portal.rotation.y = Math.PI / 2;
-      portal.position.set(side * (CELL * 3 + 0.12), tunnelY, 0);
-      portal.userData = { type: side < 0 ? 'rabbit_hole_entrance_40' : 'rabbit_hole_exit_28' };
-      group.add(portal);
-    });
-
-    // Rabbit Hole 的诗句同样后置；此时只保留可验收的空腔与管路。
-
-    this.hollowInteriorGroup.add(group);
+    buildRabbitHole(this.events, this.hollowInteriorGroup);
   }
 
   /**
