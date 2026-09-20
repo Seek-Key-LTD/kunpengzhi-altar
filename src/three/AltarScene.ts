@@ -59,6 +59,7 @@ import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
 import { seatTrailPoints } from '../data/seatTrail';
 import { pickStelaEvents, stelaPose } from '../data/stelaRing';
+import { seatWorldPos } from '../data/seatWorldPos';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -482,10 +483,8 @@ export class AltarScene {
    * 每席就是一块立方砖，砖心正好落在平面格点上，所以席位坐标 = 格点坐标。
    */
   private getSeatWorldPos(event: SpiralEvent): THREE.Vector3 {
-    const x = event.grid_x * CELL;
-    const z = event.grid_z * CELL;
-    const y = event.elevation + 0.12;
-    return new THREE.Vector3(x, y, z);
+    const p = seatWorldPos(event, CELL);
+    return new THREE.Vector3(p.x, p.y, p.z);
   }
 
   /**
