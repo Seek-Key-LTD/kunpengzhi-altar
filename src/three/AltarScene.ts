@@ -2476,11 +2476,12 @@ export class AltarScene {
 
   /** 鼠标/触摸一次只唤起一条游客既定路线，播放完停在当前位置。 */
   private activateGuestRoutine(): void {
+    // 固定黄金机位（拉格朗日点）：飞过去即停死，不连续钻洞、不后台巡游。
     const routine = GUEST_ROUTINES[this.guestRoutineIndex];
     this.guestRoutineIndex = (this.guestRoutineIndex + 1) % GUEST_ROUTINES.length;
     this.guestRoutineTimer = 0;
-    this.guestRoutinePlaying = true;
-    this.rabbitHoleTourActive = routine === 'rabbit_hole';
+    this.guestRoutinePlaying = false;
+    this.rabbitHoleTourActive = false;
     this.setCameraMode(routine);
   }
 

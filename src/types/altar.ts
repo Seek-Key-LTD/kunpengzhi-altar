@@ -162,7 +162,9 @@ export const CAMERA_DISTANCE_BY_ROLE: Record<AltarRole, { min: number; max: numb
  *
  * 三条路线均由访客的鼠标或触摸主动唤起；播放一次后停住，绝不后台替人巡游。
  */
-export const GUEST_ROUTINES: CameraMode[] = ['cinematic', 'rabbit_hole', 'patrol'];
+// 固定黄金机位（拉格朗日点）：访客每点一次，平滑飞到下一个机位即停死，
+// 不再连续钻洞、不后台替人巡游。机位均为构图调好的静止点，镜头不抢。
+export const GUEST_ROUTINES: CameraMode[] = ['cinematic', 'relic', 'topdown', 'patrol', 'interior'];
 
 /** 每条 routine 的播放时长（秒） */
 export const GUEST_ROUTINE_SECONDS = 18;
