@@ -48,6 +48,7 @@ import { CameraRig } from './CameraRig';
 import { DemoDirector } from './DemoDirector';
 import { RitualClock } from './RitualClock';
 import { DualDragonRig } from './DualDragonRig';
+import { StarshipRig } from './StarshipRig';
 import { MechanicsRig, WATER_LIFT_Z, WATER_LIFT_BASE_Y, WATER_LIFT_PULLEY_Y, WATER_LIFT_SEP } from './MechanicsRig';
 import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
@@ -100,6 +101,7 @@ export class AltarScene {
   private ritualClock!: RitualClock;
   private mech!: MechanicsRig;
   private dragon!: DualDragonRig;
+  private starship!: StarshipRig;
   private animationFrameId: number | null = null;
 
   // ── #7 · 能力三态 / 无画模式 ───────────────────────────────────────
@@ -178,7 +180,6 @@ export class AltarScene {
   private wujiAbsorber: THREE.Mesh | null = null;
   private seatPads: Map<number, THREE.Mesh> = new Map();
   private seatLotusMeshes: Map<number, THREE.Group> = new Map();
-  private starshipMeshes: Map<number, THREE.Group> = new Map();
   private lanternPanels: Map<number, THREE.Mesh> = new Map();
   private interiorStelae: Map<string, THREE.Mesh> = new Map();
 
@@ -293,6 +294,7 @@ export class AltarScene {
     this.ritualClock = new RitualClock();
     this.mech = new MechanicsRig();
     this.dragon = new DualDragonRig();
+    this.starship = new StarshipRig();
     this.controls.dampingFactor = 0.05;
     this.controls.minDistance = 0.8;
     this.controls.maxDistance = 220;
@@ -1534,7 +1536,7 @@ export class AltarScene {
         shipGroup.add(wings);
 
         shipGroup.scale.set(0.65, 0.65, 0.65);
-        this.starshipMeshes.set(ev.seat_id, shipGroup);
+        this.starship.register(ev.seat_id, shipGroup);
         this.outerShellGroup.add(shipGroup);
       }
     });
@@ -1714,7 +1716,7 @@ export class AltarScene {
     this.waterworksGroup.visible = !isDark;
     this.fountainGroup.visible = !isDark;
     this.primeLinesGroup.visible = false;
-    this.starshipMeshes.forEach((ship) => { ship.visible = false; });
+    this.starship.hideAll();
     this.lanternsGroup.visible = phase === 'lanterns' || phase === 'extinguishing';
     // 回转由 RFC-008 引擎持续驱动，幕次切换不再改写转速（见 animate 第 9b 段）
     const dualDragonVisible = phase === 'naming' || phase === 'lanterns';
@@ -2345,10 +2347,7 @@ export class AltarScene {
     this.dragon.animateParticles(elapsedTime, this.dualDragonLitSeats());
 
     // 7. Starships floating
-    this.starshipMeshes.forEach((ship, id) => {
-      ship.position.y += Math.sin(elapsedTime * 2 + id) * 0.002;
-      ship.rotation.y = elapsedTime * 0.2 + id;
-    });
+    this.starship.update(elapsedTime);
 
     // 8. Flowers breathing
     this.seatLotusMeshes.forEach((flower, id) => {
@@ -2547,7 +2546,7 @@ export class AltarScene {
     // 7. 索引表与回调断开，别把整棵场景图挂在闭包上
     this.seatPads.clear();
     this.seatLotusMeshes.clear();
-    this.starshipMeshes.clear();
+    this.starship.clear();
     this.lanternPanels.clear();
     this.interiorStelae.clear();
     // RFC-007 双体水梯：几何随整棵场景图在第 6 步回收，这里只断开引用
