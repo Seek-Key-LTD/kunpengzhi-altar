@@ -23,7 +23,6 @@ import {
   DRAGON_SEAT_COUNT,
   TEA_LANTERN_REV_SEC,
   soundDragonNode,
-  seatTrailTightnessB,
   teaLanternRotationEnabled,
   fogCaptionAt
 } from '../data/dualDragon';
@@ -58,6 +57,7 @@ import { saucerLayout } from '../data/wujiGeometry';
 import { ceremonyVisibility } from '../data/ceremonyVisibility';
 import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
+import { seatTrailPoints } from '../data/seatTrail';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -1470,7 +1470,6 @@ export class AltarScene {
   /**
    * #2 要求 3：每个已触发席位保留一条**随音高收紧**的对数螺线光迹。
    *
-   * 螺线 r(θ)=r0·e^{bθ}：b 由该席音高决定（见 `seatTrailTightnessB`）——
    * 音越高 b 越小、螺线越紧。锚点取该席音龙节点，使光迹紧贴“按半音回收”的声场。
    * 逐席建线（49 条），显隐由仪式已触发席数逐帧门控（见 setRitualState），
    * 未触发者恒不可见 —— 绝不预演未来席。
@@ -1486,21 +1485,8 @@ export class AltarScene {
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
-    const steps = 48;
-    const turns = 2.4;
     for (let seatId = 1; seatId <= DRAGON_SEAT_COUNT; seatId++) {
-      const node = soundDragonNode(seatId);
-      const b = seatTrailTightnessB(seatId);
-      const pts: THREE.Vector3[] = [];
-      for (let s = 0; s <= steps; s++) {
-        const theta = (s / steps) * turns * Math.PI * 2;
-        const r = 0.06 * Math.exp(b * theta); // 对数螺线：b 越小越紧
-        pts.push(new THREE.Vector3(
-          node.x + Math.cos(theta) * r,
-          node.y + (s / steps) * 0.45,
-          node.z + Math.sin(theta) * r
-        ));
-      }
+      const pts = seatTrailPoints(seatId).map(p => new THREE.Vector3(p.x, p.y, p.z));
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
       line.visible = false;
       line.userData = { type: 'seat_trail', seatId };
