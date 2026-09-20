@@ -63,6 +63,7 @@ import { buildStarships } from './StarshipBuilder';
 import { buildPlinth } from './PlinthBuilder';
 import { buildSeatTrails } from './SeatTrailsBuilder';
 import { buildRiverAxis } from './RiverAxisBuilder';
+import { buildFrontBead } from './FrontBeadBuilder';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -1601,21 +1602,7 @@ export class AltarScene {
 
   /** 双龙前锋珠：水龙珠（外行下潜）+ 音龙珠（内收上升），让点名肉眼可见。 */
   private buildFrontBead(color: number, radius: number, emissive: number, lightIntensity: number): THREE.Group {
-    const group = new THREE.Group();
-    group.name = 'front-bead';
-    const mat = new THREE.MeshStandardMaterial({
-      color,
-      emissive,
-      emissiveIntensity: 2.6,
-      roughness: 0.3,
-      metalness: 0.1
-    });
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 18, 18), mat);
-    group.add(mesh);
-    // 一束跟随点名珠的光，让“水流抵达”真正照亮周围。
-    const light = new THREE.PointLight(color, lightIntensity, 14, 1.7);
-    group.add(light);
-    return group;
+    return buildFrontBead(color, radius, emissive, lightIntensity);
   }
 
   /**
