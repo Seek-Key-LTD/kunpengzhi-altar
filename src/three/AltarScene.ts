@@ -64,6 +64,7 @@ import { buildBrickColumns } from './CubePyramidBuilder';
 import { buildSeats } from './SeatsBuilder';
 import { buildPrimeDiagonalLines } from './PrimeDiagonalBuilder';
 import { buildWujiFountain } from './WujiFountainBuilder';
+import { broadcastStateAt } from '../data/broadcastSchedule';
 import { createInteriorStelaSprite, createTeaLanternSprite } from './SpriteTextureFactory';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
@@ -1248,12 +1249,15 @@ export class AltarScene {
    */
   public startRitual() {
     this.ritualClock.running = true;
-    this.ritualClock.elapsed = 0;
-    this.ritualClock.phase = 'abyss';
+    // #19 公共正典广播时钟：从 Asia/Shanghai 当前时间取场内秒数
+    const broadcast = broadcastStateAt(new Date());
+    const startSec = broadcast.mode === 'live' ? broadcast.showSec ?? 0 : 0;
+    this.ritualClock.elapsed = startSec;
+    this.ritualClock.phase = ritualPhaseAt(startSec);
     this.ritualClock.namingLitSeats = -1;
     // 先归到 #00「未显形」档（<24:00），再落到初幕 abyss（黑场、litSeats=0）。
-    this.setRitualTime(0);
-    this.setRitualState('abyss', 0, null);
+    this.setRitualTime(startSec);
+    this.setRitualState(this.ritualClock.phase, 0, null);
     this.kickAudio();
   }
 
