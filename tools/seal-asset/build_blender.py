@@ -189,7 +189,14 @@ make_text("大魏受汉\n传国之宝", "era_wei_a", 1.9, 0.95,
 # 魏晋 · 石勒魏碑「天命在赵」：玺肩 +X 面
 make_text("天命在赵", "era_wei_b", 2.3, 0.55,
           (1.505, 0, -0.35), (math.radians(90), 0, math.radians(90)))
-for nm in ("era_wei_a", "era_wei_b"):
+# 唐 · 虫鸟篆「大唐受命宝」：玺肩 +Y 面
+make_text("大唐受命宝", "era_tang", 2.1, 0.65,
+          (0, 1.505, -0.40), (math.radians(-90), 0, 0))
+# 宋 · 虫鸟篆「大宋承天受命之宝」：玺肩 -X 面
+make_text("大宋承天
+受命之宝", "era_song", 1.9, 0.85,
+          (-1.505, 0, -0.45), (math.radians(90), 0, math.radians(-90)))
+for nm in ("era_wei_a", "era_wei_b", "era_tang", "era_song"):
     o = bpy.data.objects.get(nm)
     if o:
         o.data.materials.append(INK)
