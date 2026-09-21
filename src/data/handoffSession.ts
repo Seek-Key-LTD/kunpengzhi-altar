@@ -1,5 +1,5 @@
 /**
- * #22 洞内手机会话交接：handoff token 前端工具
+ * #22 洞内手机会话交接：handoff session 前端工具
  *
  * 纯函数：不碰 DOM、不碰 three.js，可直接单元测试。
  * 服务端签发短时、一次性、不可猜测的 token；前端只消费。
@@ -8,8 +8,8 @@
 /** token 有效期：5 分钟 */
 export const HANDOFF_TOKEN_TTL_MS = 5 * 60 * 1000;
 
-/** handoff token 载荷（服务端签发，前端只读） */
-export interface HandoffToken {
+/** handoff session 载荷（服务端签发，前端只读） */
+export interface HandoffSession {
   /** token 字符串（不可猜测） */
   readonly token: string;
   /** 签发时间（unix ms） */
@@ -23,7 +23,7 @@ export interface HandoffToken {
 }
 
 /** 验证 token 是否有效（纯函数） */
-export function isHandoffTokenValid(t: HandoffToken, now: number = Date.now()): boolean {
+export function isHandoffSessionValid(t: HandoffSession, now: number = Date.now()): boolean {
   // 过期检查
   if (now - t.issuedAt > HANDOFF_TOKEN_TTL_MS) return false;
   // token 非空
@@ -32,7 +32,7 @@ export function isHandoffTokenValid(t: HandoffToken, now: number = Date.now()): 
 }
 
 /** 构造 handoff URL（纯函数） */
-export function handoffUrl(t: HandoffToken): string {
+export function handoffUrl(t: HandoffSession): string {
   const params = new URLSearchParams({
     token: t.token,
     layer: String(t.layer),

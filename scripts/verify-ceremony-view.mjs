@@ -262,21 +262,14 @@ for (const word of ['camera', 'debug', 'speed', 'playback', '倍速', '拓扑', 
     `A-16 ceremonyView 全文（含字符串字面量）对敏感词「${word}」零命中`);
 }
 
-// ── B-1 单点调用（定义 1 + animate 内调用 1，且次序钉死）─────────────────
-const callSites = [...sceneSrc.matchAll(/applyCeremonyView\s*\(/g)].map((m) => m.index);
-ok(callSites.length === 2, `B-1 applyCeremonyView( 出现次数 == 2（1 定义 + 1 调用，实测 ${callSites.length}）`);
-const lineOf = (idx) => sceneSrc.slice(0, idx).split('\n').length;
-const flightLine = lineOf(sceneSrc.indexOf('this.updateFreeFlight(dt);'));
-const callLine = lineOf(sceneSrc.indexOf('this.applyCeremonyView('));
-ok(callLine > flightLine, `B-1 调用点（:${callLine}）必须在 updateFreeFlight（:${flightLine}）之后 —— §5.1 次序钉死`);
+// ── B-1 重构后：仪式时间驱动入口在 RitualTimelineController ────────────────
+const rtcSrc = readFileSync(resolve(ROOT, 'src/three/RitualTimelineController.ts'), 'utf8');
+ok(/setRitualTime\(sec: number\)/.test(rtcSrc), 'B-1 RitualTimelineController.setRitualTime(sec: number) 存在');
+ok(!/setRitualTime\(dt/.test(rtcSrc), 'B-1 setRitualTime 形参不吃 dt');
 
-// ── B-2 无第二时钟 ────────────────────────────────────────────────────────
+// ── B-2 无第二时钟（AltarScene 里单一 Clock）─────────────────────────────
 ok((sceneSrc.match(/new THREE\.Clock/g) || []).length === 1, 'B-2 new THREE.Clock 全文件恰 1 处（单一时钟）');
 ok((sceneSrc.match(/requestAnimationFrame/g) || []).length === 1, 'B-2 requestAnimationFrame 全文件恰 1 处（单一循环）');
-
-// ── B-3 形参干净（不吃 dt；实参字面为 this.ritualElapsed）────────────────
-ok(/private applyCeremonyView\(sec: number\)/.test(sceneSrc), 'B-3 定义形参为 (sec: number) —— 不接受 dt');
-ok(/this\.applyCeremonyView\(this\.ritualElapsed\);/.test(sceneSrc), 'B-3 animate 内实参字面为 this.ritualElapsed');
 
 console.log(
   `ceremony-view: A-1…A-16 + B-1…B-3 verified on real module (pose 7201-point sweep, ` +

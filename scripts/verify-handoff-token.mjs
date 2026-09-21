@@ -1,7 +1,7 @@
 // #22 handoff token 单测
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isHandoffTokenValid, handoffUrl, HANDOFF_TOKEN_TTL_MS } from '../src/data/handoffToken.ts';
+import { isHandoffSessionValid, handoffUrl, HANDOFF_TOKEN_TTL_MS } from '../src/data/handoffSession.ts';
 
 const now = Date.now();
 
@@ -13,7 +13,7 @@ test('#22 有效 token 通过验证', () => {
     yaw: 1.5,
     mode: 'single',
   };
-  assert.ok(isHandoffTokenValid(t, now));
+  assert.ok(isHandoffSessionValid(t, now));
 });
 
 test('#22 过期 token 拒绝', () => {
@@ -24,7 +24,7 @@ test('#22 过期 token 拒绝', () => {
     yaw: 1.5,
     mode: 'single',
   };
-  assert.ok(!isHandoffTokenValid(t, now));
+  assert.ok(!isHandoffSessionValid(t, now));
 });
 
 test('#22 短 token 拒绝', () => {
@@ -35,7 +35,7 @@ test('#22 短 token 拒绝', () => {
     yaw: 1.5,
     mode: 'single',
   };
-  assert.ok(!isHandoffTokenValid(t, now));
+  assert.ok(!isHandoffSessionValid(t, now));
 });
 
 test('#22 handoff URL 构造', () => {
