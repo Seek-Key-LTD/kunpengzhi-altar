@@ -31,8 +31,7 @@ import { SEASON1_POEMS } from '../data/season1_poems';
 import {
   BRICK,
   CELL,
-  PYRAMID_HALF,
-  PYRAMID_TOP
+  PYRAMID_HALF
 } from '../data/altarGeometry';
 import { ImperialSealObject } from './relic/ImperialSealObject';
 import { CameraRig } from './CameraRig';
@@ -45,7 +44,7 @@ import { MechanicsRig } from './MechanicsRig';
 import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
-import { saucerLayout } from '../data/wujiGeometry';
+import { buildLightRig } from './LightRig';
 import { ceremonyVisibility } from '../data/ceremonyVisibility';
 import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
@@ -386,66 +385,12 @@ export class AltarScene {
   }
 
   private initLighting() {
-    const ambientLight = new THREE.AmbientLight(0x1e293b, 1.4);
-    this.scene.add(ambientLight);
-    this.ambientLight = ambientLight;
-
-    const sunLight = new THREE.DirectionalLight(0xffecd2, 2.6);
-    sunLight.position.set(35, 55, 25);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
-    this.scene.add(sunLight);
-    this.sunLight = sunLight;
-
-    const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.6);
-    rimLight.position.set(-35, 12, -35);
-    this.scene.add(rimLight);
-    this.rimLight = rimLight;
-
-    const apexLight = new THREE.PointLight(0xfbbf24, 3.2, 70, 1.2);
-    apexLight.position.set(0, PYRAMID_TOP + 4, 0);
-    this.scene.add(apexLight);
-    this.apexLight = apexLight;
-
-    // #00 无极具象：飞碟悬于坛顶上方中央，向下一束冷光罩住玉玺（SEAL_HOVER_Y）。
-    // 抛物面 z=22.42−0.01·r² 焦距 f=1/(4·0.01)=25，数学焦点在顶点下方 z=−2.58（坛底）；
-    // 此处取仪式化布置：飞碟即天听，光柱垂直下落，落点压在玉玺印面之上。
-    const layout = saucerLayout();
-    const wujiLight = new THREE.SpotLight(0xbfe8ff, 0, 30, 0.10, 0.55, 1.4);
-    wujiLight.position.set(0, layout.saucerY, 0);
-    wujiLight.target.position.set(0, SEAL_HOVER_Y, 0);
-    this.scene.add(wujiLight, wujiLight.target);
-    this.wujiLight = wujiLight;
-    // 飞碟本体（扁圆盘 + 底部发光核心）
-    const saucer = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.7, 1.7, 0.32, 48, 1, false),
-      new THREE.MeshStandardMaterial({ color: 0xdfeff5, emissive: 0xbfe8ff, emissiveIntensity: 1.6, roughness: 0.35, metalness: 0.1 })
-    );
-    saucer.position.set(0, layout.saucerY, 0);
-    this.scene.add(saucer);
-    const saucerCore = new THREE.Mesh(
-      new THREE.SphereGeometry(0.55, 24, 16),
-      new THREE.MeshBasicMaterial({ color: 0xeaf9ff })
-    );
-    saucerCore.position.set(0, layout.saucerY - 0.25, 0);
-    this.scene.add(saucerCore);
-    // 可见光柱：从飞碟垂直下落到玉玺（半透明锥柱，上窄下宽罩住玉玺）
-    const beam = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.9, 1.9, layout.beamLen, 24, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })
-    );
-    beam.position.set(0, layout.beamCenterY, 0);
-    this.scene.add(beam);
-
-    // 阴锥内腔照明（空腔是封闭的，光必须留在里面）
-    const yinLightA = new THREE.PointLight(0x38bdf8, 3.0, 26, 1.2);
-    yinLightA.position.set(0, 2.4, 0);
-    this.hollowInteriorGroup.add(yinLightA);
-
-    const yinLightB = new THREE.PointLight(0xf59e0b, 2.2, 22, 1.2);
-    yinLightB.position.set(0, 8.0, 0);
-    this.hollowInteriorGroup.add(yinLightB);
+    const handles = buildLightRig(this.scene, this.hollowInteriorGroup);
+    this.ambientLight = handles.ambient;
+    this.sunLight = handles.sun;
+    this.rimLight = handles.rim;
+    this.apexLight = handles.apex;
+    this.wujiLight = handles.wuji;
   }
 
   /**
