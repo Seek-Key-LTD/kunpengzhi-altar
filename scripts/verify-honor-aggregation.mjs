@@ -152,8 +152,8 @@ console.log('[P1–P5] 公共投影规则');
 ok(view.badges.length <= A.SEAT_ID_MAX, 'P1 badges.length ≤ 49');
 ok(view.badges.every((b) => A.isSeatId(b.seatIndex)), 'P1 badges 逐条 isSeatId(seatIndex)');
 // P2：字段集精确（不含 credits/node/tokenId/snapshotHash/basis/epoch）
-eq(JSON.stringify(Object.keys(view).sort()), JSON.stringify(['badges', 'epochTag', 'seatDomainSize', 'vacantApex']),
-  'P2 PublicHonorView 字段集恰 {epochTag,badges,vacantApex,seatDomainSize}');
+eq(JSON.stringify(Object.keys(view).sort()), JSON.stringify(['badges', 'periodTag', 'seatDomainSize', 'vacantApex']),
+  'P2 PublicHonorView 字段集恰 {periodTag,badges,vacantApex,seatDomainSize}');
 eq(view.badges.every((b) => JSON.stringify(Object.keys(b).sort()) === JSON.stringify(['changed', 'glyph', 'ordinal', 'seatIndex'])),
   true, 'P2 每条 badge 字段集恰 {seatIndex,ordinal,glyph,changed}（无 credits/node/tokenId/…）');
 eq(['credits', 'creditsPrev', 'node', 'tokenId', 'snapshotHash', 'basis', 'epoch'].every((k) => !Object.keys(view).includes(k)),

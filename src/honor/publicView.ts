@@ -27,13 +27,13 @@ export interface PublicSeatBadge {
 }
 
 /**
- * 公共只读视图。字段集**已穷举**：`epochTag` / `badges` / `vacantApex` / `seatDomainSize`。
+ * 公共只读视图。字段集**已穷举**：`periodTag` / `badges` / `vacantApex` / `seatDomainSize`。
  * 任何 ASN 相关字段（`sourceRefs` / `snapshotHash` / `chainRef` / `basis` / `node`）
  * 都不进这个接口 —— 这是 §2.3 投影规则 P2 的直接后果。
  */
 export interface PublicHonorView {
   /** '2026-09'。保留 epoch 的**值**作文案，但字段名不叫 epoch。 */
-  readonly epochTag: EpochTag;
+  readonly periodTag: EpochTag;
   readonly badges: readonly PublicSeatBadge[];
   /** 无极天花板恒空（规范 §2）。**字面量 `true`** —— 不存在"可以变成 false"的路径。 */
   readonly vacantApex: true;
@@ -78,7 +78,7 @@ export function toPublicView(
   }
 
   return {
-    epochTag: ranking.epoch,
+    periodTag: ranking.epoch,
     badges,
     vacantApex: true,
     seatDomainSize: SEAT_ID_MAX
