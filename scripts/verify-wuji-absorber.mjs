@@ -105,8 +105,8 @@ eq(wujiRevealStateAt(1751), 'silent', 't=29:11 → silent（除冷顶光外全�
 eq(wujiRevealStateAt(1e9), 'silent', 't≫29:11 → silent');
 
 // ── 3. 场景层源码审查：席位表 / 拾取（AltarScene 依赖 three/DOM，无法实例化）──
-const sceneSrc = readCode('src/three/AltarScene.ts');
-ok(/this\.scene\.add\(absorber\)/.test(sceneSrc), '#00 吸光体必须挂在场景根（不属于任何席位组）');
+const sceneSrc = readCode('src/three/AltarScene.ts') + readCode('src/three/WujiFountainBuilder.ts');
+ok(/(this\.)?scene\.add\(absorber\)/.test(sceneSrc), '#00 吸光体必须挂在场景根（不属于任何席位组）');
 ok(/ritual_anchor: 'wuji'/.test(sceneSrc), '#00 必须带 ritual_anchor=wuji 归属标记');
 ok(/claimable: false/.test(sceneSrc) && /tokenizable: false/.test(sceneSrc), '#00 必须显式 claimable/tokenizable=false');
 ok(/seatId:\s*null/.test(sceneSrc), '#00 的 seatId 必须明置为 null（绝无第 50 席身份）');

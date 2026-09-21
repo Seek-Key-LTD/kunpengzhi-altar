@@ -63,6 +63,7 @@ import { buildWaterLift } from './WaterLiftBuilder';
 import { buildBrickColumns } from './CubePyramidBuilder';
 import { buildSeats } from './SeatsBuilder';
 import { buildPrimeDiagonalLines } from './PrimeDiagonalBuilder';
+import { buildWujiFountain } from './WujiFountainBuilder';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -896,70 +897,9 @@ export class AltarScene {
   }
 
   private buildWujiFountain() {
-    // #00 无极点 · 吸光体：
-    //   · 独立网格，挂在**场景根**上（不属于 outerShellGroup / 任何席位组）；
-    //   · 材质：color 黑 / roughness 0.95 / metalness 0.1 / **无自发光**（emissive 关闭）；
-    //   · 无 seatId、无音高、不进拾取列表，只在 24:00 后接受末段一束窄角冷顶光。
-    //   世界坐标：x=0, y=PYRAMID_TOP+0.14(=21.14), z=0 —— 坛心正上方，不可占有。
-    const absorber = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.72, 0.82, 0.18, 48),
-      new THREE.MeshStandardMaterial({
-        color: 0x000000,
-        roughness: 0.95,
-        metalness: 0.1,
-        emissive: 0x000000,
-        emissiveIntensity: 0
-      })
-    );
-    absorber.position.set(0, PYRAMID_TOP + 0.14, 0);
-    absorber.name = 'wuji_absorber_#00';
-    // 归属标记：永不可认领 / 不可通证化；seatId 明置为 null（#00 不是席位，绝无第 50 席）。
-    absorber.userData = { ritual_anchor: 'wuji', seatId: null, claimable: false, tokenizable: false };
-    this.scene.add(absorber);
+    const { absorber, fountainParticles } = buildWujiFountain(this.scene, this.fountainGroup);
     this.wujiAbsorber = absorber;
-
-    const beamGeo = new THREE.CylinderGeometry(0.3, 1.2, 20, 16, 1, true);
-    const beamMat = new THREE.MeshBasicMaterial({
-      color: 0x67e8f9,
-      transparent: true,
-      opacity: 0.25,
-      side: THREE.DoubleSide
-    });
-    const beam = new THREE.Mesh(beamGeo, beamMat);
-    beam.position.set(0, PYRAMID_TOP + 9.75, 0);
-    this.fountainGroup.add(beam);
-
-    const ringGeo = new THREE.TorusGeometry(1.8, 0.08, 16, 64);
-    const ringMat = new THREE.MeshStandardMaterial({
-      color: 0xf59e0b,
-      metalness: 0.9,
-      roughness: 0.1,
-      emissive: 0xd97706,
-      emissiveIntensity: 0.8
-    });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.set(0, PYRAMID_TOP + 4, 0);
-    this.fountainGroup.add(ring);
-
-    const fountainPCount = 300;
-    const fGeo = new THREE.BufferGeometry();
-    const fPos = new Float32Array(fountainPCount * 3);
-    for (let i = 0; i < fountainPCount; i++) {
-      fPos[i * 3] = (Math.random() - 0.5) * 1.5;
-      fPos[i * 3 + 1] = PYRAMID_TOP + 0.5 + Math.random() * 4.0;
-      fPos[i * 3 + 2] = (Math.random() - 0.5) * 1.5;
-    }
-    fGeo.setAttribute('position', new THREE.BufferAttribute(fPos, 3));
-    const fMat = new THREE.PointsMaterial({
-      size: 0.22,
-      color: 0x38bdf8,
-      transparent: true,
-      opacity: 0.85,
-      blending: THREE.AdditiveBlending
-    });
-    this.fountainParticles = new THREE.Points(fGeo, fMat);
-    this.fountainGroup.add(this.fountainParticles);
+    this.fountainParticles = fountainParticles;
 
     // 水龙沿阴蝎子楔的管芯走；绝不重建成阳面上的顶面水流。
     if (this.dragon.waterPath.length !== this.events.length) {
