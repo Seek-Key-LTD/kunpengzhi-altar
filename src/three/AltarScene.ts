@@ -45,6 +45,7 @@ import { onWindowResize as evWindowResize, onPointerDown as evPointerDown, onKey
 import { RelicController } from './RelicController';
 import { DemoController } from './DemoController';
 import { RitualTimelineController } from './RitualTimelineController';
+import { SceneDisposer } from './SceneDisposer';
 import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
 import { seatWorldPos } from '../data/seatWorldPos';
@@ -1450,153 +1451,52 @@ export class AltarScene {
    * 十来次之后浏览器 context 配额打满，就是白屏。现在全部回收。
    */
   public destroy() {
-    // 0. 幂等闸：React.StrictMode 双挂、或 App 兜底路径重复清理时，二次调用必须安全返回。
-    //    （销毁后 renderer / controls 已置空，再走一遍会炸在 null 上。）
     if (this.destroyed) return;
     this.destroyed = true;
 
-    // 0. 先撤玉玺子系统；其 geometry/material/texture 由第 6 步统一遍历回收。
-    this.disposeRelic();
-
-    // 1. rAF
-    if (this.animationFrameId !== null) {
-      cancelAnimationFrame(this.animationFrameId);
-      this.animationFrameId = null;
-    }
-
-    // 2. 事件监听
-    window.removeEventListener('resize', this.onWindowResize);
-    window.removeEventListener('keydown', this.onKeyDown);
-    window.removeEventListener('keyup', this.onKeyUp);
-    window.removeEventListener('blur', this.onWindowBlur);
-    this.container.removeEventListener('pointerdown', this.onPointerDown);
-
-    // 3. 雾中字幕行（工程 HUD 的 DOM 自始不挂，数表只属于验收、不属于公共仪式）
-    if (this.fogCaptionEl?.parentElement) {
-      this.fogCaptionEl.parentElement.removeChild(this.fogCaptionEl);
-    }
-    this.fogCaptionEl = null;
-    // 4. 控制器（内部也挂着 DOM 监听）
-    this.controls.dispose();
-
-    // 6. 场景全量回收：geometry / material / 全部贴图（28 张 CanvasTexture 在此）
-    this.disposeSceneResources();
-
-    // 7. 索引表与回调断开，别把整棵场景图挂在闭包上
-    this.seatPads.clear();
-    this.lotus.clear();
-    this.starship.clear();
-    this.lanternPanels.clear();
-    this.interiorStelae.clear();
-    // RFC-007 双体水梯：几何随整棵场景图在第 6 步回收，这里只断开引用
-    // RFC-008 走马灯：引擎是纯数学状态、无场景资源（几何随场景图第 6 步回收），
-    // 这里只把 RFC-007→RFC-008 的地脉冲击量归零。
-    this.waterLiftSeismic = 0;
-    // #2：逐席光迹的几何随整棵场景图在第 6 步回收，这里只断开引用。
-    this.seatTrails = [];
-    this.seatTrailsGroup = null;
-    this.fountainParticles = null;
-    this.ambientLight = null;
-    this.sunLight = null;
-    this.rimLight = null;
-    this.apexLight = null;
-    this.wujiLight = null;
-    // #00 无极点吸光体：几何随整棵场景图在第 6 步回收，这里只断开引用。
-    this.wujiAbsorber = null;
-    this.onSeatSelect = undefined;
-    this.onLanternSelect = undefined;
-    this.onInteriorPoemSelect = undefined;
-
-    // 8. 渲染器：dispose 之后必须 forceContextLoss()，
-    //    否则 WebGL context 只是被标记为可丢弃，配额不会立刻回来。
-    //    #7：无画模式根本没有渲染器（也就没有 canvas），这一步整段跳过。
-    if (this.renderer) {
-      this.renderer.domElement.removeEventListener('webglcontextlost', this.onWebglContextLost);
-      this.renderer.domElement.removeEventListener('webglcontextrestored', this.onWebglContextRestored);
-      this.renderer.setRenderTarget(null);
-      this.renderer.dispose();
-      this.renderer.forceContextLoss();
-      if (this.renderer.domElement.parentElement) {
-        this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+    const disposer = new SceneDisposer({
+      scene: this.scene,
+      renderer: this.renderer,
+      controls: this.controls,
+      container: this.container,
+      animationFrameId: this.animationFrameId,
+      onWindowResize: this.onWindowResize,
+      onKeyDown: this.onKeyDown,
+      onKeyUp: this.onKeyUp,
+      onWindowBlur: this.onWindowBlur,
+      onPointerDown: this.onPointerDown,
+      fogCaptionEl: this.fogCaptionEl,
+      onWebglContextLost: this.onWebglContextLost,
+      onWebglContextRestored: this.onWebglContextRestored,
+      audioResumeHandler: this.audioResumeHandler,
+      disposeRelic: () => this.disposeRelic(),
+      clearIndexes: () => {
+        this.seatPads.clear();
+        this.lotus.clear();
+        this.starship.clear();
+        this.lanternPanels.clear();
+        this.interiorStelae.clear();
+        this.waterLiftSeismic = 0;
+        this.seatTrails = [];
+        this.seatTrailsGroup = null;
+        this.fountainParticles = null;
+        this.ambientLight = null;
+        this.sunLight = null;
+        this.rimLight = null;
+        this.apexLight = null;
+        this.wujiLight = null;
+        this.wujiAbsorber = null;
+        this.onSeatSelect = undefined;
+        this.onLanternSelect = undefined;
+        this.onInteriorPoemSelect = undefined;
+        this.ritualClock.running = false;
       }
-      this.renderer = null;
-    }
+    });
+    disposer.dispose();
+
     this.onDegrade = undefined;
-
-    // 8b. 公共入口 1800s 时间轴 / Web Audio 手势兜底：停推进，摘掉 window 监听。
-    this.ritualClock.running = false;
-    if (this.audioResumeHandler) {
-      window.removeEventListener('pointerdown', this.audioResumeHandler);
-      window.removeEventListener('keydown', this.audioResumeHandler);
-      this.audioResumeHandler = null;
-    }
-
-    // 9. Tone.js：altarAudio 是这一轮仪式造的乐器，随祭坛一起拆，
-    //    下次入坛由 App 的 begin() 重新 init()。拆不干净就是一堆悬挂的 AudioNode。
-    try {
-      altarAudio.dispose();
-    } catch (err) {
-      console.warn('音频资源释放失败（不影响场景释放）：', err);
-    }
+    this.renderer = null;
   }
 
-  /**
-   * 遍历场景，按类别回收：
-   *   · geometry（共享几何用 Set 去重，不会重复 dispose）
-   *   · material，以及 material 上挂着的**每一张**贴图（CanvasTexture 在这里）
-   *   · 光源阴影贴图（独立 RenderTarget，dispose(material) 不会带走）
-   *   · 场景级 background / environment 贴图
-   */
-  private disposeSceneResources(): void {
-    const geometries = new Set<THREE.BufferGeometry>();
-    const materials = new Set<THREE.Material>();
-    const textures = new Set<THREE.Texture>();
 
-    const collectMaterial = (material: THREE.Material) => {
-      materials.add(material);
-      // 贴图挂在材质实例的自有属性上（map / normalMap / alphaMap / sheenColorMap …）
-      const record = material as unknown as Record<string, unknown>;
-      Object.keys(record).forEach((key) => {
-        const value = record[key];
-        if (value && typeof value === 'object' && (value as THREE.Texture).isTexture) {
-          textures.add(value as THREE.Texture);
-        }
-      });
-      // ShaderMaterial 的贴图藏在 uniforms 里
-      const uniforms = (material as THREE.ShaderMaterial).uniforms;
-      if (uniforms) {
-        Object.values(uniforms).forEach((uniform) => {
-          const value = uniform?.value as THREE.Texture | undefined;
-          if (value && value.isTexture) textures.add(value);
-        });
-      }
-    };
-
-    this.scene.traverse((obj) => {
-      const mesh = obj as THREE.Mesh;
-      if (mesh.geometry) geometries.add(mesh.geometry);
-
-      const material = (obj as unknown as { material?: THREE.Material | THREE.Material[] }).material;
-      if (Array.isArray(material)) material.forEach(collectMaterial);
-      else if (material) collectMaterial(material);
-
-      const light = obj as THREE.Light;
-      if (light.isLight && light.shadow) {
-        light.shadow.map?.dispose();
-      }
-    });
-
-    [this.scene.background, this.scene.environment].forEach((slot) => {
-      if (slot && (slot as THREE.Texture).isTexture) textures.add(slot as THREE.Texture);
-    });
-
-    geometries.forEach((geometry) => geometry.dispose());
-    materials.forEach((material) => material.dispose());
-    textures.forEach((texture) => texture.dispose());
-
-    this.scene.clear();
-    this.scene.background = null;
-    this.scene.environment = null;
-    this.scene.fog = null;
-  }
 }
