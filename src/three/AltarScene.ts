@@ -44,7 +44,7 @@ import { buildWaterWaterway, buildSoundWaterway } from './WaterwayBuilder';
 import { onWindowResize as evWindowResize, onPointerDown as evPointerDown, onKeyDown as evKeyDown, onKeyUp as evKeyUp, onWindowBlur as evWindowBlur } from './EventHandlers';
 import { RelicController } from './RelicController';
 import { DemoController } from './DemoController';
-import { ceremonyVisibility } from '../data/ceremonyVisibility';
+import { RitualTimelineController } from './RitualTimelineController';
 import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
 import { seatWorldPos } from '../data/seatWorldPos';
@@ -199,6 +199,7 @@ export class AltarScene {
   private relicDecal: SealStampDecal | null = null;
   private relicController: RelicController | null = null;
   private demoController: DemoController | null = null;
+  private ritualController: RitualTimelineController | null = null;
   private onRelicSelect?: (relicId: string) => void;
 
 
@@ -751,45 +752,37 @@ export class AltarScene {
     litSeats: number,
     activeSeatId: number | null
   ) {
-    this.ritualMode = true;
-    this.ritualLitSeats = Math.max(0, Math.min(49, litSeats));
-    this.isAutoPatrol = false;
-    // 游客 routine 的残留倒计时归零：进坛后不再有任何机位硬切。
-    // 公共页唯一的镜头运动是 animate() 第 0 段的连续环绕（不受 ritualMode 影响）。
-    this.rig.guestTimer = 0;
-    this.rig.guestIndex = 0;
-    this.controls.enabled = false;
-    this.scene.background = new THREE.Color(0x000000);
-    const v = ceremonyVisibility(phase);
-    // 公共仪式可以暗，不能灰。雾只承担远景吸收，不许把 7×7 Cube 的贴合边界糊掉。
-    this.scene.fog = new THREE.FogExp2(0x000000, v.fogDensity);
-
-    if (this.ambientLight) this.ambientLight.intensity = v.ambientLight;
-    if (this.sunLight) this.sunLight.intensity = v.sunLight;
-    if (this.rimLight) this.rimLight.intensity = v.rimLight;
-    if (this.apexLight) this.apexLight.intensity = v.apexLight;
-    if (this.wujiLight) this.wujiLight.intensity = v.wujiLightIntensity;
-
-    this.outerShellGroup.visible = v.outerShellVisible;
-    this.hollowInteriorGroup.visible = v.outerShellVisible;
-    this.waterworksGroup.visible = v.waterworksVisible;
-    this.fountainGroup.visible = v.waterworksVisible;
-    this.primeLinesGroup.visible = false;
-    this.starship.hideAll();
-    this.lanternsGroup.visible = v.lanternsVisible;
-    // 回转由 RFC-008 引擎持续驱动，幕次切换不再改写转速（见 animate 第 9b 段）
-    this.dragon.setRitual(this.ritualLitSeats, v.dualDragonVisible);
-    // #2：逐席光迹 —— 只有已触发席位保留光迹（未触发者不可见，绝不预演未来席）。
-    if (this.seatTrailsGroup) this.seatTrailsGroup.visible = v.dualDragonVisible;
-    this.seatTrails.forEach((trail, idx) => {
-      trail.visible = v.dualDragonVisible && idx + 1 <= this.ritualLitSeats;
-    });
-    if (this.wujiAbsorber) this.wujiAbsorber.visible = v.wujiAbsorberVisible;
-    // 玉玺属于导演台的器物层；公共仪式中不能让它与 #00 争中心。
-    if (this.relic) this.relic.object3D.visible = false;
-    if (this.relicDecal) this.relicDecal.object3D.visible = false;
-
-    this.lotus.setRitual(this.ritualLitSeats, v.isDark, activeSeatId);
+    if (!this.ritualController) {
+      this.ritualController = new RitualTimelineController({
+        clock: this.ritualClock,
+        scene: this.scene,
+        ambientLight: this.ambientLight,
+        sunLight: this.sunLight,
+        rimLight: this.rimLight,
+        apexLight: this.apexLight,
+        wujiLight: this.wujiLight,
+        outerShellGroup: this.outerShellGroup,
+        hollowInteriorGroup: this.hollowInteriorGroup,
+        waterworksGroup: this.waterworksGroup,
+        fountainGroup: this.fountainGroup,
+        lanternsGroup: this.lanternsGroup,
+        seatTrailsGroup: this.seatTrailsGroup,
+        seatTrails: this.seatTrails,
+        wujiAbsorber: this.wujiAbsorber,
+        relic: this.relic,
+        relicDecal: this.relicDecal,
+        dragon: this.dragon,
+        lotus: this.lotus,
+        starship: this.starship,
+        rig: this.rig,
+        controls: this.controls,
+        activeSeatId: this.activeSeatId,
+        onKickAudio: () => this.kickAudio()
+      });
+    }
+    this.ritualController.setRitualState(phase, litSeats, activeSeatId);
+    this.ritualMode = this.ritualController.ritualMode;
+    this.ritualLitSeats = this.ritualController.ritualLitSeats;
   }
 
   /**
