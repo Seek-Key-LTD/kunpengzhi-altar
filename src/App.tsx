@@ -53,7 +53,7 @@ export const App: React.FC = () => {
 
     // 公共入口采用自由观察席：进入即开放鼠标 OrbitControls 与 WASD/QE。
     // 真正 OIDC 接入后由身份层覆写此角色；祭坛本体仍只消费 role，不自行验权。
-    altar.setRole('authenticated');
+    altar.setRole('guest'); // #20 公共入口禁止飞行
 
     // 公共页启动 1800s 五幕正典时间轴（#16 修复：时钟自走，手势只影响音频增益）
     altar.startRitual();
