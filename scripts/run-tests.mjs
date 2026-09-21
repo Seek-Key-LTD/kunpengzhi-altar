@@ -37,6 +37,7 @@ const SUITES = [
   ['#7 公共 DOM 无工程化字样', 'scripts/verify-public-dom.mjs'],
   ['#21 Rabbit Hole 递归等比门槛', 'scripts/verify-rabbit-hole-journey.mjs'],
   ['#22 handoff token 前端工具', 'scripts/verify-handoff-token.mjs'],
+  ['#23 Discord 外链入口', 'scripts/verify-discord-link.mjs'],
   ['QA 独立门禁（#4）', 'scripts/qa-verify-audio-envelope.mjs'],
   // #6 荣誉层：数据契约 + #00 三态（44 断言） + 公共入口不可达（15 断言）
   ['荣誉层聚合·#00 三态（#6 T1–T6）', 'scripts/verify-honor-aggregation.mjs'],
