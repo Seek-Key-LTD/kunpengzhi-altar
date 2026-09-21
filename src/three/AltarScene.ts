@@ -26,10 +26,7 @@ import {
   teaLanternRotationEnabled,
   fogCaptionAt
 } from '../data/dualDragon';
-import { TEA_POEM_16_CHAPTERS } from '../data/tea_poem_16';
-import { SEASON1_POEMS } from '../data/season1_poems';
 import {
-  BRICK,
   CELL,
   PYRAMID_HALF
 } from '../data/altarGeometry';
@@ -45,10 +42,10 @@ import { SealStampDecal } from './relic/SealStampDecal';
 import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import { buildLightRig } from './LightRig';
+import { buildInnerStelaeRing, buildOuter16TeaLanterns } from './StelaeLanternBuilder';
 import { ceremonyVisibility } from '../data/ceremonyVisibility';
 import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
-import { pickStelaEvents, stelaPose } from '../data/stelaRing';
 import { seatWorldPos } from '../data/seatWorldPos';
 import { buildSurroundingAtmosphere } from './AtmosphereBuilder';
 import { buildStarships } from './StarshipBuilder';
@@ -64,7 +61,6 @@ import { buildSeats } from './SeatsBuilder';
 import { buildPrimeDiagonalLines } from './PrimeDiagonalBuilder';
 import { buildWujiFountain } from './WujiFountainBuilder';
 import { broadcastStateAt } from '../data/broadcastSchedule';
-import { createInteriorStelaSprite, createTeaLanternSprite } from './SpriteTextureFactory';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -645,111 +641,12 @@ export class AltarScene {
    */
   /** 后置展示层：结构验收通过后才由显式调用启用。 */
   public buildInnerStelaeRing() {
-    const picks = pickStelaEvents(this.events, SEASON1_POEMS.length);
-
-    const slabMat = new THREE.MeshStandardMaterial({
-      color: 0x0f172a,
-      metalness: 0.6,
-      roughness: 0.3,
-      emissive: 0x1e3a8a,
-      emissiveIntensity: 0.35,
-      transparent: true,
-      opacity: 0.94
-    });
-    const frameMat = new THREE.MeshStandardMaterial({
-      color: 0xf59e0b,
-      metalness: 0.9,
-      roughness: 0.2,
-      emissive: 0xb45309,
-      emissiveIntensity: 0.5
-    });
-
-    const stelaH = BRICK * 0.9;
-    const stelaW = BRICK * 2.4;
-
-    picks.forEach((ev, i) => {
-      const poem = SEASON1_POEMS[i % SEASON1_POEMS.length];
-
-      const sp = stelaPose(ev, CELL, BRICK, stelaH);
-      const { x: cx, y: cy, z: cz, nx, nz } = sp;
-
-      const stelaGroup = new THREE.Group();
-      stelaGroup.position.set(cx, cy, cz);
-      stelaGroup.rotation.y = Math.atan2(nx, nz);
-
-      const slab = new THREE.Mesh(new THREE.BoxGeometry(stelaW, stelaH, 0.1), slabMat);
-      slab.userData = { type: 'interior_stela', seasonId: poem.seasonId };
-      stelaGroup.add(slab);
-      this.interiorStelae.set(poem.seasonId, slab);
-
-      const frame = new THREE.Mesh(
-        new THREE.BoxGeometry(stelaW + 0.12, stelaH + 0.12, 0.06),
-        frameMat
-      );
-      frame.position.z = -0.03;
-      stelaGroup.add(frame);
-
-      const sprite = createInteriorStelaSprite(poem);
-      sprite.position.set(0, 0, 0.07);
-      sprite.scale.set(stelaW, stelaH, 1);
-      stelaGroup.add(sprite);
-
-      this.hollowInteriorGroup.add(stelaGroup);
-    });
+    this.interiorStelae = buildInnerStelaeRing(this.events, this.hollowInteriorGroup);
   }
 
   /** 后置展示层：结构验收通过后才由显式调用启用。 */
   public buildOuter16TeaLanterns() {
-    // 16-Faceted Rotating Lantern Pavilion (十六面转经走马大茶灯回廊)
-    const lanternRadius = 23.5;
-    const lanternHeight = 4.6;
-
-    TEA_POEM_16_CHAPTERS.forEach((ch, idx) => {
-      const angle = (idx / 16) * Math.PI * 2;
-      const x = Math.sin(angle) * lanternRadius;
-      const z = Math.cos(angle) * lanternRadius;
-
-      const panelGroup = new THREE.Group();
-      panelGroup.position.set(x, lanternHeight / 2 + 0.3, z);
-      panelGroup.rotation.y = angle;
-
-      const screenGeo = new THREE.PlaneGeometry(3.8, lanternHeight);
-      const screenMat = new THREE.MeshStandardMaterial({
-        color: 0x0c1322,
-        emissive: 0x1e293b,
-        emissiveIntensity: 0.4,
-        roughness: 0.4,
-        metalness: 0.3,
-        side: THREE.DoubleSide
-      });
-      const screenMesh = new THREE.Mesh(screenGeo, screenMat);
-      screenMesh.userData = { type: 'tea_lantern', chapterIndex: ch.chapterIndex };
-      panelGroup.add(screenMesh);
-      this.lanternPanels.set(ch.chapterIndex, screenMesh);
-
-      const rodGeo = new THREE.CylinderGeometry(0.08, 0.08, 4.0, 8);
-      rodGeo.rotateZ(Math.PI / 2);
-      const rodMat = new THREE.MeshStandardMaterial({
-        color: 0xf59e0b,
-        metalness: 0.9,
-        roughness: 0.2,
-        emissive: 0x92400e,
-        emissiveIntensity: 0.4
-      });
-      const topRod = new THREE.Mesh(rodGeo, rodMat);
-      topRod.position.y = lanternHeight / 2;
-      panelGroup.add(topRod);
-
-      const botRod = new THREE.Mesh(rodGeo, rodMat);
-      botRod.position.y = -lanternHeight / 2;
-      panelGroup.add(botRod);
-
-      const sprite = createTeaLanternSprite(ch);
-      sprite.position.set(0, 0, 0.05);
-      panelGroup.add(sprite);
-
-      this.lanternsGroup.add(panelGroup);
-    });
+    this.lanternPanels = buildOuter16TeaLanterns(this.lanternsGroup);
   }
 
   private buildWujiFountain() {
