@@ -34,6 +34,7 @@ const SUITES = [
   ['QA 独立门禁（#2/#9）', 'scripts/qa-verify-dual-dragon.mjs'],
   ['#16 公共页时钟自走（免手势）', 'scripts/verify-public-clock.mjs'],
   ['#19 公共正典广播时钟', 'scripts/verify-broadcast-schedule.mjs'],
+  ['#7 公共 DOM 无工程化字样', 'scripts/verify-public-dom.mjs'],
   ['QA 独立门禁（#4）', 'scripts/qa-verify-audio-envelope.mjs'],
   // #6 荣誉层：数据契约 + #00 三态（44 断言） + 公共入口不可达（15 断言）
   ['荣誉层聚合·#00 三态（#6 T1–T6）', 'scripts/verify-honor-aggregation.mjs'],
