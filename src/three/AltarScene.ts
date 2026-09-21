@@ -32,8 +32,7 @@ import {
   BRICK,
   CELL,
   PYRAMID_HALF,
-  PYRAMID_TOP,
-  RABBIT_HOLE_SEATS
+  PYRAMID_TOP
 } from '../data/altarGeometry';
 import { ImperialSealObject } from './relic/ImperialSealObject';
 import { CameraRig } from './CameraRig';
@@ -52,7 +51,6 @@ import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
 import { pickStelaEvents, stelaPose } from '../data/stelaRing';
 import { seatWorldPos } from '../data/seatWorldPos';
-import { brickLevels } from '../data/brickLevels';
 import { isPrimeDiagonal } from '../data/primeDiagonal';
 import { buildSurroundingAtmosphere } from './AtmosphereBuilder';
 import { buildStarships } from './StarshipBuilder';
@@ -63,6 +61,7 @@ import { buildFrontBead } from './FrontBeadBuilder';
 import { buildScorpionWaterway } from './ScorpionWaterwayBuilder';
 import { buildRabbitHole } from './RabbitHoleBuilder';
 import { buildWaterLift } from './WaterLiftBuilder';
+import { buildBrickColumns } from './CubePyramidBuilder';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -476,45 +475,10 @@ export class AltarScene {
    * 水只可能向外流到下一层，不会积在台上。
    */
   private buildCubePyramidAndSeats() {
-    const brickMat = new THREE.MeshStandardMaterial({
-      color: 0x263247,
-      roughness: 0.54,
-      metalness: 0.16
-    });
-
     // ---- 1. 49 根砖柱：每席一根，从地面砌到该席的台面高程 ----
-    const bricks: Array<{ x: number; y: number; z: number }> = [];
+    buildBrickColumns(this.events, this.outerShellGroup);
 
-    const rabbitHoleSeats = new Set<number>(RABBIT_HOLE_SEATS);
-    // #00 无极点（锚点 0）不在席位域：任何 seat_id 非 [1,49] 的条目都不许砌成砖柱或席位。
-    // 这一步让「#00 混进第 50 席」在结构上不可能发生，而不是靠约定。
     const seatEvents = this.events.filter((ev) => isSeatId(ev.seat_id));
-    seatEvents.forEach((ev) => {
-      const levels = brickLevels(ev.elevation, BRICK);
-      for (let i = 0; i < levels; i++) {
-        // 横轴 40→19→6→1→2→11→28：只抽第二层的同尺寸 Cube。
-        // 顶面仍然由上层 Cube 封住；入口/出口则在两端自然开口。
-        if (rabbitHoleSeats.has(ev.seat_id) && i === 1) continue;
-        bricks.push({
-          x: ev.grid_x * CELL,
-          y: (i + 0.5) * BRICK,
-          z: ev.grid_z * CELL
-        });
-      }
-    });
-
-    const brickGeo = new THREE.BoxGeometry(BRICK, BRICK, BRICK);
-    const blocks = new THREE.InstancedMesh(brickGeo, brickMat, bricks.length);
-    blocks.castShadow = true;
-    blocks.receiveShadow = true;
-
-    const mat4 = new THREE.Matrix4();
-    bricks.forEach((b, i) => {
-      mat4.makeTranslation(b.x, b.y, b.z);
-      blocks.setMatrixAt(i, mat4);
-    });
-    blocks.instanceMatrix.needsUpdate = true;
-    this.outerShellGroup.add(blocks);
 
     // ---- 2. 阴蝎子楔：水路不许出现在阳 Cube 的外露面 ----
     this.buildScorpionWaterway();
