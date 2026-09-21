@@ -51,7 +51,6 @@ import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
 import { pickStelaEvents, stelaPose } from '../data/stelaRing';
 import { seatWorldPos } from '../data/seatWorldPos';
-import { isPrimeDiagonal } from '../data/primeDiagonal';
 import { buildSurroundingAtmosphere } from './AtmosphereBuilder';
 import { buildStarships } from './StarshipBuilder';
 import { buildPlinth } from './PlinthBuilder';
@@ -63,6 +62,7 @@ import { buildRabbitHole } from './RabbitHoleBuilder';
 import { buildWaterLift } from './WaterLiftBuilder';
 import { buildBrickColumns } from './CubePyramidBuilder';
 import { buildSeats } from './SeatsBuilder';
+import { buildPrimeDiagonalLines } from './PrimeDiagonalBuilder';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -492,28 +492,8 @@ export class AltarScene {
     // ---- 3. 49 席：托座 / 质数环 / 莲花 ----
     buildSeats(seatEvents, (ev) => this.getSeatWorldPos(ev), this.seatPads, this.lotus, this.outerShellGroup);
 
-    // Build Ulam Prime Diagonal Alignment Lines
-    const primes = seatEvents.filter(e => e.is_prime);
-    const diagLineMat = new THREE.LineBasicMaterial({
-      color: 0x38bdf8,
-      linewidth: 2,
-      transparent: true,
-      opacity: 0.55
-    });
-
-    for (let i = 0; i < primes.length; i++) {
-      for (let j = i + 1; j < primes.length; j++) {
-        const p1 = primes[i];
-        const p2 = primes[j];
-        if (isPrimeDiagonal(p1, p2)) {
-          const v1 = this.getSeatWorldPos(p1);
-          const v2 = this.getSeatWorldPos(p2);
-          const geo = new THREE.BufferGeometry().setFromPoints([v1, v2]);
-          const line = new THREE.Line(geo, diagLineMat);
-          this.primeLinesGroup.add(line);
-        }
-      }
-    }
+    // Ulam 素数对角线
+    buildPrimeDiagonalLines(seatEvents, (ev) => this.getSeatWorldPos(ev), this.primeLinesGroup);
   }
 
   /**
