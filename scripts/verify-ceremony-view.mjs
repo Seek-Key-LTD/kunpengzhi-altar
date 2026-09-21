@@ -223,9 +223,9 @@ ok(stripped.includes('PHASE_WINDOWS') && /from\s+'\.\.\/audio\/phaseEnvelope'/.t
   'A-14① ceremonyView 引用 PHASE_WINDOWS（audio/phaseEnvelope 真源）');
 ok(/from\s+'\.\.\/types\/altar'/.test(stripped) && stripped.includes('RITUAL_TOTAL_SEC'),
   'A-14① ceremonyView 引用 types/altar 真源常量');
-// ② AltarScene 的 ritualElapsed 写入点恰为 4 处（1 处字段初值 + 3 处赋值），
+// ② AltarScene 的 ritualClock.elapsed 写入点恰为 3 处（1 处字段初值 + 3 处赋值），
 //    且 3 处赋值分别落在 startRitual / seekTo / updateRitualTimeline 方法体内。
-// ② AltarScene 的 ritualElapsed 写入点恰为 4 处（1 处字段初值 + 3 处赋值），
+// ② AltarScene 的 ritualClock.elapsed 写入点恰为 3 处（1 处字段初值 + 3 处赋值），
 //    且 3 处赋值分别落在 startRitual / seekTo / updateRitualTimeline 方法体内。
 //    （剔除注释行 —— 文档字符串里会出现「ritualElapsed = t」的字样，不是写点。）
 const sceneLines = sceneSrc.split('\n');
@@ -235,20 +235,19 @@ const isCommentLine = (line) => {
 };
 const writes = [];
 sceneLines.forEach((line, i) => {
-  if (!isCommentLine(line) && /ritualElapsed\s*=[^=]/.test(line)) {
+  if (!isCommentLine(line) && /ritualClock\.elapsed\s*=[^=]/.test(line)) {
     writes.push({ line: i + 1, text: line.trim() });
   }
 });
-ok(writes.length === 4, `A-14② ritualElapsed 写入点恰为 4 处（实测 ${writes.length}：${writes.map((w) => w.line).join('/')}）`);
-const fieldInit = writes.filter((w) => /^\s*private\s+ritualElapsed\s*=/.test(sceneLines[w.line - 1]));
-ok(fieldInit.length === 1, 'A-14② 恰 1 处字段初值（private ritualElapsed = 0）');
+ok(writes.length === 3, `A-14② ritualClock.elapsed 写入点恰为 3 处（实测 ${writes.length}：${writes.map((w) => w.line).join('/')}）`);
+// ritualClock 是对象，初值在 RitualClock 类里，不在 AltarScene.ts
 const methodDecls = [];
 sceneLines.forEach((line, i) => {
   const m = line.match(/^\s*(?:private|public)\s+([A-Za-z_$][\w$]*)\s*\(/);
   if (m) methodDecls.push({ line: i + 1, name: m[1] });
 });
 const LEGAL_WRITERS = new Set(['startRitual', 'seekTo', 'updateRitualTimeline']);
-const assignments = writes.filter((w) => !/^\s*private\s+ritualElapsed\s*=/.test(sceneLines[w.line - 1]));
+const assignments = writes.filter((w) => !/^\s*private\s+ritualClock\s*=/.test(sceneLines[w.line - 1]));
 ok(assignments.length === 3, 'A-14② 赋值点恰 3 处');
 for (const a of assignments) {
   const before = methodDecls.filter((m) => m.line < a.line);
