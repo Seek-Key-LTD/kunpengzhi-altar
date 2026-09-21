@@ -40,6 +40,7 @@ const SUITES = [
   ['#23 Discord 外链入口', 'scripts/verify-discord-link.mjs'],
   ['#15 Sarazm 天球计算', 'scripts/verify-sarazm-astronomy.mjs'],
   ['#7 WebGL 静默降级', 'scripts/verify-webgl-fallback.mjs'],
+  ['#26 World Kernel 类型', 'scripts/verify-kernel-types.mjs'],
   ['QA 独立门禁（#4）', 'scripts/qa-verify-audio-envelope.mjs'],
   // #6 荣誉层：数据契约 + #00 三态（44 断言） + 公共入口不可达（15 断言）
   ['荣誉层聚合·#00 三态（#6 T1–T6）', 'scripts/verify-honor-aggregation.mjs'],
