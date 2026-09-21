@@ -42,6 +42,7 @@ import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import { buildLightRig } from './LightRig';
 import { buildInnerStelaeRing, buildOuter16TeaLanterns } from './StelaeLanternBuilder';
 import { buildWaterWaterway, buildSoundWaterway } from './WaterwayBuilder';
+import { onWindowResize as evWindowResize, onPointerDown as evPointerDown, onKeyDown as evKeyDown, onKeyUp as evKeyUp, onWindowBlur as evWindowBlur } from './EventHandlers';
 import { ceremonyVisibility } from '../data/ceremonyVisibility';
 import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
@@ -204,6 +205,36 @@ export class AltarScene {
   private events: SpiralEvent[] = [];
   private activeSeatId: number | null = 1;
   private onSeatSelect?: (seatId: number) => void;
+
+  /** 事件处理上下文（供 EventHandlers 模块使用） */
+  private get eventContext(): import('./EventHandlers').EventContext {
+    return {
+      container: this.container,
+      camera: this.camera,
+      renderer: this.renderer,
+      raycaster: this.raycaster,
+      mouse: this.mouse,
+      lanternPanels: this.lanternPanels,
+      interiorStelae: this.interiorStelae,
+      seatPads: this.seatPads,
+      relic: this.relic,
+      caps: this.rig.caps,
+      pressedKeys: this.rig.pressedKeys,
+      onLanternSelect: this.onLanternSelect,
+      onInteriorPoemSelect: this.onInteriorPoemSelect,
+      onSeatSelect: this.onSeatSelect,
+      onRelicSelect: this.onRelicSelect,
+      focusTeaLantern: (id) => this.focusTeaLantern(id),
+      focusInteriorPoem: (id) => this.focusInteriorPoem(id),
+      setActiveSeat: (id) => this.setActiveSeat(id),
+      selectRelic: () => this.selectRelic(),
+      resetCamera: () => this.resetCamera(),
+      activateGuestRoutine: () => this.activateGuestRoutine(),
+      role: this.rig.role,
+      transitioning: this.rig.transitioning,
+      setTransitioning: (v) => { this.rig.transitioning = v; },
+    };
+  }
   private onLanternSelect?: (chapterIndex: number) => void;
   private onInteriorPoemSelect?: (seasonId: string) => void;
   private clock = new THREE.Clock();
@@ -686,114 +717,15 @@ export class AltarScene {
     buildSurroundingAtmosphere(this.scene);
   }
 
-  private onWindowResize = () => {
-    if (!this.container) return;
-    const width = this.container.clientWidth;
-    const height = this.container.clientHeight;
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
-    this.renderer?.setSize(width, height);
-  };
+  private onWindowResize = () => evWindowResize(this.eventContext);
 
-  private onPointerDown = (event: MouseEvent) => {
-    // 访客不是自动播放的被动摄像机：每次鼠标/触摸才唤起一条固定路线。
-    if (this.rig.role === 'guest') {
-      this.activateGuestRoutine();
-      return;
-    }
-    const caps = this.rig.caps;
-    if (!caps.freeCamera) return;
+  private onPointerDown = (event: MouseEvent) => evPointerDown(this.eventContext, event);
 
-    // 用户一按鼠标，立刻放弃自动机位过渡，别跟人抢镜头
-    this.rig.transitioning = false;
+  private onKeyDown = (event: KeyboardEvent) => evKeyDown(this.eventContext, event);
 
-    const rect = this.container.getBoundingClientRect();
-    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  private onKeyUp = (event: KeyboardEvent) => evKeyUp(this.eventContext, event);
 
-    this.raycaster.setFromCamera(this.mouse, this.camera);
-    
-    // 1. Check Outer Tea Lanterns
-    if (caps.pickLanterns) {
-      const lanterns = Array.from(this.lanternPanels.values());
-      const lanternHits = this.raycaster.intersectObjects(lanterns);
-      if (lanternHits.length > 0) {
-        const hit = lanternHits[0].object;
-        const chIdx = hit.userData?.chapterIndex;
-        if (chIdx) {
-          this.focusTeaLantern(chIdx);
-          if (this.onLanternSelect) {
-            this.onLanternSelect(chIdx);
-          }
-          return;
-        }
-      }
-    }
-
-    // 2. Check Interior Stelae
-    if (caps.pickStelae) {
-      const stelae = Array.from(this.interiorStelae.values());
-      const stelaHits = this.raycaster.intersectObjects(stelae);
-      if (stelaHits.length > 0) {
-        const hit = stelaHits[0].object;
-        const sId = hit.userData?.seasonId;
-        if (sId) {
-          this.focusInteriorPoem(sId);
-          if (this.onInteriorPoemSelect) {
-            this.onInteriorPoemSelect(sId);
-          }
-          return;
-        }
-      }
-    }
-
-    // 3. Check Seat Pads（只读：只聚焦与回调，不写座次表）
-    if (caps.pickSeats) {
-      const pads = Array.from(this.seatPads.values());
-      const seatHits = this.raycaster.intersectObjects(pads);
-      if (seatHits.length > 0) {
-        const hit = seatHits[0].object;
-        const seatId = hit.userData?.seatId;
-        if (seatId && this.onSeatSelect) {
-          this.onSeatSelect(seatId);
-          this.setActiveSeat(seatId);
-          return;
-        }
-      }
-    }
-
-    // 4. 玉玺拾取（器物不是席位：不进 49 席、不发音、不入座次表）
-    //    ⚠️ 命中后**只做选中**（高亮 + 推近），**不改形态**。
-    //      形态变更一律走 UI（SealPanel）—— 圣物形态不能被一次误触改掉。
-    if (caps.sealStamp || caps.sealExploded) {
-      if (this.relic) {
-        const relicHits = this.raycaster.intersectObjects(this.relic.pickables(), true);
-        if (relicHits.length > 0) {
-          this.selectRelic();
-          this.onRelicSelect?.('imperial_seal');
-        }
-      }
-    }
-  };
-
-  private onKeyDown = (event: KeyboardEvent) => {
-    if (!this.rig.caps.freeCamera) return;
-    const key = event.key.toLowerCase();
-    if (key === 'r') {
-      this.resetCamera();
-      event.preventDefault();
-      return;
-    }
-    if (!['w', 'a', 's', 'd', 'q', 'e', 'shift'].includes(key)) return;
-    this.rig.pressedKeys.add(key);
-    event.preventDefault();
-  };
-
-  private onKeyUp = (event: KeyboardEvent) => {
-    this.rig.pressedKeys.delete(event.key.toLowerCase());
-  };
-
-  private onWindowBlur = () => this.rig.pressedKeys.clear();
+  private onWindowBlur = () => evWindowBlur(this.eventContext);
 
   public setActiveSeat(seatId: number) {
     this.activeSeatId = seatId;
