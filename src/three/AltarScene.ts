@@ -64,6 +64,7 @@ import { buildBrickColumns } from './CubePyramidBuilder';
 import { buildSeats } from './SeatsBuilder';
 import { buildPrimeDiagonalLines } from './PrimeDiagonalBuilder';
 import { buildWujiFountain } from './WujiFountainBuilder';
+import { createInteriorStelaSprite, createTeaLanternSprite } from './SpriteTextureFactory';
 import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
@@ -742,56 +743,13 @@ export class AltarScene {
       frame.position.z = -0.03;
       stelaGroup.add(frame);
 
-      const sprite = this.createInteriorStelaSprite(poem);
+      const sprite = createInteriorStelaSprite(poem);
       sprite.position.set(0, 0, 0.07);
       sprite.scale.set(stelaW, stelaH, 1);
       stelaGroup.add(sprite);
 
       this.hollowInteriorGroup.add(stelaGroup);
     });
-  }
-
-  private createInteriorStelaSprite(poem: typeof SEASON1_POEMS[0]): THREE.Sprite {
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 384;
-    const ctx = canvas.getContext('2d')!;
-
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
-    ctx.roundRect(8, 8, 240, 368, 12);
-    ctx.fill();
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    ctx.fillStyle = '#f59e0b';
-    ctx.font = 'bold 28px "Noto Serif SC", serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${poem.seasonId} ${poem.seasonName}`, 128, 50);
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '16px "Noto Serif SC", serif';
-    ctx.fillText(poem.opening.title, 128, 80);
-
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '14px "Noto Serif SC", serif';
-    ctx.textAlign = 'left';
-    poem.opening.text.slice(0, 5).forEach((line, i) => {
-      const shortLine = line.length > 14 ? line.substring(0, 13) + '…' : line;
-      ctx.fillText(shortLine, 22, 125 + i * 26);
-    });
-
-    ctx.fillStyle = '#38bdf8';
-    ctx.font = 'italic 13px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('【点击展开全卷】', 128, 350);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-    const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
-    const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(1.7, 2.5, 1);
-    return sprite;
   }
 
   /** 后置展示层：结构验收通过后才由显式调用启用。 */
@@ -840,60 +798,12 @@ export class AltarScene {
       botRod.position.y = -lanternHeight / 2;
       panelGroup.add(botRod);
 
-      const sprite = this.createTeaLanternSprite(ch);
+      const sprite = createTeaLanternSprite(ch);
       sprite.position.set(0, 0, 0.05);
       panelGroup.add(sprite);
 
       this.lanternsGroup.add(panelGroup);
     });
-  }
-
-  private createTeaLanternSprite(ch: typeof TEA_POEM_16_CHAPTERS[0]): THREE.Sprite {
-    const canvas = document.createElement('canvas');
-    canvas.width = 640;
-    canvas.height = 853;
-    const ctx = canvas.getContext('2d')!;
-
-    ctx.fillStyle = 'rgba(10, 15, 29, 0.94)';
-    ctx.roundRect(17, 17, 606, 819, 27);
-    ctx.fill();
-    ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 7;
-    ctx.stroke();
-
-    ctx.fillStyle = '#f59e0b';
-    ctx.font = 'bold 50px "Noto Serif SC", serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`第 ${ch.chapterIndex} 面 · ${ch.title.split(' · ')[1]}`, 320, 100);
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '27px "Noto Serif SC", serif';
-    ctx.fillText(ch.historicalTheme, 320, 158);
-
-    // 双列是版式，不把“左栏/右栏/起承/转合”等编辑标签烧进门帘纹理。
-    // CanvasTexture 不受 CSS 影响，因此 3D 扇面在这里直接按两列排版；
-    // HTML 阅读层另由 CSS grid 控制同一份左右数据。
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = '27px "Noto Serif SC", serif';
-    ctx.textAlign = 'left';
-    ch.leftColumn.slice(0, 4).forEach((line, i) => {
-      ctx.fillText(line, 40, 242 + i * 53);
-    });
-    ch.rightColumn.slice(0, 4).forEach((line, i) => {
-      ctx.fillText(line, 337, 242 + i * 53);
-    });
-
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = 'italic 27px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('【点击展开 16 句全赋】', 320, 783);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-    const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
-    const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(3.6, 4.4, 1);
-    return sprite;
   }
 
   private buildWujiFountain() {
