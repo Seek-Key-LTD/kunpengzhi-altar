@@ -20,9 +20,7 @@ import {
   isTimelineDrivenPhase
 } from '../types/altar';
 import {
-  DRAGON_SEAT_COUNT,
   TEA_LANTERN_REV_SEC,
-  soundDragonNode,
   teaLanternRotationEnabled,
   fogCaptionAt
 } from '../data/dualDragon';
@@ -43,6 +41,7 @@ import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import { buildLightRig } from './LightRig';
 import { buildInnerStelaeRing, buildOuter16TeaLanterns } from './StelaeLanternBuilder';
+import { buildWaterWaterway, buildSoundWaterway } from './WaterwayBuilder';
 import { ceremonyVisibility } from '../data/ceremonyVisibility';
 import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
@@ -658,86 +657,11 @@ export class AltarScene {
     if (this.dragon.waterPath.length !== this.events.length) {
       throw new Error('水龙未绑定 49 枚蝎子楔');
     }
-    const curve = new THREE.CurvePath<THREE.Vector3>();
-    for (let index = 0; index < this.dragon.waterPath.length - 1; index++) {
-      curve.add(new THREE.LineCurve3(this.dragon.waterPath[index], this.dragon.waterPath[index + 1]));
-    }
-    const points = curve.getSpacedPoints(360);
+    const { waterLine, waterParticles } = buildWaterWaterway(this.dragon.waterPath, this.waterworksGroup);
 
-    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
-    const lineMat = new THREE.LineBasicMaterial({
-      color: 0x38bdf8,
-      linewidth: 3,
-      transparent: true,
-      opacity: 0.85
-    });
-    const waterLine = new THREE.Line(lineGeo, lineMat);
-    waterLine.geometry.setDrawRange(0, 0);
-    this.waterworksGroup.add(waterLine);
-
-    const particleCount = 280;
-    const particleGeo = new THREE.BufferGeometry();
-    const positions = new Float32Array(particleCount * 3);
-    const colors = new Float32Array(particleCount * 3);
-
-    for (let i = 0; i < particleCount; i++) {
-      const p = points[Math.floor(Math.random() * points.length)];
-      positions[i * 3] = p.x;
-      positions[i * 3 + 1] = p.y + 0.08;
-      positions[i * 3 + 2] = p.z;
-      colors[i * 3] = 0.35;
-      colors[i * 3 + 1] = 0.95;
-      colors[i * 3 + 2] = 1.0;
-    }
-
-    particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    const particleMat = new THREE.PointsMaterial({
-      size: 0.52,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.9,
-      blending: THREE.AdditiveBlending
-    });
-
-    const waterParticles = new THREE.Points(particleGeo, particleMat);
-    this.waterworksGroup.add(waterParticles);
-
-    // 阴龙不复制水路。它绕过 #00，由外缘大半径起步、按半音**向内收**，
-    // 高度随内收**向上抬升** —— 与水龙“向外向下”互为反向（#2 要求 2/4）。
-    // 节点取自唯一权威 `soundDragonNode`，第 n 点对应 C2.transpose(n)。
-    const soundPoints: THREE.Vector3[] = [];
-    for (let i = 0; i < DRAGON_SEAT_COUNT; i++) {
-      const node = soundDragonNode(i + 1);
-      soundPoints.push(new THREE.Vector3(node.x, node.y, node.z));
-    }
+    // 阴龙不复制水路。它绕过 #00，由外缘大半径起步、按半音**向内收**。
+    const { soundPoints, soundLine, soundParticles } = buildSoundWaterway(this.scene);
     this.dragon.setSoundPath(soundPoints);
-    const soundGeo = new THREE.BufferGeometry().setFromPoints(soundPoints);
-    const soundMat = new THREE.LineBasicMaterial({
-      color: 0xc4b5fd,
-      transparent: true,
-      opacity: 0.72,
-      blending: THREE.AdditiveBlending
-    });
-    const soundLine = new THREE.Line(soundGeo, soundMat);
-    soundLine.geometry.setDrawRange(0, 0);
-    soundLine.visible = false;
-    this.scene.add(soundLine);
-
-    const soundParticleGeo = new THREE.BufferGeometry();
-    const soundParticlePositions = new Float32Array(96 * 3);
-    soundParticleGeo.setAttribute('position', new THREE.BufferAttribute(soundParticlePositions, 3));
-    const soundParticleMat = new THREE.PointsMaterial({
-      color: 0xe9d5ff,
-      size: 0.32,
-      transparent: true,
-      opacity: 0.72,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-    const soundParticles = new THREE.Points(soundParticleGeo, soundParticleMat);
-    soundParticles.visible = false;
-    this.scene.add(soundParticles);
     this.dragon.registerParticles(waterParticles, waterLine, soundLine, soundParticles);
   }
 
