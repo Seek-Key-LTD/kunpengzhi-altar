@@ -44,7 +44,15 @@ const SUITES = [
   ['QA 独立门禁（#4）', 'scripts/qa-verify-audio-envelope.mjs'],
   // #6 荣誉层：数据契约 + #00 三态（44 断言） + 公共入口不可达（15 断言）
   ['荣誉层聚合·#00 三态（#6 T1–T6）', 'scripts/verify-honor-aggregation.mjs'],
-  ['荣誉层隔离·import-graph（#6 T9）', 'scripts/verify-honor-isolation.mjs']
+  ['荣誉层隔离·import-graph（#6 T9）', 'scripts/verify-honor-isolation.mjs'],
+  // 阴司重工央企矩阵 · 数据契约
+  ['阴司重工央企矩阵·数据契约', 'scripts/verify-hell-corp-matrix.mjs'],
+  // 传国玉玺 · 规格常量
+  ['传国玉玺·规格常量', 'scripts/verify-seal-spec.mjs'],
+  // 华夏祭坛 · 几何常量
+  ['华夏祭坛·几何常量', 'scripts/verify-altar-geometry.mjs'],
+  // 螺旋事件 · 49 席数据契约
+  ['螺旋事件·49席数据契约', 'scripts/verify-spiral-events.mjs']
 ];
 
 for (const [name, rel] of SUITES) {
