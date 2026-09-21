@@ -1,21 +1,33 @@
+/**
+ * 砖层数 · 纯函数验收
+ * 运行：node scripts/verify-brick-levels.mjs
+ */
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const tmp = mkdtempSync(resolve(tmpdir(), 'brick-'));
-execFileSync(resolve(ROOT, 'node_modules/.bin/esbuild'), [
-  resolve(ROOT, 'src/data/brickLevels.ts'),
-  '--bundle', '--platform=node', '--format=esm', '--log-level=warning',
-  `--outfile=${resolve(tmp, 'brick.mjs')}`
-], { stdio: ['ignore', 'ignore', 'inherit'] });
-const B = await import(pathToFileURL(resolve(tmp, 'brick.mjs')).href);
-rmSync(tmp, { recursive: true, force: true });
+let checks = 0;
+const ok = (c, m) => { assert.ok(c, `✗ ${m}`); checks++; };
+const eq = (a, b, m) => { assert.equal(a, b, `✗ ${m}`); checks++; };
 
-assert.equal(B.brickLevels(0, 1), 1, '至少 1 层');
-assert.equal(B.brickLevels(1.4, 1), 1, '1.4 层砖');
-assert.equal(B.brickLevels(1.6, 1), 2, '1.6 层砖');
-console.log(`brick-levels: 砖层数计算正确`);
+const esbuildBin = resolve(ROOT, 'node_modules/.bin/esbuild');
+ok(existsSync(esbuildBin), '缺少 esbuild');
+
+const tmp = mkdtempSync(resolve(tmpdir(), 'brick-'));
+try {
+  execFileSync(esbuildBin, [resolve(ROOT, 'src/data/brickLevels.ts'), '--bundle', '--format=esm', `--outfile=${resolve(tmp, 'brick.mjs')}`], { stdio: 'pipe' });
+  const T = await import(`${tmp}/brick.mjs`);
+  eq(T.brickLevels(0, 3), 1, 'elevation=0 → 至少 1 层');
+  eq(T.brickLevels(3, 3), 1, 'elevation=3 → 1 层');
+  eq(T.brickLevels(6, 3), 2, 'elevation=6 → 2 层');
+  eq(T.brickLevels(10.5, 3), 4, 'elevation=10.5 → 4 层');
+  eq(T.brickLevels(21, 3), 7, 'elevation=21 → 7 层');
+  eq(T.brickLevels(-5, 3), 1, 'elevation=-5 → 至少 1 层');
+} finally {
+  rmSync(tmp, { recursive: true, force: true });
+}
+console.log(`✓ brickLevels · ${checks} 断言通过`);

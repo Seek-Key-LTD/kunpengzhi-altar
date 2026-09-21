@@ -52,7 +52,19 @@ const SUITES = [
   // 华夏祭坛 · 几何常量
   ['华夏祭坛·几何常量', 'scripts/verify-altar-geometry.mjs'],
   // 螺旋事件 · 49 席数据契约
-  ['螺旋事件·49席数据契约', 'scripts/verify-spiral-events.mjs']
+  ['螺旋事件·49席数据契约', 'scripts/verify-spiral-events.mjs'],
+  // 砖层数 · 纯函数
+  ['砖层数·纯函数', 'scripts/verify-brick-levels.mjs'],
+  // Ulam 素数对角线 · 纯函数
+  ['Ulam素数对角线·纯函数', 'scripts/verify-prime-diagonal.mjs'],
+  // 第一季十二期 · 诗词数据契约
+  ['第一季十二期·诗词数据契约', 'scripts/verify-season1-poems.mjs'],
+  // 席位世界坐标 · 纯函数
+  ['席位世界坐标·纯函数', 'scripts/verify-seat-world-pos.mjs'],
+  // 内环壁碑 · 纯函数
+  ['内环壁碑·纯函数', 'scripts/verify-stela-ring.mjs'],
+  // 茶史五绝赋 · 十六章数据契约
+  ['茶史五绝赋·十六章数据契约', 'scripts/verify-tea-poem-16.mjs']
 ];
 
 for (const [name, rel] of SUITES) {
