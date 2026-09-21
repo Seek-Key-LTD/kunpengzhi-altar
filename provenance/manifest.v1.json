@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "v1",
+  "generatedAt": "2026-09-21T00:00:00+08:00",
+  "repo": "seekkey/kunpengzhi-altar",
+  "canonicalCommit": "unrecorded",
+  "assets": [
+    {
+      "name": "imperial_seal.glb",
+      "type": "3d-model",
+      "path": "public/models/imperial_seal.glb",
+      "sha256": "34ad46b6e79bce41184ace1be2f0bd5cd49d066d2df6800c8d5bad04256f0934",
+      "bytes": 445604,
+      "firstCommit": "fc51c0f",
+      "structure": {
+        "triangles": 10205,
+        "faces": ["qin_bottom", "wei_a", "wei_b", "tang_c", "song_d"]
+      }
+    }
+  ],
+  "buildEnv": {
+    "os": "unrecorded",
+    "node": "unrecorded",
+    "blender": "unrecorded",
+    "openscad": "unrecorded",
+    "fonts": "unrecorded"
+  }
+}
