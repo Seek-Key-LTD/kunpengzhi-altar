@@ -43,6 +43,7 @@ import { buildInnerStelaeRing, buildOuter16TeaLanterns } from './StelaeLanternBu
 import { buildWaterWaterway, buildSoundWaterway } from './WaterwayBuilder';
 import { onWindowResize as evWindowResize, onPointerDown as evPointerDown, onKeyDown as evKeyDown, onKeyUp as evKeyUp, onWindowBlur as evWindowBlur } from './EventHandlers';
 import { RelicController } from './RelicController';
+import { DemoController } from './DemoController';
 import { ceremonyVisibility } from '../data/ceremonyVisibility';
 import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
@@ -52,7 +53,6 @@ import { buildStarships } from './StarshipBuilder';
 import { buildPlinth } from './PlinthBuilder';
 import { buildSeatTrails } from './SeatTrailsBuilder';
 import { buildRiverAxis } from './RiverAxisBuilder';
-import { buildFrontBead } from './FrontBeadBuilder';
 import { buildScorpionWaterway } from './ScorpionWaterwayBuilder';
 import { buildRabbitHole } from './RabbitHoleBuilder';
 import { buildWaterLift } from './WaterLiftBuilder';
@@ -198,6 +198,7 @@ export class AltarScene {
   private relic: ImperialSealObject | null = null;
   private relicDecal: SealStampDecal | null = null;
   private relicController: RelicController | null = null;
+  private demoController: DemoController | null = null;
   private onRelicSelect?: (relicId: string) => void;
 
 
@@ -797,11 +798,6 @@ export class AltarScene {
    */
   // ── 公共入口 · 自运维演示循环 ──────────────────────────────────────
 
-  /** 双龙前锋珠：水龙珠（外行下潜）+ 音龙珠（内收上升），让点名肉眼可见。 */
-  private buildFrontBead(color: number, radius: number, emissive: number, lightIntensity: number): THREE.Group {
-    return buildFrontBead(color, radius, emissive, lightIntensity);
-  }
-
   /**
    * 公共入口：启动自运维演示循环。
    *
@@ -811,28 +807,28 @@ export class AltarScene {
    * demoLitSeats 驱动（与 ritualLitSeatsAt 同语义，不预演未来席）。
    */
   public startDemo(): void {
-    if (this.demo.isActive) return;
-    this.demo.start();
+    if (!this.demoController) {
+      this.demoController = new DemoController({
+        demo: this.demo,
+        seatTrails: this.seatTrails,
+        seatTrailsGroup: this.seatTrailsGroup,
+        lotus: this.lotus,
+        dragon: this.dragon,
+        events: this.events,
+        waterworksGroup: this.waterworksGroup,
+        scene: this.scene,
+        wujiLight: this.wujiLight,
+        wujiAbsorber: this.wujiAbsorber
+      });
+    }
     this.isAutoPatrol = false;
-
-    const waterBead = this.buildFrontBead(0x38bdf8, 0.72, 0x0b7ab8, 3.2);
-    this.waterworksGroup.add(waterBead);
-    const soundBead = this.buildFrontBead(0xc4b5fd, 0.55, 0x7c5cbf, 2.6);
-    this.scene.add(soundBead);
-    this.dragon.setFrontBeads(waterBead, soundBead);
-    // #00 无极点：演示循环中给一束常驻冷顶光（吸光体做视觉锚点，仍不可占有）。
-    if (this.wujiLight) this.wujiLight.intensity = 0.9;
-    if (this.wujiAbsorber) this.wujiAbsorber.visible = true;
-
-    this.applyDemoVisuals();
+    this.demoController.start();
     this.kickAudio();
   }
 
   /** 停掉演示循环（导演/工程入口不需要时）。 */
   public stopDemo(): void {
-    if (!this.demo.isActive) return;
-    this.demo.stop();
-    if (this.wujiLight) this.wujiLight.intensity = 0;
+    this.demoController?.stop();
   }
 
   /**
@@ -840,25 +836,7 @@ export class AltarScene {
    * 未获用户手势时 altarAudio 静默跳过，由 kickAudio 的首次点击兜底。
    */
   private updateDemo(dt: number): void {
-    if (!this.demo.isActive) return;
-    this.demo.update(dt, (seatId) => {
-      const ev = this.events.find((e) => e.seat_id === seatId);
-      if (ev) altarAudio.triggerSeatEvent(ev);
-    });
-    this.applyDemoVisuals();
-  }
-
-  /** 把 demoLitSeats 落到全部演示驱动的视觉上（每帧幂等）。 */
-  private applyDemoVisuals(): void {
-    const lit = this.demo.lit;
-
-    // 逐席光迹与繁花：点名中递增、逆熄中递减。
-    if (this.seatTrailsGroup) this.seatTrailsGroup.visible = lit > 0;
-    this.seatTrails.forEach((trail, idx) => { trail.visible = idx + 1 <= lit; });
-    this.lotus.setDemo(lit);
-
-    // 双龙线/粒子/前锋珠：沿路径随 lit 追席（见 DualDragonRig.setDemo）。
-    this.dragon.setDemo(lit);
+    this.demoController?.update(dt);
   }
 
   public presentImmediately() {
