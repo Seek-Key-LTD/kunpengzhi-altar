@@ -55,11 +55,8 @@ export const App: React.FC = () => {
     // 真正 OIDC 接入后由身份层覆写此角色；祭坛本体仍只消费 role，不自行验权。
     altar.setRole('authenticated');
 
-    // 直入版全坛呈现（一帧即亮，不做开场黑场），随后启动自运维演示循环：
-    // 点名（1→49 逐席点亮发声）→ 定格 → 逆熄 → 留白 → 重生。
-    // 30 分钟五幕正典仍由导演入口 startRitual() 提供（#5 隔离），公共页不锁相机。
-    altar.presentImmediately();
-    altar.startDemo();
+    // 公共页启动 1800s 五幕正典时间轴（#16 修复：时钟自走，手势只影响音频增益）
+    altar.startRitual();
 
     // #7 T5：**只换画面层**。时间轴 / 雾中字幕 / 音频由 AltarScene 的**同一个**
     // animate 循环继续推进 —— 这里不新建第二套时间轴，也不新建计时器（#4 不变量）。
