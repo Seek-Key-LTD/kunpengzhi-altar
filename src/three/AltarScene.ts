@@ -37,12 +37,12 @@ import { StarshipRig } from './StarshipRig';
 import { SeatLotusRig } from './SeatLotusRig';
 import { MechanicsRig } from './MechanicsRig';
 import { SealStampDecal } from './relic/SealStampDecal';
-import { SealCameraRig } from './relic/SealCameraRig';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import { buildLightRig } from './LightRig';
 import { buildInnerStelaeRing, buildOuter16TeaLanterns } from './StelaeLanternBuilder';
 import { buildWaterWaterway, buildSoundWaterway } from './WaterwayBuilder';
 import { onWindowResize as evWindowResize, onPointerDown as evPointerDown, onKeyDown as evKeyDown, onKeyUp as evKeyUp, onWindowBlur as evWindowBlur } from './EventHandlers';
+import { RelicController } from './RelicController';
 import { ceremonyVisibility } from '../data/ceremonyVisibility';
 import { lanternCameraPose } from '../data/lanternCamera';
 import { CAMERA_MODE_POSES } from '../data/cameraModes';
@@ -61,7 +61,7 @@ import { buildSeats } from './SeatsBuilder';
 import { buildPrimeDiagonalLines } from './PrimeDiagonalBuilder';
 import { buildWujiFountain } from './WujiFountainBuilder';
 import { broadcastStateAt } from '../data/broadcastSchedule';
-import { SEAL_HOVER_Y, SEAL_STAMP } from '../data/sealSpec';
+import { SEAL_HOVER_Y } from '../data/sealSpec';
 import { altarAudio } from '../audio/altarAudio';
 import { phaseProgress } from '../audio/phaseEnvelope';
 import { RitualNarration, type NarrationChapter } from '../audio/ritualNarration';
@@ -197,7 +197,7 @@ export class AltarScene {
   // 玉玺子系统（器物：不占格、不发音、不入座次表）
   private relic: ImperialSealObject | null = null;
   private relicDecal: SealStampDecal | null = null;
-  private relicRig: SealCameraRig | null = null;
+  private relicController: RelicController | null = null;
   private onRelicSelect?: (relicId: string) => void;
 
 
@@ -1213,7 +1213,7 @@ export class AltarScene {
     } else if (mode === 'relic') {
       // 玉玺机位：数值的唯一真源在玉玺 rig（sealSpec.SEAL_CAMERA_POSES），
       // 这里不复制一份常量，避免两边漂移。rig 未挂载时退回直算。
-      const pose = this.relicRig?.getPose('overview');
+      const pose = this.relicController?.getCameraPose();
       if (pose) {
         this.rig.targetPos.copy(pose.position);
         this.rig.targetLookAt.copy(pose.target);
@@ -1386,11 +1386,7 @@ export class AltarScene {
     }
 
     // 10. 玉玺：自转 + 呼吸 + 形态状态机（器物，不占席、不发音、不入座次表）
-    if (this.relic) {
-      this.relic.update(dt, elapsedTime);
-      this.relicDecal?.update(dt);
-      this.relicRig?.update(dt);
-    }
+    this.relicController?.update(dt, elapsedTime);
 
     // #5：取证正交相机存在时以它渲一帧（俯视 7×7），否则走主循环透视相机。
     // #7：无画模式 / 上下文已丢失 ⇒ **不画**。只跳过这一次 draw call，
@@ -1408,52 +1404,32 @@ export class AltarScene {
    * 缓慢自转 + 呼吸浮动 + 自带柔光。交互留给导演/认证路由去开。
    */
   public mountRelic(): void {
-    if (this.relic) return;
-
-    const decal = new SealStampDecal();
-    this.scene.add(decal.object3D);
-    this.relicDecal = decal;
-
-    const seal: ImperialSealObject = new ImperialSealObject({
-      // 拓印触地：朱砂印痕落在坛体西侧台基（PYRAMID_HALF 之外，不被中空方锥遮挡）
-      onStamp: () =>
-        decal.stamp(
-          new THREE.Vector3(SEAL_STAMP.home.x, SEAL_STAMP.home.y, SEAL_STAMP.home.z),
-          seal.getEra()
-        )
-    });
-    seal.object3D.position.set(0, SEAL_HOVER_Y, 0);
-    this.scene.add(seal.object3D);
-    this.relic = seal;
-
-    // 用真实资产接管程序化占位几何（public/models/imperial_seal.glb）。
-    // 文件缺失/解析失败一律安全退回占位，不会把玉玺弄丢，也不会中断场景。
-    void seal.loadSealFromGLB().then((ok) => {
-      if (ok) {
-        console.info('[玉玺] 高精 GLB 已接管，三角面 =', seal.countTriangles());
-      }
-    });
-
-    this.relicRig = new SealCameraRig({
-      camera: this.camera,
-      controlsTarget: this.controls.target
-    });
+    if (!this.relicController) {
+      this.relicController = new RelicController({
+        scene: this.scene,
+        camera: this.camera,
+        controlsTarget: this.controls.target
+      });
+      this.relicController.onRelicSelect = (id) => this.onRelicSelect?.(id);
+    }
+    this.relicController.mount();
+    this.relic = this.relicController.relic;
+    this.relicDecal = this.relicController.relicDecal;
   }
 
   /** 玉玺形态：normal（合） / exploded（拆解） / stamping（拓印） */
   public setSealMode(mode: SealMode): void {
-    this.relic?.setMode(mode);
-    this.relicRig?.focusMode(mode);
+    this.relicController?.setMode(mode);
   }
 
   /** 断代层过滤：秦 → 汉新 → 魏晋十六国 → 辽金 */
   public setSealEra(era: SealEra): void {
-    this.relic?.setEra(era);
+    this.relicController?.setEra(era);
   }
 
   /** 推近到悬浮玺台（导演/认证路由或点选玉玺时用） */
   public focusRelic(): void {
-    this.relicRig?.focus('overview');
+    this.relicController?.focus();
   }
 
   /**
@@ -1462,42 +1438,35 @@ export class AltarScene {
    * 圣物形态不能被一次误触改掉，这是硬规矩。
    */
   public selectRelic(): void {
-    this.relic?.handlePick(); // 器物侧只置选中态，不改形态
-    this.focusRelic();
+    this.relicController?.handlePick();
   }
 
   public clearRelicSelection(): void {
-    this.relic?.setSelected(false);
+    this.relicController?.setSelected(false);
   }
 
   /** 导演手动拖拆解进度（0 合 → 1 全拆），会覆盖形态自动过渡 */
   public setSealExploded(progress: number): void {
-    this.relic?.setExplodedProgress(progress);
+    this.relicController?.setExplodedProgress(progress);
   }
 
   /** 拾取回调登记（骨架：不改动 role/guest 判定） */
   public setOnRelicSelect(callback?: (relicId: string) => void): void {
     this.onRelicSelect = callback;
+    if (this.relicController) {
+      this.relicController.onRelicSelect = (id) => this.onRelicSelect?.(id);
+    }
   }
 
   /** 玉玺运行时状态（无席位语义，可安全上报） */
   public getRelicState(): ImperialSealState | null {
-    return this.relic?.getState() ?? null;
+    return this.relicController?.getState() ?? null;
   }
 
   private disposeRelic(): void {
-    if (this.relic) {
-      this.scene.remove(this.relic.object3D);
-      this.relic.dispose();
-      this.relic = null;
-    }
-    if (this.relicDecal) {
-      this.scene.remove(this.relicDecal.object3D);
-      this.relicDecal.dispose();
-      this.relicDecal = null;
-    }
-    this.relicRig?.dispose();
-    this.relicRig = null;
+    this.relicController?.dispose();
+    this.relic = null;
+    this.relicDecal = null;
     this.onRelicSelect = undefined;
   }
 
