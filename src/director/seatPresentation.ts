@@ -66,7 +66,10 @@ export function seatPresentation(event: SpiralEvent): SeatPresentation {
       : isPrime
         ? `质数在混沌里自排斜线，文明在乱世里走出秩序。此为第${seatId}席质数锚点。`
         : `寄语于第${seatId}席，顺水流而巡礼，承连续螺旋之梯度，与天地同波。`;
-  const starshipName = isReserved ? reservedInfo.starship : `巡天舟·0${seatId}号`;
+  // 席号两位补零：09..49。修复前 `0${seatId}` 在 10..49 段产出「巡天舟·010号」这类三位脏号。
+  const starshipName = isReserved
+    ? reservedInfo.starship
+    : `巡天舟·${String(seatId).padStart(2, '0')}号`;
 
   return {
     display_name: displayName,
