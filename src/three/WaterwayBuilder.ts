@@ -33,7 +33,7 @@ export function buildWaterWaterway(
   const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
   const lineMat = new THREE.LineBasicMaterial({
     color: 0x38bdf8,
-    linewidth: 3,
+    // 不设 linewidth：WebGL 下恒为 1px，改它只会误导读者
     transparent: true,
     opacity: 0.85,
   });
@@ -41,10 +41,9 @@ export function buildWaterWaterway(
   waterLine.geometry.setDrawRange(0, 0);
   waterworksGroup.add(waterLine);
 
-  // 槽位 = 49 席：DualDragonRig.animateParticles 每帧只定位/绘制
-  // min(lit, pathLen, count) ≤ 49 枚水珠（每已触发席一枚），多出来的槽位
-  // 永远进不了 drawRange，纯属死分配。
-  const particleCount = DRAGON_SEAT_COUNT;
+  // 按席位上限分配：DualDragonRig.animateParticles 只写/画前 min(lit, 49) 个槽，
+  // 原 280 槽有 ≥231 个永久闲置；留 8% 余量防后续实现越界。
+  const particleCount = Math.ceil(DRAGON_SEAT_COUNT * 1.08);
   const particleGeo = new THREE.BufferGeometry();
   const positions = new Float32Array(particleCount * 3);
   const colors = new Float32Array(particleCount * 3);
@@ -98,8 +97,8 @@ export function buildSoundWaterway(
   scene.add(soundLine);
 
   const soundParticleGeo = new THREE.BufferGeometry();
-  // 同上：音龙粒子每帧也只画 min(lit, 49) 枚，槽位按 49 席收敛。
-  const soundParticlePositions = new Float32Array(DRAGON_SEAT_COUNT * 3);
+  // 同水路：只消费 DRAGON_SEAT_COUNT 个槽（原 96 槽闲置 47 个），留 8% 余量防越界。
+  const soundParticlePositions = new Float32Array(Math.ceil(DRAGON_SEAT_COUNT * 1.08) * 3);
   soundParticleGeo.setAttribute('position', new THREE.BufferAttribute(soundParticlePositions, 3));
   const soundParticleMat = new THREE.PointsMaterial({
     color: 0xe9d5ff,

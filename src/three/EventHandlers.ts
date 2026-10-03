@@ -125,8 +125,9 @@ export function onPointerDown(ctx: EventContext, event: MouseEvent): void {
     if (ctx.relic) {
       const relicHits = ctx.raycaster.intersectObjects(ctx.relic.pickables(), true);
       if (relicHits.length > 0) {
+        // selectRelic → RelicController.handlePick 内部已触发 onRelicSelect；
+        // 这里再直呼一次会造成同一回调双发，只保留委托路径。
         ctx.selectRelic();
-        ctx.onRelicSelect?.('imperial_seal');
       }
     }
   }

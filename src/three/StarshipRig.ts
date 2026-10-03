@@ -23,6 +23,8 @@ export class StarshipRig {
   /** 每帧：上下浮动 + 绕 y 轴缓旋（绝对量写入，帧率无关）。 */
   update(elapsed: number): void {
     this.ships.forEach((ship, id) => {
+      // 隐藏的飞碟跳过写入：两处均为 elapsed 绝对值，恢复可见的下一帧即自动对齐
+      if (!ship.visible) return;
       const baseY = this.baseYs.get(id) ?? ship.position.y;
       ship.position.y = baseY + Math.sin(elapsed * 2 + id) * StarshipRig.FLOAT_AMPLITUDE;
       ship.rotation.y = elapsed * 0.2 + id;

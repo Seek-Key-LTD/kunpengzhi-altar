@@ -41,12 +41,6 @@ export class CameraRig {
   readonly pressedKeys = new Set<string>();
   readonly lastSafe = new THREE.Vector3(48, 40, 58);
 
-  // 自由飞行的复用向量：按住 WASD/QE 期间逐帧调用 updateFreeFlight，
-  // 早先每帧 new 三个 Vector3，纯 GC churn —— 复用同一组字段即可。
-  private readonly flightForward = new THREE.Vector3();
-  private readonly flightRight = new THREE.Vector3();
-  private readonly flightDelta = new THREE.Vector3();
-
   orthoTopdownCamera: THREE.OrthographicCamera | null = null;
 
   constructor(camera: THREE.PerspectiveCamera, controls: OrbitControls) {
@@ -139,6 +133,9 @@ export class CameraRig {
     const routine = GUEST_ROUTINES[this.guestIndex];
     this.guestIndex = (this.guestIndex + 1) % GUEST_ROUTINES.length;
     this.guestTimer = 0;
+    // 合并裁决：维持 main/luban 的「rabbit_hole 停用」行为（固定黄金机位语义）。
+    // mini 的激活改动（guestPlaying = routine === 'rabbit_hole'）属产品语义变更，
+    // 已在合并报告中标注待设计方确认，确认后再放开。
     this.guestPlaying = false;
     this.rabbitActive = false;
     this.setCameraMode(routine);
@@ -154,8 +151,11 @@ export class CameraRig {
       }
     }
     if (this.transitioning) {
-      // 固定时长过渡（≈1.2s @60fps），用 easeInOut 曲线，到了就停死
-      const k = 0.085;
+      // 固定时长过渡（≈1.2s），用 easeInOut 曲线，到了就停死。
+      // 为什么：固定 k=0.085 是帧率相关的（144Hz 下收敛快 ~2.4 倍），
+      // 改为指数衰减的帧率无关形式后，任意刷新率下过渡节奏一致。
+      // 速率取 5.1/s：60fps 下 k≈0.085，精确保留旧 60fps 基线观感。
+      const k = 1 - Math.exp(-5.1 * dt);
       this.camera.position.lerp(this.targetPos, k);
       this.controls.target.lerp(this.targetLookAt, k);
       // 距离阈值放大到 0.4：早停，不做无限指数衰减（消除"吸附感"）
@@ -179,15 +179,20 @@ export class CameraRig {
     this.controls.update();
   }
 
+  // 自由飞行每帧临时向量：预分配复用，避免每帧 new 3 个 Vector3 产生 GC 抖动
+  private readonly ffForward = new THREE.Vector3();
+  private readonly ffRight = new THREE.Vector3();
+  private readonly ffDelta = new THREE.Vector3();
+
   private updateFreeFlight(dt: number): void {
     if (!this.capabilities.freeCamera || this.pressedKeys.size === 0) return;
-    const forward = this.flightForward;
+    const forward = this.ffForward;
     this.camera.getWorldDirection(forward);
     forward.y = 0;
     if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
     forward.normalize();
-    const right = this.flightRight.crossVectors(forward, this.camera.up).normalize();
-    const delta = this.flightDelta.set(0, 0, 0);
+    const right = this.ffRight.crossVectors(forward, this.camera.up).normalize();
+    const delta = this.ffDelta.set(0, 0, 0);
     if (this.pressedKeys.has('w')) delta.add(forward);
     if (this.pressedKeys.has('s')) delta.sub(forward);
     if (this.pressedKeys.has('d')) delta.add(right);

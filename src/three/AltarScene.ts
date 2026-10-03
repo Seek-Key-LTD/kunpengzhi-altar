@@ -819,6 +819,8 @@ export class AltarScene {
       });
     }
     this.isAutoPatrol = false;
+    // 模式切换自愈边界：demo 期间可能改写仪式视觉，退出/进入后强制下帧重放。
+    this.lastWujiAppliedSig = null;
     this.demoController.start();
     this.kickAudio();
   }
@@ -826,6 +828,7 @@ export class AltarScene {
   /** 停掉演示循环（导演/工程入口不需要时）。 */
   public stopDemo(): void {
     this.demoController?.stop();
+    this.lastWujiAppliedSig = null;
   }
 
   /**
@@ -840,6 +843,8 @@ export class AltarScene {
     this.ritualMode = false;
     this.ritualLitSeats = 49;
     this.isAutoPatrol = false;
+    // 模式切换自愈边界：直显状态不经 setRitualState，复位签名避免旧档位残留。
+    this.lastWujiAppliedSig = null;
     this.scene.background = new THREE.Color(0x000000);
     this.scene.fog = new THREE.FogExp2(0x000000, 0.006);
 
@@ -947,6 +952,10 @@ export class AltarScene {
     // 的稳态席数落位：abyss=0、naming=当时已点席数、其后各幕=49。
     this.setRitualTime(startSec);
     this.setRitualState(this.ritualClock.phase, ritualLitSeatsAt(startSec), null);
+    // 门控自愈边界：上面的显式序列（setRitualTime 先落 #00 档、setRitualState 再按幕覆盖）
+    // 会让签名停在最后一次写入上；复位后强制下一帧按当前时间/幕次重放正确状态，
+    // 消除"直播窗中途开页被 litSeats=0 覆盖后永久卡死"的回归。
+    this.lastWujiAppliedSig = null;
     this.kickAudio();
   }
 
@@ -1156,17 +1165,19 @@ export class AltarScene {
    * （保留旧的公开方法签名，内部改由引擎驱动，避免两套转速逻辑打架。）
    */
   public setLanternRotationSpeed(speed: number) {
-    this.maglev.state.omega = speed;
+    // 引擎 override 语义：显式调速期间关闭驱动项并双向锁速；clearLanternSpeedOverride() 恢复驱动。
+    // 原实现直写 state.omega 会被引擎恒定驱动几秒内拉回 maxOmega，公开调速接口实际失效。
+    this.maglev.setOmegaOverride(speed);
   }
 
   public setSpeedMode(mode: 'pause' | 'ultra_slow' | 'slow') {
-    if (mode === 'pause') {
-      this.maglev.state.omega = 0.0;
-    } else if (mode === 'ultra_slow') {
-      this.maglev.state.omega = 0.0015;
-    } else if (mode === 'slow') {
-      this.maglev.state.omega = 0.005;
-    }
+    const targets = { pause: 0.0, ultra_slow: 0.0015, slow: 0.005 } as const;
+    this.maglev.setOmegaOverride(targets[mode]);
+  }
+
+  /** 解除显式调速，恢复引擎额定驱动（回 maxOmega）。 */
+  public clearLanternSpeedOverride() {
+    this.maglev.clearOmegaOverride();
   }
 
   /**

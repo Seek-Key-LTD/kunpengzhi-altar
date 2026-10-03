@@ -235,6 +235,8 @@ export class RitualTimelineController {
     // litSeats 按接续时刻的稳态席数落位（与 AltarScene.startRitual 同口径）：
     // 直播中段入场时恒置 0 会让 lanterns 等后段各幕停在空坛且无逐帧结算点可救。
     this.setRitualState(this.clock.phase, ritualLitSeatsAt(startSec), null);
+    // 门控自愈边界：复位签名，强制下一帧按当前时间/幕次重放（与 AltarScene.startRitual 同约定）。
+    this.lastWujiAppliedSig = null;
     this.onKickAudio();
   }
 
