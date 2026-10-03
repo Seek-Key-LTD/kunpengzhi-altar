@@ -1035,6 +1035,11 @@ export class AltarScene {
     // #4 五阶段音频包络：与幕次**同源**（ritualPhaseAt），逐帧落到三条声链
     // （水声 / 翻斗链条 / 低频空间混响）。silence 幕三层归零（1751→1800 恰 49s）。
     altarAudio.applyPhaseEnvelope(phase, phaseProgress(this.ritualClock.elapsed));
+
+    // 朗诵音量同源接续：RitualNarration 的契约是「仪式秒数由既有时间轴逐帧喂入，
+    // 音量 = envelopeAt(sec).water」。本类持有朗诵实例却从未喂秒 —— ritualSec
+    // 恒 0 ⟹ envelopeAt(0).water = 0 ⟹ 一旦 startLanternNarration 起播就是静音。
+    this.narration.setRitualTime(this.ritualClock.elapsed);
   }
 
   /**
