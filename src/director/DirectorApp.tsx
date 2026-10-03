@@ -159,8 +159,8 @@ export const DirectorApp: React.FC = () => {
   // 空数据时 activeEvent 为 null，下面的渲染守卫让席位面板整体让位，而不是解引用崩溃。
   // （合并裁决：mbp useMemo 壳收敛 10Hz 轮询重渲染 —— 讲解文案只随席位变，
   // 缓存住别在拓印/拆解读数驱动的每轮重渲染里重造对象。）
+  const seatCount = INITIAL_SPIRAL_EVENTS.length;
   const activeEvent = useMemo(() => {
-    const seatCount = INITIAL_SPIRAL_EVENTS.length;
     const baseEvent =
       seatCount > 0
         ? INITIAL_SPIRAL_EVENTS[Math.min(seatCount - 1, Math.max(0, activeSeatId - 1))]
