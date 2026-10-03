@@ -1,7 +1,14 @@
 /**
- * #7 WebGL 静默降级页
+ * #7 WebGL 无 React 降级页（遗留导出，运行时已由 tier 声幕接管）
  *
- * 无 WebGL 时呈现静默降级页，不显示报错或工程说明。
+ * ⚠️ 归属说明（防双实现漂移）：
+ *   - 运行时降级路径 = `src/three/webglCapability.ts` 三态探测 + `App.tsx` 兜底 +
+ *     `src/components/WebglFallback.tsx`（`tier='none'` 声幕层）。
+ *   - 本文件的 `renderSilentFallback()` 只服务无 React 的静态宿主场景；
+ *     其上屏文案**逐字复用** `WebglFallback.tsx` 的主理人裁定版
+ *     （docs/design/007-webgl-degradation.md §2.3：上屏文案工程不得自拟/增删/改写）。
+ *     历史上这里曾另写一套「静默。此身未具观象之器。」—— 与正典文案冲突，已收编对齐。
+ *   - 与声幕同款三条硬规矩：不得出现任何工程字样；静置层无按钮、不可点。
  */
 
 /** 检测是否支持 WebGL（纯函数） */
@@ -17,7 +24,10 @@ export function isWebGLAvailable(): boolean {
   }
 }
 
-/** 渲染静默降级页（纯函数，无副作用） */
+/**
+ * 渲染无 React 降级页（纯函数，无副作用）。
+ * 文案 = `WebglFallback.tsx` 声幕层逐字拷贝，两处必须同步修改。
+ */
 export function renderSilentFallback(): string {
   return `
     <!DOCTYPE html>
@@ -39,7 +49,7 @@ export function renderSilentFallback(): string {
           min-height: 100vh;
           text-align: center;
         }
-        .silence {
+        .ritual-veil-content {
           max-width: 400px;
           line-height: 2;
           font-size: 14px;
@@ -47,10 +57,10 @@ export function renderSilentFallback(): string {
       </style>
     </head>
     <body>
-      <div class="silence">
-        静默。<br>
-        此身未具观象之器。<br>
-        可待夜阑，换一器再来。
+      <div class="ritual-veil-content">
+        <p>坛不设形，声自往还。</p>
+        <p>此刻唯余字与音。</p>
+        <p>静听即可。</p>
       </div>
     </body>
     </html>
