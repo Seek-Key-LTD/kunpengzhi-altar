@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { TEA_POEM_16_CHAPTERS, TEA_POEM_PREFACE, TeaChapter } from '../data/tea_poem_16';
 import { X, ChevronLeft, ChevronRight, BookOpen, Sparkles, Feather } from 'lucide-react';
 
@@ -33,6 +33,19 @@ export const TeaLanternsModal: React.FC<TeaLanternsModalProps> = ({
 
   const [showPreface, setShowPreface] = useState(false);
 
+  // Esc 可关 + 打开时把焦点交给弹窗本体（键盘可达性）。
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    dialogRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // 防御：数据面为空或下标越界时回落第 1 面，而不是让 currentChapter 解引用崩溃。
@@ -42,7 +55,14 @@ export const TeaLanternsModal: React.FC<TeaLanternsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-lg animate-fade-in">
-      <div className="bg-slate-900 border border-amber-500/40 rounded-3xl w-full max-w-4xl shadow-2xl p-6 md:p-8 text-slate-200 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="外围十六面转经走马大茶灯 ·《茶史五绝赋》"
+        className="bg-slate-900 border border-amber-500/40 rounded-3xl w-full max-w-4xl shadow-2xl p-6 md:p-8 text-slate-200 relative max-h-[90vh] overflow-y-auto custom-scrollbar outline-none"
+      >
         {/* Close Button */}
         <button
           onClick={onClose}
