@@ -1454,6 +1454,14 @@ export class AltarScene {
     if (this.destroyed) return;
     this.destroyed = true;
 
+    // 朗诵播放器持有游离的 HTMLAudioElement（不在场景图内、不归 SceneDisposer 管）：
+    // 不拆的话销毁后音频会继续播、元素上的 ended/error/timeupdate 监听还会
+    // 继续把回调打进已销毁的场景（onChapterStart → focusTeaLantern → rig…）。
+    this.narration.dispose();
+    this.lanternChoreographyActive = false;
+    // 演示循环一并停表：状态机虽无计时器，停掉才是销毁语义的对称收口。
+    this.stopDemo();
+
     const disposer = new SceneDisposer({
       scene: this.scene,
       renderer: this.renderer,
