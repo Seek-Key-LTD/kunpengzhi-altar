@@ -26,7 +26,8 @@ import {
 } from '../data/dualDragon';
 import {
   CELL,
-  PYRAMID_HALF
+  PYRAMID_HALF,
+  PYRAMID_TOP
 } from '../data/altarGeometry';
 import { ImperialSealObject } from './relic/ImperialSealObject';
 import { CameraRig } from './CameraRig';
@@ -1319,9 +1320,13 @@ export class AltarScene {
     }
     if (this.fountainParticles) {
       const posAttr = this.fountainParticles.geometry.attributes.position as THREE.BufferAttribute;
+      // 回收带必须与 WujiFountainBuilder 的生成带同源：坛顶 [PYRAMID_TOP+0.5, PYRAMID_TOP+4.5]。
+      // 此前硬编码 [7.2, 11.2] 是七级方坛重建前的旧竖井几何残留——粒子会落进坛体中部变成无源悬雨。
+      const fountainFloorY = PYRAMID_TOP + 0.5;
+      const fountainRespawnY = PYRAMID_TOP + 4.5;
       for (let i = 0; i < posAttr.count; i++) {
         let y = posAttr.getY(i) - 0.03;
-        if (y < 7.2) y = 11.2;
+        if (y < fountainFloorY) y = fountainRespawnY;
         posAttr.setY(i, y);
       }
       posAttr.needsUpdate = true;
