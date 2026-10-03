@@ -165,13 +165,8 @@ export class AltarScene {
   private lastWujiAppliedSig: string | null = null;
 
   // ── 公共入口 · 1800s 五幕时间轴 ────────────────────────────────────
-  /** 仪式已运行秒数（仅在 ritualRunning 时随 dt 推进）。 */
-  /**
-   * 时间轴回放速率（#4）。公共入口恒 1.0（1800s 全程）；仅导演/工程入口
-   * 经 setPlaybackRate() 变更，用于加速回放。默认值即公共入口行为。
-   */
-  /** 时间轴是否在推进：startRitual() 置真，presentImmediately() 保持假。 */
-  /** naming 幕上一帧的 litSeats；-1 表示需要强制刷新。 */
+  // 时间轴状态（elapsed / rate / running / phase / namingLitSeats）整体收敛进
+  // RitualClock：本类只持有 ritualClock 与每帧推进量 ritualDeltaSec。
 
   // ── 公共入口 · 自运维演示循环状态 ──────────────────────────────────
   /** Web Audio 手势兜底是否已武装（避免重复绑定）。 */
