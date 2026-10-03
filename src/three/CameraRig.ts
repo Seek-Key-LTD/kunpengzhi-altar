@@ -41,6 +41,12 @@ export class CameraRig {
   readonly pressedKeys = new Set<string>();
   readonly lastSafe = new THREE.Vector3(48, 40, 58);
 
+  // 自由飞行的复用向量：按住 WASD/QE 期间逐帧调用 updateFreeFlight，
+  // 早先每帧 new 三个 Vector3，纯 GC churn —— 复用同一组字段即可。
+  private readonly flightForward = new THREE.Vector3();
+  private readonly flightRight = new THREE.Vector3();
+  private readonly flightDelta = new THREE.Vector3();
+
   orthoTopdownCamera: THREE.OrthographicCamera | null = null;
 
   constructor(camera: THREE.PerspectiveCamera, controls: OrbitControls) {
@@ -175,13 +181,13 @@ export class CameraRig {
 
   private updateFreeFlight(dt: number): void {
     if (!this.capabilities.freeCamera || this.pressedKeys.size === 0) return;
-    const forward = new THREE.Vector3();
+    const forward = this.flightForward;
     this.camera.getWorldDirection(forward);
     forward.y = 0;
     if (forward.lengthSq() < 1e-6) forward.set(0, 0, -1);
     forward.normalize();
-    const right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize();
-    const delta = new THREE.Vector3();
+    const right = this.flightRight.crossVectors(forward, this.camera.up).normalize();
+    const delta = this.flightDelta.set(0, 0, 0);
     if (this.pressedKeys.has('w')) delta.add(forward);
     if (this.pressedKeys.has('s')) delta.sub(forward);
     if (this.pressedKeys.has('d')) delta.add(right);
