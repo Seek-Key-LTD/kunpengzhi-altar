@@ -65,6 +65,8 @@ const SUITES = [
   ['内环壁碑·纯函数', 'scripts/verify-stela-ring.mjs'],
   // 茶史五绝赋 · 十六章数据契约
   ['茶史五绝赋·十六章数据契约', 'scripts/verify-tea-poem-16.mjs'],
+  // 无极泉 · 粒子回收带与生成带同源（ea29d5a 防回漂：7.2/11.2 类魔数不得重现）
+  ['无极泉·回收带与生成带同源（源码级）', 'scripts/verify-fountain-band.mjs'],
   // 导演台 · 席位讲解/汇报字段
   ['导演台·席位讲解字段', 'scripts/verify-seat-presentation.mjs']
 ];
