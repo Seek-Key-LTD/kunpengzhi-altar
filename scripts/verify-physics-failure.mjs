@@ -86,3 +86,23 @@ console.log('──────────────────────�
 
 ok(/参数越界/.test(thrown.message), '错误信息必须点明「参数越界」并列出环节');
 console.log(`physics-failure: 受控失败被精确归因（${failedStages.length} 环节）· ${checks} 项断言通过`);
+
+// ── 3. dt 自守卫：非法 dt 不得污染状态（update 契约）────────────────────────
+const guard = new AltarWaterLiftEngine({ height: 7.0, bucketMass: 5.0, initialWater: 10.0 });
+const snap = { z: guard.state.z, v: guard.state.v, mA: guard.state.mA, mB: guard.state.mB };
+guard.update(NaN);
+guard.update(Infinity);
+guard.update(0);
+guard.update(-0.016);
+ok(
+  guard.state.z === snap.z && guard.state.v === snap.v &&
+  guard.state.mA === snap.mA && guard.state.mB === snap.mB,
+  'NaN/Infinity/0/负 dt 必须被整体忽略，状态零污染'
+);
+guard.update(0.016);
+ok(
+  guard.state.z !== snap.z || guard.state.v !== snap.v,
+  '合法正 dt 必须正常推进（守卫不得吞掉合法步进）'
+);
+log(`dt 守卫：NaN/∞/0/负值被忽略、合法 dt 正常推进 ✓`);
+console.log(`physics-failure: dt 自守卫取证 · ${checks} 项断言通过`);

@@ -159,6 +159,10 @@ export class AltarWaterLiftEngine {
    * 离散物理步推进（半隐式欧拉积分）
    */
   public update(dt: number): void {
+    // dt 自守卫：只接受正的有限数。0/负值会以负步长反向积分（能量凭空注入），
+    // NaN/Infinity 会沿 z/v/m 扩散污染全部状态量 —— 与调用方的钳制无关，
+    // 内核自己不依赖外部纪律（QA 观察条目同款建议，落为内核契约）。
+    if (!Number.isFinite(dt) || dt <= 0) return;
     // 限制单步最大时间步长以保证弹簧碰撞稳定性
     const clampedDt = Math.min(dt, 0.033);
     const subSteps = clampedDt > 0.016 ? 2 : 1;
