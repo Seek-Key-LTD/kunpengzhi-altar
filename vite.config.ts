@@ -31,12 +31,15 @@ export default defineConfig({
         },
         // #5 · 公共/工程入口隔离。
         // 隔离**本体**来自 main.tsx 的 lazy split（公共页根本不下发导演 chunk）；
-        // 此处仅把导演按需 chunk 的**文件名**改为中性 `chunk-[hash].js`，使公共 entry 里
-        // 动态 import 说明符不残留 `DirectorApp` 模块名（view-source 公共包读不到工程标识）。
-        // 这是「不暴露模块名」的收尾混淆，**不是**隔离本体；不改行为：导演台仍在其独立
-        // chunk 里、仍只在 `#/director` 时按需拉取。
+        // 此处仅把**按路由懒加载**的入口 chunk（DirectorApp / RelicViewer）的文件名
+        // 改为中性 `chunk-[hash].js`：动态 import 说明符最终以 chunk 文件名字符串
+        // 落在公共 entry 里，中性名使公共包读不到模块名（view-source 口径）。
+        // 这是「不暴露模块名」的收尾混淆，**不是**隔离本体；不改行为：两者仍只在
+        // 各自路由命中时按需拉取。
         chunkFileNames: (chunkInfo) =>
-          chunkInfo.name === 'DirectorApp' ? 'assets/chunk-[hash].js' : 'assets/[name]-[hash].js'
+          chunkInfo.name === 'DirectorApp' || chunkInfo.name === 'RelicViewer'
+            ? 'assets/chunk-[hash].js'
+            : 'assets/[name]-[hash].js'
       }
     }
   }
