@@ -20,7 +20,7 @@ import {
   SEAT_ID_MAX
 } from '../types/altar';
 import { broadcastStateAt } from '../data/broadcastSchedule';
-import { ceremonyVisibility } from '../data/ceremonyVisibility';
+import { ceremonyVisibility, type CeremonyVisibility } from '../data/ceremonyVisibility';
 import type { RitualClock } from './RitualClock';
 import type { CameraRig } from './CameraRig';
 import type { DualDragonRig } from './DualDragonRig';
@@ -87,6 +87,25 @@ export class RitualTimelineController {
   ritualLitSeats = 0;
   wujiRevealState: 'hidden' | 'revealed' | 'silent' = 'hidden';
 
+  // ── 每帧零分配 ──────────────────────────────────────────────────────
+  // setRitualState 在 extinguishing（1440→1751）与 silence（1751→1800）两幕会被
+  // setRitualTime **逐帧**调用（#00 阈值结算是唯一时间注入点）。早先每帧
+  // `new THREE.Color` + `new THREE.FogExp2` + ceremonyVisibility 对象，一轮仪式
+  // 仅这两幕就白产 ~460s×fps 个堆对象。背景色恒黑、雾型恒 FogExp2，故复用同一
+  // 实例只改 density；visibility 纯映射按幕缓存（五幕各一份）。
+  private readonly blackBackground = new THREE.Color(0x000000);
+  private readonly ritualFog = new THREE.FogExp2(0x000000, 0.006);
+  private readonly visibilityByPhase = new Map<RitualPhase, CeremonyVisibility>();
+
+  private visibilityFor(phase: RitualPhase): CeremonyVisibility {
+    let v = this.visibilityByPhase.get(phase);
+    if (!v) {
+      v = ceremonyVisibility(phase);
+      this.visibilityByPhase.set(phase, v);
+    }
+    return v;
+  }
+
   constructor(options: RitualTimelineControllerOptions) {
     this.clock = options.clock;
     this.scene = options.scene;
@@ -134,9 +153,10 @@ export class RitualTimelineController {
     this.rig.guestTimer = 0;
     this.rig.guestIndex = 0;
     this.controls.enabled = false;
-    this.scene.background = new THREE.Color(0x000000);
-    const v = ceremonyVisibility(phase);
-    this.scene.fog = new THREE.FogExp2(0x000000, v.fogDensity);
+    this.scene.background = this.blackBackground;
+    const v = this.visibilityFor(phase);
+    this.ritualFog.density = v.fogDensity;
+    this.scene.fog = this.ritualFog;
 
     if (this.ambientLight) this.ambientLight.intensity = v.ambientLight;
     if (this.sunLight) this.sunLight.intensity = v.sunLight;
