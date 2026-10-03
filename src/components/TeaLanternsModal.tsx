@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { TEA_POEM_16_CHAPTERS, TEA_POEM_PREFACE, TeaChapter } from '../data/tea_poem_16';
 import { X, ChevronLeft, ChevronRight, BookOpen, Sparkles, Feather } from 'lucide-react';
 
@@ -8,17 +8,37 @@ interface TeaLanternsModalProps {
   onClose: () => void;
 }
 
+const CHAPTER_COUNT = TEA_POEM_16_CHAPTERS.length;
+const LAST_CHAPTER_IDX = CHAPTER_COUNT - 1;
+
+/** chapter（1 起）→ 数组下标：非有限值/越界一律钳回有效区间。 */
+function chapterToIdx(chapter: number): number {
+  if (!Number.isFinite(chapter)) return 0;
+  return Math.min(LAST_CHAPTER_IDX, Math.max(0, Math.round(chapter) - 1));
+}
+
 export const TeaLanternsModal: React.FC<TeaLanternsModalProps> = ({
   isOpen,
   initialChapter = 1,
   onClose
 }) => {
-  const [activeIdx, setActiveIdx] = useState(initialChapter - 1);
+  const [activeIdx, setActiveIdx] = useState(() => chapterToIdx(initialChapter));
+
+  // initialChapter 只在 mount 时被 useState 快照一次；导演台两次打开之间
+  // 点了不同的灯面（DirectorApp 以状态变量传参）会让弹窗停在上一面的位置。
+  // 与 InteriorPoetryModal 的换期对位修复同款：在「每次打开」时按最新值重新对位。
+  useEffect(() => {
+    if (isOpen) setActiveIdx(chapterToIdx(initialChapter));
+  }, [isOpen, initialChapter]);
+
   const [showPreface, setShowPreface] = useState(false);
 
   if (!isOpen) return null;
 
-  const currentChapter: TeaChapter = TEA_POEM_16_CHAPTERS[activeIdx];
+  // 防御：数据面为空或下标越界时回落第 1 面，而不是让 currentChapter 解引用崩溃。
+  const currentChapter: TeaChapter | undefined =
+    TEA_POEM_16_CHAPTERS[activeIdx] ?? TEA_POEM_16_CHAPTERS[0];
+  if (!currentChapter) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-lg animate-fade-in">
@@ -101,7 +121,7 @@ export const TeaLanternsModal: React.FC<TeaLanternsModalProps> = ({
               {/* Title & Historical Theme */}
               <div className="mb-6 text-center">
                 <span className="inline-block px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-xs font-mono font-medium mb-2">
-                  灯屏第 {currentChapter.chapterIndex} 面 / 共 16 面
+                  灯屏第 {currentChapter.chapterIndex} 面 / 共 {CHAPTER_COUNT} 面
                 </span>
                 <h3 className="text-2xl font-serif font-bold text-amber-200">
                   {currentChapter.title}
@@ -147,7 +167,7 @@ export const TeaLanternsModal: React.FC<TeaLanternsModalProps> = ({
             {/* Stepper Navigation */}
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setActiveIdx((prev) => (prev > 0 ? prev - 1 : 15))}
+                onClick={() => setActiveIdx((prev) => (prev > 0 ? prev - 1 : LAST_CHAPTER_IDX))}
                 className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition-all"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -155,11 +175,11 @@ export const TeaLanternsModal: React.FC<TeaLanternsModalProps> = ({
               </button>
 
               <div className="text-xs text-slate-500 font-mono">
-                {activeIdx + 1} / 16
+                {activeIdx + 1} / {CHAPTER_COUNT}
               </div>
 
               <button
-                onClick={() => setActiveIdx((prev) => (prev < 15 ? prev + 1 : 0))}
+                onClick={() => setActiveIdx((prev) => (prev < LAST_CHAPTER_IDX ? prev + 1 : 0))}
                 className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition-all"
               >
                 <span>下一面灯屏</span>
