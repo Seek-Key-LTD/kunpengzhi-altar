@@ -45,6 +45,8 @@ const RelicViewer: React.FC = () => {
 
     const loader = new GLTFLoader();
     let disposed = false;
+    // 金材质替换时被顶下来的 GLTF 原始材质（可能带贴图）：cleanup 时统一回收
+    const replacedMaterials: THREE.Material[] = [];
     loader.load(
       MODEL_URL,
       (gltf) => {
@@ -62,6 +64,9 @@ const RelicViewer: React.FC = () => {
             mesh.castShadow = false;
             mesh.receiveShadow = false;
             if (mesh.name.toLowerCase().includes('gold')) {
+              const original = mesh.material;
+              if (Array.isArray(original)) replacedMaterials.push(...original);
+              else if (original) replacedMaterials.push(original);
               mesh.material = new THREE.MeshStandardMaterial(SEAL_GOLD_MATERIAL);
             }
           }
@@ -94,15 +99,32 @@ const RelicViewer: React.FC = () => {
       cancelAnimationFrame(frame);
       window.removeEventListener('resize', onResize);
       controls.dispose();
+      // 场景全量回收（口径对齐 SceneDisposer.disposeSceneResources）：
+      // 几何 + 材质 + 材质自身属性上的贴图（map/normalMap/…）都逐一 dispose，
+      // 缺了贴图这一层，GLB 的位图会一直占着显存。
+      const materials = new Set<THREE.Material>();
+      const textures = new Set<THREE.Texture>();
+      const collectMaterial = (material: THREE.Material) => {
+        materials.add(material);
+        const record = material as unknown as Record<string, unknown>;
+        Object.keys(record).forEach((key) => {
+          const value = record[key];
+          if (value instanceof THREE.Texture) textures.add(value);
+        });
+      };
       scene.traverse((object) => {
         const mesh = object as THREE.Mesh;
         if (mesh.isMesh) {
-          mesh.geometry.dispose();
-          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          materials.forEach((material) => material.dispose());
+          mesh.geometry?.dispose();
+          if (Array.isArray(mesh.material)) mesh.material.forEach(collectMaterial);
+          else if (mesh.material) collectMaterial(mesh.material);
         }
       });
+      replacedMaterials.forEach(collectMaterial);
+      materials.forEach((material) => material.dispose());
+      textures.forEach((texture) => texture.dispose());
       renderer.dispose();
+      renderer.forceContextLoss();
       renderer.domElement.remove();
     };
   }, []);
