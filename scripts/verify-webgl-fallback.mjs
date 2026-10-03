@@ -6,8 +6,11 @@
 // 与正典冲突，已收编；此断言防止回漂。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 // 合并裁决：直导 .ts 在 Node<23.6 无默认类型剥离会 ERR_UNKNOWN_FILE_EXTENSION
-// （raccoon 修复项），统一走共享 esbuild 打包。
+// （raccoon 修复项），统一走共享 esbuild 打包；node:fs 导入保留（正文源码对账用）。
 import { bundleTs } from './lib/bundle-ts.mjs';
 
 const [{ isWebGLAvailable, renderSilentFallback }] = await bundleTs([
