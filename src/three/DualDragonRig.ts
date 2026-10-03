@@ -44,8 +44,27 @@ export class DualDragonRig {
   }
 
   setFrontBeads(water: THREE.Group | null, sound: THREE.Group | null): void {
+    // 退役旧前锋珠：登记方（DemoController.start）每次启动都会新建一对，
+    // 若不回收，start/stop 循环会在场景里堆积孤儿 Group（几何+材质+点光源）。
+    // 口径对齐 SceneDisposer：先摘出场景树，再按 Mesh 逐个 dispose 几何/材质。
+    this.retireBead(this.waterBead, water);
+    this.retireBead(this.soundBead, sound);
     this.waterBead = water;
     this.soundBead = sound;
+  }
+
+  /** 摘除并释放一颗旧前锋珠；与新珠同一对象（或已不在场景树）时跳过。 */
+  private retireBead(old: THREE.Group | null, next: THREE.Group | null): void {
+    if (!old || old === next) return;
+    old.removeFromParent();
+    old.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.geometry?.dispose();
+        if (Array.isArray(mesh.material)) mesh.material.forEach((m) => m.dispose());
+        else mesh.material?.dispose();
+      }
+    });
   }
 
   private applyVisibility(lit: number, visible: boolean, fullLine: boolean): void {
