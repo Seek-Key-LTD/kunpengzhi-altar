@@ -38,6 +38,16 @@ export function buildLightRig(
   sun.castShadow = true;
   sun.shadow.mapSize.width = 2048;
   sun.shadow.mapSize.height = 2048;
+  // 阴影视锥必须罩住全坛（灯环半径 23.5、坛体宽 21、玉玺悬顶 ~25）。
+  // 不配置时 three 默认 ±5 正交视锥：2048² 深度图每帧白跑，且绝大多数阴影被裁掉。
+  sun.shadow.camera.left = -32;
+  sun.shadow.camera.right = 32;
+  sun.shadow.camera.top = 32;
+  sun.shadow.camera.bottom = -32;
+  sun.shadow.camera.near = 20;
+  sun.shadow.camera.far = 160;
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.02;
   scene.add(sun);
 
   const rim = new THREE.DirectionalLight(0x38bdf8, 1.6);
