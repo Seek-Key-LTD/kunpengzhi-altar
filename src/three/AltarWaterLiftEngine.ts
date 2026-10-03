@@ -111,6 +111,8 @@ export class AltarWaterLiftEngine {
   // 状态防重触发锁
   private topTriggeredA = false;
   private topTriggeredB = false;
+  /** 未消费的物理时间残差 (s)：掉帧部分累积到此，按固定子步补推，保证帧率无关 */
+  private accDt = 0.0;
 
   constructor(options?: {
     height?: number;
@@ -156,15 +158,17 @@ export class AltarWaterLiftEngine {
   }
 
   /**
-   * 离散物理步推进（半隐式欧拉积分）
+   * 离散物理步推进（半隐式欧拉积分，残差累积 + 固定 1/60 子步）
    */
   public update(dt: number): void {
-    // 限制单步最大时间步长以保证弹簧碰撞稳定性
-    const clampedDt = Math.min(dt, 0.033);
-    const subSteps = clampedDt > 0.016 ? 2 : 1;
-    const subDt = clampedDt / subSteps;
-
-    for (let step = 0; step < subSteps; step++) {
+    // 为什么：旧实现 min(dt, 0.033) 会把掉帧部分整段丢弃，帧率越低水梯越慢。
+    // 改为残差累积：超时部分存入 accDt，后续帧按固定 1/60 子步补推，
+    // 物理推进总量只取决于真实流逝时间，与帧率无关。
+    // 上限 0.25s 防死亡螺旋：连续长卡顿时单帧最多补 15 个子步，不无限追帧。
+    this.accDt = Math.min(this.accDt + Math.max(dt, 0), 0.25);
+    const subDt = 1 / 60;
+    while (this.accDt >= subDt) {
+      this.accDt -= subDt;
       this.subStep(subDt);
     }
 
@@ -290,5 +294,7 @@ export class AltarWaterLiftEngine {
     this.state.yB = this.strokeLimit - perturbation;
     this.topTriggeredA = false;
     this.topTriggeredB = false;
+    // 为什么：重置即时间零点，未消费的时间残差一并清零，避免复位后多推若干子步
+    this.accDt = 0.0;
   }
 }
