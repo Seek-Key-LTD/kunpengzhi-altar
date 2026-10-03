@@ -137,15 +137,34 @@ export class SceneDisposer {
           textures.add(value);
         }
       });
+      // ShaderMaterial/RawShaderMaterial 的贴图藏在 uniforms[*].value 里，一层自有属性扫不到。
+      const uniforms = (material as THREE.ShaderMaterial).uniforms;
+      if (uniforms) {
+        Object.keys(uniforms).forEach((key) => {
+          const value = uniforms[key]?.value;
+          if (value instanceof THREE.Texture) {
+            textures.add(value);
+          }
+        });
+      }
     };
 
     this.scene.traverse((obj) => {
+      // Sprite 继承 Object3D 而非 Mesh：碑面/灯面 CanvasTexture 走这里，漏掉即整份泄漏。
+      if (obj instanceof THREE.Sprite) {
+        collectMaterial(obj.material);
+        return;
+      }
       if (obj instanceof THREE.Mesh || obj instanceof THREE.Line || obj instanceof THREE.Points) {
         if (obj.geometry) geometries.add(obj.geometry);
         if (Array.isArray(obj.material)) {
           obj.material.forEach(collectMaterial);
         } else if (obj.material) {
           collectMaterial(obj.material);
+        }
+        // InstancedMesh 的 instanceMatrix/instanceColor 是独立 GPU 缓冲，dispose() 才释放。
+        if ((obj as THREE.InstancedMesh).isInstancedMesh) {
+          (obj as THREE.InstancedMesh).dispose();
         }
       }
     });
