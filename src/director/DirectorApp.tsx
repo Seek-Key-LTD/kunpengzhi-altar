@@ -14,7 +14,7 @@
 // 拓印 → authenticated 起；拆解与断代 → 仅 director。
 // 断代的史事注脚只在合规弹窗里由 director 主动唤出，不自动进公共画面。
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AltarScene } from '../three/AltarScene';
 import { INITIAL_SPIRAL_EVENTS } from '../data/spiral_events';
 import { seatPresentation } from './seatPresentation';
@@ -140,8 +140,15 @@ export const DirectorApp: React.FC = () => {
   };
 
   // 公共事件（坐标/音高/时序） + 导演台讲解文案（display_name/message_excerpt/…）按需合并。
-  const baseEvent = INITIAL_SPIRAL_EVENTS[Math.min(48, Math.max(0, activeSeatId - 1))];
-  const activeEvent = { ...baseEvent, ...seatPresentation(baseEvent) };
+  // 讲解文案只随席位变；缓存住，别在拓印/拆解读数驱动的每轮重渲染里重造对象。
+  const activeEvent = useMemo(() => {
+    const baseEvent = INITIAL_SPIRAL_EVENTS[Math.min(48, Math.max(0, activeSeatId - 1))];
+    return { ...baseEvent, ...seatPresentation(baseEvent) };
+  }, [activeSeatId]);
+
+  const handlePlaySeatSound = useCallback(() => {
+    altarAudio.triggerSeatEvent(activeEvent);
+  }, [activeEvent]);
 
   // ── 未确认：先挡一道 ───────────────────────────────────────────────
   if (!entered) {
@@ -197,7 +204,7 @@ export const DirectorApp: React.FC = () => {
       {activeEvent && (
         <SeatDetailPanel
           event={activeEvent}
-          onPlaySound={() => altarAudio.triggerSeatEvent(activeEvent)}
+          onPlaySound={handlePlaySeatSound}
         />
       )}
 

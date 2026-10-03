@@ -26,7 +26,9 @@ function sameState(a: ImperialSealState | null, b: ImperialSealState | null): bo
     a.glb_loaded === b.glb_loaded &&
     a.lod === b.lod &&
     a.transmission_enabled === b.transmission_enabled &&
-    a.hover_y === b.hover_y &&
+    // hover_y 不比：呼吸悬浮（幅 0.18 / 周期 9s）让它每轮轮询都在变，
+    // 精确比较会把"没变就不 setState"整个击穿成 10Hz 恒定重渲染；
+    // 且无任何面板消费该字段，印章动作已由 stamp_progress 覆盖（同 spin_rpm 不比）。
     a.stamp_count === b.stamp_count &&
     // 连续量只在"肉眼可辨"的粒度上比较，避免小数点后抖动引发重渲染
     Math.abs(a.exploded_progress - b.exploded_progress) < 0.005 &&
