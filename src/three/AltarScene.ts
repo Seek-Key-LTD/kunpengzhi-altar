@@ -1145,17 +1145,19 @@ export class AltarScene {
    * （保留旧的公开方法签名，内部改由引擎驱动，避免两套转速逻辑打架。）
    */
   public setLanternRotationSpeed(speed: number) {
-    this.maglev.state.omega = speed;
+    // 引擎 override 语义：显式调速期间关闭驱动项并双向锁速；clearLanternSpeedOverride() 恢复驱动。
+    // 原实现直写 state.omega 会被引擎恒定驱动几秒内拉回 maxOmega，公开调速接口实际失效。
+    this.maglev.setOmegaOverride(speed);
   }
 
   public setSpeedMode(mode: 'pause' | 'ultra_slow' | 'slow') {
-    if (mode === 'pause') {
-      this.maglev.state.omega = 0.0;
-    } else if (mode === 'ultra_slow') {
-      this.maglev.state.omega = 0.0015;
-    } else if (mode === 'slow') {
-      this.maglev.state.omega = 0.005;
-    }
+    const targets = { pause: 0.0, ultra_slow: 0.0015, slow: 0.005 } as const;
+    this.maglev.setOmegaOverride(targets[mode]);
+  }
+
+  /** 解除显式调速，恢复引擎额定驱动（回 maxOmega）。 */
+  public clearLanternSpeedOverride() {
+    this.maglev.clearOmegaOverride();
   }
 
   /**

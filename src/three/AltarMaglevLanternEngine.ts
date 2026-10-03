@@ -62,6 +62,15 @@ export class AltarMaglevLanternEngine {
   public state: MaglevLanternState;
   public onAcousticStrum?: AcousticStrumCallback;
 
+  /**
+   * LIM 驱动总开关（默认 true 保持既有行为：恒有正驱动、只钳正向 omega）。
+   * 外部调速（'pause'/'ultra_slow'/'slow'）应改走 setOmegaOverride/clearOmegaOverride，
+   * 直接写 state.omega 的旧路径在驱动开启时仍会被 T_drive 拉回 maxOmega（历史行为不变）。
+   */
+  public driveEnabled = true;
+  /** 调速覆盖目标（rad/s）：非 null 时驱动项关闭并双向钳位到该值 */
+  private omegaOverrideTarget: number | null = null;
+
   // 触发防重锁
   private lastTriggeredBay: number = -1;
   /** 内部时钟：用于节流与冷却判定 */
@@ -117,15 +126,23 @@ export class AltarMaglevLanternEngine {
     s.z += s.vz * dt;
 
     // 2. 切向圆周驱动 (地下分段长定子行波电磁推力 - 空气阻尼)
-    const T_drive = this.F_drive * this.R;
+    // 为什么：override 生效（或 driveEnabled=false）期间必须关掉 T_drive，
+    // 否则恒定正驱动会在几秒内把外部写入的低速 omega 拉回 maxOmega，'pause'/'slow' 全部失效。
+    const driveOff = !this.driveEnabled || this.omegaOverrideTarget !== null;
+    const T_drive = driveOff ? 0.0 : this.F_drive * this.R;
     const v_tan = s.omega * this.R;
     const F_drag = this.gamma_air * v_tan;
     const T_drag = F_drag * this.R;
 
     const alpha = (T_drive - T_drag) / this.I_rot;
     s.omega += alpha * dt;
-    // LIM 电流限幅：钳住角速度，保持"幽灵般缓慢巡礼"，杜绝 4.7s/圈失控
-    if (s.omega > this.maxOmega) s.omega = this.maxOmega;
+    if (this.omegaOverrideTarget !== null) {
+      // 调速覆盖生效：双向钳位锁死在目标转速（低于目标被拉回、高于目标被压回）
+      s.omega = this.omegaOverrideTarget;
+    } else if (s.omega > this.maxOmega) {
+      // LIM 电流限幅：钳住角速度，保持"幽灵般缓慢巡礼"，杜绝 4.7s/圈失控
+      s.omega = this.maxOmega;
+    }
     s.theta = (s.theta + s.omega * dt) % (2 * Math.PI);
     if (s.theta < 0) s.theta += 2 * Math.PI;
 
@@ -183,5 +200,25 @@ export class AltarMaglevLanternEngine {
   public replenishLiquidNitrogen(amountKg: number = 800.0): void {
     this.state.liquidN2Mass += amountKg;
     this.state.temperature = 77.0;
+  }
+
+  /**
+   * 调速覆盖：锁定角速度到 target（rad/s）。
+   *
+   * 为什么：外部 setLanternRotationSpeed / setSpeedMode 直接写 state.omega，
+   * 但引擎恒有 T_drive=28800 N·m 正驱动，写入几秒内即被拉回 maxOmega，
+   * 'pause'/'ultra_slow'/'slow' 名存实亡。覆盖生效期间驱动项关闭、
+   * omega 双向钳位到 target，clearOmegaOverride() 后恢复既有驱动行为。
+   */
+  public setOmegaOverride(target: number): void {
+    this.omegaOverrideTarget = target;
+    this.driveEnabled = false;
+    this.state.omega = target; // 立即生效，不等下一个物理步
+  }
+
+  /** 解除调速覆盖，恢复 LIM 驱动（回到默认"缓慢巡礼"动力学）。 */
+  public clearOmegaOverride(): void {
+    this.omegaOverrideTarget = null;
+    this.driveEnabled = true;
   }
 }
