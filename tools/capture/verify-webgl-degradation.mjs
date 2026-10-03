@@ -28,6 +28,8 @@
  *   node tools/capture/verify-webgl-degradation.mjs --skip-build   （复用现有 dist）
  *   node tools/capture/verify-webgl-degradation.mjs --self-test    （注入违规，证明门禁会判红）
  *   PW_NODE_MODULES=<dir with node_modules/playwright> 可换 playwright 来源
+ *   ALTAR_CHROME_PATH=<chrome 二进制> 可换浏览器夹具（luban：受管 Chrome for Testing，
+ *   一次性进程；不设则走 playwright 缺省）
  *   VERIFY_PORT=4400 可固定端口
  */
 import { createRequire } from 'node:module';
@@ -38,6 +40,7 @@ import { dirname, resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { analyze } from './lib/png-probe.mjs';
 import { loadWordLists } from '../../scripts/lib/public-ui-tree.mjs';
+import { chromiumLaunchOptions } from '../../scripts/lib/chromium-launch.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -51,6 +54,10 @@ const SELF_TEST = process.argv.includes('--self-test');
 const ARGS_NO_WEBGL = ['--disable-webgl', '--disable-webgl2', '--disable-3d-apis'];
 /** B 路径：正常软栅格（⇒ degraded 档，仍出画），用于随后触发运行时上下文丢失。 */
 const ARGS_SOFTWARE = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+// 浏览器夹具：缺省走 playwright 自带 chromium-headless-shell；luban 上设 ALTAR_CHROME_PATH
+// 指向受管 Chrome for Testing（一次性进程，见 scripts/lib/chromium-launch.mjs 口径）
+const LAUNCH_OPTS_NO_WEBGL = chromiumLaunchOptions(ARGS_NO_WEBGL);
+const LAUNCH_OPTS_SOFTWARE = chromiumLaunchOptions(ARGS_SOFTWARE);
 
 /** §2.3 文案三联（主理人裁定）—— 降级页必须在场的锚点。 */
 const VEIL_LINES = ['坛不设形，声自往还。', '此刻唯余字与音。', '静听即可。'];
@@ -215,7 +222,7 @@ async function shoot(page, file) {
 
 async function runPathA(chromium, words) {
   const errors = { pageerror: 0, consoleError: 0, samples: [] };
-  const browser = await chromium.launch({ args: ARGS_NO_WEBGL });
+  const browser = await chromium.launch(LAUNCH_OPTS_NO_WEBGL);
   let probe;
   try {
     const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
@@ -250,7 +257,7 @@ async function runPathA(chromium, words) {
 
 async function runPathB(chromium) {
   const errors = { pageerror: 0, consoleError: 0, samples: [] };
-  const browser = await chromium.launch({ args: ARGS_SOFTWARE });
+  const browser = await chromium.launch(LAUNCH_OPTS_SOFTWARE);
   let probe;
   try {
     const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
@@ -370,6 +377,7 @@ async function main() {
       generatedAt: new Date().toISOString(),
       head,
       baseUrl: BASE,
+      browserFixture: { executablePath: LAUNCH_OPTS_SOFTWARE.executablePath || null, source: LAUNCH_OPTS_SOFTWARE.executablePath ? 'ALTAR_CHROME_PATH' : 'playwright-registry' },
       pathA: { launchArgs: ARGS_NO_WEBGL, ...a, wordHitCount: a.wordHits.length, wordHits: a.wordHits.slice(0, 20) },
       pathB: { launchArgs: ARGS_SOFTWARE, ...b },
       gate: { pass: gate.pass, checks: gate.checks, selfTest }

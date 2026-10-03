@@ -1,7 +1,11 @@
 {
-  "generatedAt": "2026-09-18T07:53:45.709Z",
-  "head": "3b24a1ca957978a62e2e10d32fd2f7ab968538e2",
-  "baseUrl": "http://127.0.0.1:4662",
+  "generatedAt": "2026-10-03T15:08:24.483Z",
+  "head": "4ae6554633ce67f0b50d8d712a5488842804a25f",
+  "baseUrl": "http://127.0.0.1:4410",
+  "browserFixture": {
+    "executablePath": "/home/ben/.cache/puppeteer/chrome/linux-149.0.7827.22/chrome-linux64/chrome",
+    "source": "ALTAR_CHROME_PATH"
+  },
   "pathA": {
     "launchArgs": [
       "--disable-webgl",
@@ -12,7 +16,7 @@
     "hasCanvas": false,
     "hasCaption": true,
     "interactive": 0,
-    "innerText": "天地未形，混沌如渊。\n\n坛不设形，声自往还。\n\n此刻唯余字与音。\n\n静听即可。",
+    "innerText": "四十九席，逐一点亮；水向外行，音向内收。\n观察席快捷键\nW 前进\nS 后退\nA 左移\nD 右移\nQ 下降\nE 上升\nShift 加速\nR 复位\n鼠标拖拽旋转 · 滚轮缩放 · 右键拖拽平移\n\n坛不设形，声自往还。\n\n此刻唯余字与音。\n\n静听即可。",
     "search": "",
     "hash": "#/",
     "pollution": {
@@ -23,11 +27,11 @@
     },
     "probe": {
       "file": "degrade-01-nowebgl.png",
-      "bytes": 427574,
-      "sha256": "029e65c55c0ad8f723381e8df43b1f365c80166f3bad289bca15c56486dd90eb",
-      "nonBlackRatio": 0.8176884765625,
-      "meanLum": 10.735833314602843,
-      "brightPixels": 9143,
+      "bytes": 432497,
+      "sha256": "4c2f25d24857de81bc5790e85e36e273f42bb3871a663f26cee5c3b190cb0487",
+      "nonBlackRatio": 0.835076171875,
+      "meanLum": 10.922207123978358,
+      "brightPixels": 12054,
       "totalPixels": 1024000
     },
     "errors": {
@@ -38,8 +42,8 @@
     "wordHits": [],
     "missingLines": [],
     "clockAdvanced": true,
-    "clock0": 347,
-    "clock1": 439,
+    "clock0": 378,
+    "clock1": 468,
     "wordHitCount": 0
   },
   "pathB": {
@@ -56,10 +60,10 @@
     "hasVeil": true,
     "hasCaption": true,
     "interactive": 0,
-    "drawAtLoss": 1507,
-    "drawAfter": 1507,
-    "rafAtLoss": 309,
-    "rafAfter": 431,
+    "drawAtLoss": 78283,
+    "drawAfter": 78283,
+    "rafAtLoss": 211,
+    "rafAfter": 360,
     "search": "",
     "hash": "#/",
     "pollution": {
@@ -68,7 +72,7 @@
       "__degrade": false,
       "__webglTier": false
     },
-    "innerText": "天地未形，混沌如渊。\n\n坛不设形，声自往还。\n\n此刻唯余字与音。\n\n静听即可。",
+    "innerText": "四十九席，逐一点亮；水向外行，音向内收。\n观察席快捷键\nW 前进\nS 后退\nA 左移\nD 右移\nQ 下降\nE 上升\nShift 加速\nR 复位\n鼠标拖拽旋转 · 滚轮缩放 · 右键拖拽平移\n\n坛不设形，声自往还。\n\n此刻唯余字与音。\n\n静听即可。",
     "errors": {
       "pageerror": 0,
       "consoleError": 0,
@@ -76,11 +80,11 @@
     },
     "probe": {
       "file": "degrade-02-contextlost.png",
-      "bytes": 270006,
-      "sha256": "20b74b232aa585d5353fc63cddba3ad995263e3c06d9d1265d7bac3755cb8790",
-      "nonBlackRatio": 0.8176826171875,
-      "meanLum": 10.807376577297308,
-      "brightPixels": 10167,
+      "bytes": 303239,
+      "sha256": "f4e4a0e16e643876f91694de0edf24530a10d37e86831a76526d94165a783fb8",
+      "nonBlackRatio": 0.8358515625,
+      "meanLum": 11.039925457962285,
+      "brightPixels": 12426,
       "totalPixels": 1024000
     }
   },
@@ -145,7 +149,7 @@
         "id": "A10.dark-with-content",
         "desc": "A 路径：有内容地暗（nonBlack>0 且 meanLum<40 且非白屏）",
         "ok": true,
-        "detail": "nonBlackRatio=0.81769 meanLum=10.74 bright=9143"
+        "detail": "nonBlackRatio=0.83508 meanLum=10.92 bright=12054"
       },
       {
         "id": "B1.before-has-canvas",
@@ -169,13 +173,13 @@
         "id": "B4.draw-frozen",
         "desc": "B 路径：丢失后**停画**（GL draw call 计数冻结）",
         "ok": true,
-        "detail": "丢时=1507 丢后=1507"
+        "detail": "丢时=78283 丢后=78283"
       },
       {
         "id": "B5.clock-alive",
         "desc": "B 路径：丢失后**时钟未停**（rAF 仍在涨 ⇒ #4 单时间轴不变量）",
         "ok": true,
-        "detail": "丢时=309 丢后=431"
+        "detail": "丢时=211 丢后=360"
       },
       {
         "id": "B6.veil-swapped",
@@ -199,7 +203,7 @@
         "id": "B9.dark-with-content",
         "desc": "B 路径：换层后仍「有内容地暗」",
         "ok": true,
-        "detail": "nonBlackRatio=0.81768 meanLum=10.81"
+        "detail": "nonBlackRatio=0.83585 meanLum=11.04"
       }
     ],
     "selfTest": null
