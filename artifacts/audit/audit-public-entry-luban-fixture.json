@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-10-03T15:06:00.450Z",
+  "generatedAt": "2026-10-03T15:04:42.547Z",
   "head": "ea29d5ac00da46f90bf8368d84bc0d680bc25a64",
-  "label": "latest",
-  "baseUrl": "http://127.0.0.1:4212",
+  "label": "luban-fixture",
+  "baseUrl": "http://127.0.0.1:4211",
   "launchArgs": [
     "--use-gl=angle",
     "--use-angle=swiftshader",
@@ -44,7 +44,7 @@
     "tokenid"
   ],
   "public": {
-    "url": "http://127.0.0.1:4212/#/",
+    "url": "http://127.0.0.1:4211/#/",
     "pollution": {
       "__altar": false,
       "__capture": false,
@@ -271,7 +271,7 @@
     "bundle": {
       "assets": [
         {
-          "src": "http://127.0.0.1:4212/assets/index-COwEXbG2.js",
+          "src": "http://127.0.0.1:4211/assets/index-COwEXbG2.js",
           "bytes": 1240529,
           "via": "disk",
           "hits": {}
@@ -283,8 +283,8 @@
     },
     "network": {
       "assetsRequested": [
-        "http://127.0.0.1:4212/assets/index-COwEXbG2.js",
-        "http://127.0.0.1:4212/assets/index-DmHBi-AX.css"
+        "http://127.0.0.1:4211/assets/index-COwEXbG2.js",
+        "http://127.0.0.1:4211/assets/index-DmHBi-AX.css"
       ],
       "lazyChunks": [
         "chunk-DhvAFv84.js"
@@ -304,7 +304,7 @@
     "innerText": "导演 / 认证台\n\n本路由用于讲解、核验与器物操作，不是公共入口。\n拓印只写器物自身的计数（不落座次表、不进 credits、不发音）； 拆解与断代属导演讲解权。\n注：这是前端伪认证（hash + localStorage），不具真正身份校验能力。\n\n我已知晓，进入",
     "diag": {
       "nav": "ok",
-      "url": "http://127.0.0.1:4212/#/director",
+      "url": "http://127.0.0.1:4211/#/director",
       "htmlLen": 1778,
       "errors": []
     }
@@ -321,18 +321,18 @@
     "innerText": "无人值守·自运维·华夏祭坛\n\n三更道场·第十二期《黄道》终卷交互装置\n•\n大衍之数五十，其用四十有九\n\n水利回环：#1 席\n外围 16 面大茶灯\n中空地宫诗词\n规范与声明\n传国玉玺\n\n方四寸 · 高三寸六 · 悬浮于坛心正上方\n\n未选中\n形态 normal\n断代 秦\n拆解 0.00\n已拓 0 枚\n推近悬浮玺台\n形态（只走面板，点击场景只做选中）\n合\n拆解\n拓印\n拆解进度（导演）\n断代层（导演）\n注脚\n秦\n汉新\n魏晋十六国\n辽金\n落一枚朱砂印\n#01\n青衣\n\n司天监·首座\n\n首期预留席\n星笺题字\n\n\"大衍之数五十，其用四十有九。虚一以象太极，运筹以纪乾坤。\"\n\n12-TET 律吕\nC2\nchromatic_descent\n水道水流时刻\n0s\n第 0 拍抵达\n方坛退台层级\n第 1 层\n标高 +21.0m\n黄道十二宫区\n第 1 分区\n乌兰序 #1\n专属载具\n天权号·太一星舰\n繁花图腾\nPeony\n试听发声\n全员花名制 · 纯数字仪式与创作纪念 · 禁真实机构/个人背书\n启动乌兰巡礼\n自由环绕\n入阴\n俯瞰全坛\n外围16灯\n水道巡礼\n俯视九宫\n泉眼无极\n玉玺\n#1 席\n#49 席",
     "diag": {
       "nav": "ok",
-      "url": "http://127.0.0.1:4212/#/director",
+      "url": "http://127.0.0.1:4211/#/director",
       "htmlLen": 27692,
       "errors": []
     },
     "network": {
       "assetsRequested": [
-        "http://127.0.0.1:4212/assets/index-COwEXbG2.js",
-        "http://127.0.0.1:4212/assets/index-DmHBi-AX.css",
-        "http://127.0.0.1:4212/assets/chunk-DhvAFv84.js",
-        "http://127.0.0.1:4212/assets/index-COwEXbG2.js",
-        "http://127.0.0.1:4212/assets/index-DmHBi-AX.css",
-        "http://127.0.0.1:4212/assets/chunk-DhvAFv84.js"
+        "http://127.0.0.1:4211/assets/index-COwEXbG2.js",
+        "http://127.0.0.1:4211/assets/index-DmHBi-AX.css",
+        "http://127.0.0.1:4211/assets/chunk-DhvAFv84.js",
+        "http://127.0.0.1:4211/assets/index-COwEXbG2.js",
+        "http://127.0.0.1:4211/assets/index-DmHBi-AX.css",
+        "http://127.0.0.1:4211/assets/chunk-DhvAFv84.js"
       ],
       "loadedLazyChunks": [
         "chunk-DhvAFv84.js"
@@ -453,14 +453,6 @@
         "detail": "含导演标记 ✓"
       }
     ],
-    "selfTest": {
-      "injectedLazy": "chunk-DhvAFv84.js",
-      "injectedFailures": [
-        "A.dom-zero",
-        "B.bundle-zero",
-        "D.public-no-lazy"
-      ],
-      "wentRed": true
-    }
+    "selfTest": null
   }
 }

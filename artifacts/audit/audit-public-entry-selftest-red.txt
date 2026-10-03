@@ -1,12 +1,12 @@
 # QA 门禁 · 负样本自检（--self-test）：注入违规 → 门禁应判红
-- HEAD: 01cd9ff14230e22a7bdb1e924664e3e83b608f4e
-- 时间: 2026-09-18T05:55:29.332Z
-- 注入违规：exposedWords += `topology`；bundleLeaked += `altar.director.confirmed`；publicLoadedLazy += `chunk-BL6FsSMZ.js`
+- HEAD: ea29d5ac00da46f90bf8368d84bc0d680bc25a64
+- 时间: 2026-10-03T15:06:00.448Z
+- 注入违规：exposedWords += `topology`；bundleLeaked += `altar.director.confirmed`；publicLoadedLazy += `chunk-DhvAFv84.js`
 - 期望：门禁判红（exit 1）
 - 实测：✓ 已判红（PASS）
 - 触发失败断言（3 项）：
     ✗ [A.dom-zero] 公共页 #/ DOM/文本/window 词表命中 = 0 — 命中: topology
     ✗ [B.bundle-zero] 公共页下发 bundle 逐 token 命中 = 0（且扫描有效） — 夹带: altar.director.confirmed
-    ✗ [D.public-no-lazy] 网络侧：公共页 #/ 不请求导演懒加载 chunk — 公共页竟请求: chunk-BL6FsSMZ.js
+    ✗ [D.public-no-lazy] 网络侧：公共页 #/ 不请求导演懒加载 chunk — 公共页竟请求: chunk-DhvAFv84.js
 
 （本文件是「门禁有牙齿」的证据；由 `npm run audit:entry -- --self-test` 生成）
