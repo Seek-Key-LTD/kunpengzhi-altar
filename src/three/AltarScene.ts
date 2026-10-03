@@ -1865,16 +1865,20 @@ export class AltarScene {
     if (next === 'silent') {
       // 29:11 起：除 #00 的窄角冷色顶光外，全坛静默（不灰、不亮、不响）。
       // 走既有 silence 幕次：其余灯光归零、水/灯/石经收束，只留 wujiLight 一束。
-      this.setRitualState('silence', SEAT_ID_MAX, null);
+      // 跨档位才切换（见本方法 doc「幂等…跨档位时才切换场景状态」）：本方法
+      // 逐帧被喂入，setRitualState 每帧 new Color/new FogExp2 并全量重写
+      // ~150 项场景属性，静默档内这些值恒定，重放纯属每帧浪费。
       if (changed) {
+        this.setRitualState('silence', SEAT_ID_MAX, null);
         console.log(`[无极] #00 静默 t=${t.toFixed(0)}s ≥ ${WUJI_SILENCE_SEC}s(29:11)：除冷顶光外全坛寂灭`);
       }
       return;
     }
     if (next === 'revealed') {
       // 24:00 起：末段窄角冷色顶光点亮 #00 吸光体；其余景观按 extinguishing 收束。
-      this.setRitualState('extinguishing', SEAT_ID_MAX, this.activeSeatId);
+      // 同上：跨档位才切换，档内恒定值不逐帧重放。
       if (changed) {
+        this.setRitualState('extinguishing', SEAT_ID_MAX, this.activeSeatId);
         console.log(`[无极] #00 显形 t=${t.toFixed(0)}s ≥ ${WUJI_REVEAL_SEC}s(24:00)：窄角冷色顶光点亮吸光体`);
       }
       return;
@@ -2706,6 +2710,11 @@ export class AltarScene {
       window.removeEventListener('keydown', this.audioResumeHandler);
       this.audioResumeHandler = null;
     }
+
+    // 8c. 朗诵播放器：随祭坛一起拆 —— 暂停 + 撤监听 + 弃 HTMLAudioElement。
+    //     不拆则元素挂着 src 在 teardown 后继续续播、4 个事件监听悬挂
+    //     （React.StrictMode 双挂时泄漏翻倍）；dispose() 自带幂等闸，重复调用安全。
+    this.narration.dispose();
 
     // 9. Tone.js：altarAudio 是这一轮仪式造的乐器，随祭坛一起拆，
     //    下次入坛由 App 的 begin() 重新 init()。拆不干净就是一堆悬挂的 AudioNode。
