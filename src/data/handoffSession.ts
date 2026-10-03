@@ -22,12 +22,36 @@ export interface HandoffSession {
   readonly mode: 'single' | 'cardboard';
 }
 
-/** 验证 token 是否有效（纯函数） */
+/**
+ * 验证 token 是否有效（纯函数）。
+ *
+ * 五道闸，任何一道不过即拒：
+ *   1. 载荷形状完整（对象、字段类型齐全）—— handoff 载荷经 URL 传播，
+ *      类型标注挡不住运行时脏数据；
+ *   2. token 非空且 ≥ 16 字符；
+ *   3. 未过期（now − issuedAt ≤ TTL）；
+ *   4. **issuedAt 不得来自未来** —— 修复前 `now − issuedAt` 为负时直接放行，
+ *      一枚未来时间戳的载荷可以绕过过期检查长期存活；
+ *   5. layer / yaw 必须是有限数（NaN/Infinity 流进 `handoffUrl` 会变成
+ *      `layer=NaN` / `yaw=NaN`，由消费端解析出脏状态）。
+ */
 export function isHandoffSessionValid(t: HandoffSession, now: number = Date.now()): boolean {
-  // 过期检查
+  // 1) 形状：载荷可能来自反序列化而非类型系统
+  if (t === null || typeof t !== 'object') return false;
+  if (typeof t.token !== 'string') return false;
+  if (typeof t.issuedAt !== 'number' || typeof t.layer !== 'number' || typeof t.yaw !== 'number') {
+    return false;
+  }
+  if (t.mode !== 'single' && t.mode !== 'cardboard') return false;
+  // 2) token 非空且长度达标
+  if (t.token.length < 16) return false;
+  // 3) 过期检查
   if (now - t.issuedAt > HANDOFF_TOKEN_TTL_MS) return false;
-  // token 非空
-  if (!t.token || t.token.length < 16) return false;
+  // 4) 未来时间戳拒收（时钟回拨的合法漂移以 TTL 量级兜不住的，一律当脏载荷）
+  if (!Number.isFinite(t.issuedAt) || now < t.issuedAt) return false;
+  // 5) 几何字段必须是有限数，layer 为非负整数
+  if (!Number.isFinite(t.layer) || !Number.isFinite(t.yaw)) return false;
+  if (!Number.isInteger(t.layer) || t.layer < 0) return false;
   return true;
 }
 
