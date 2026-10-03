@@ -31,6 +31,9 @@ export const RITUAL_PLAYBACK_MIN = 0.25;
 export const RITUAL_PLAYBACK_MAX = 64;
 export const RITUAL_PLAYBACK_DEFAULT = 1;
 
+/** 仪式幕背景色单例（纯黑）：setRitualState 可重入，禁止逐次 new。 */
+const RITUAL_BACKGROUND_COLOR = new THREE.Color(0x000000);
+
 export interface RitualTimelineControllerOptions {
   readonly clock: RitualClock;
   readonly scene: THREE.Scene;
@@ -86,6 +89,10 @@ export class RitualTimelineController {
   ritualMode = false;
   ritualLitSeats = 0;
   wujiRevealState: 'hidden' | 'revealed' | 'silent' = 'hidden';
+  /** 最近一次实际落到场景的 #00 档位签名（revealed 档含 activeSeatId，换席需重放）。 */
+  private lastWujiAppliedSig: string | null = null;
+  /** 场景雾单例：随幕次只改 density，不重建。 */
+  private ritualFog: THREE.FogExp2 | null = null;
 
   constructor(options: RitualTimelineControllerOptions) {
     this.clock = options.clock;
@@ -134,9 +141,12 @@ export class RitualTimelineController {
     this.rig.guestTimer = 0;
     this.rig.guestIndex = 0;
     this.controls.enabled = false;
-    this.scene.background = new THREE.Color(0x000000);
+    // 复用同一 Color / FogExp2 实例：本方法在幕内可能被多次调用，逐帧 new 会堆积分配。
+    this.scene.background = RITUAL_BACKGROUND_COLOR;
     const v = ceremonyVisibility(phase);
-    this.scene.fog = new THREE.FogExp2(0x000000, v.fogDensity);
+    if (!this.ritualFog) this.ritualFog = new THREE.FogExp2(0x000000, v.fogDensity);
+    this.ritualFog.density = v.fogDensity;
+    this.scene.fog = this.ritualFog;
 
     if (this.ambientLight) this.ambientLight.intensity = v.ambientLight;
     if (this.sunLight) this.sunLight.intensity = v.sunLight;
@@ -173,15 +183,20 @@ export class RitualTimelineController {
     const changed = next !== this.wujiRevealState;
     this.wujiRevealState = next;
 
+    // 重放门控：与 AltarScene.setRitualTime 同约定——extinguishing/silent 幕的
+    // setRitualState 是全量重写，签名不变时不重放（本入口不接 activeSeatId，恒 null）。
+    const replay = next !== this.lastWujiAppliedSig;
+    this.lastWujiAppliedSig = next;
+
     if (next === 'silent') {
-      this.setRitualState('silence', SEAT_ID_MAX, null);
+      if (replay) this.setRitualState('silence', SEAT_ID_MAX, null);
       if (changed) {
         console.log(`[无极] #00 静默 t=${t.toFixed(0)}s ≥ ${WUJI_SILENCE_SEC}s(29:11)：除冷顶光外全坛寂灭`);
       }
       return;
     }
     if (next === 'revealed') {
-      this.setRitualState('extinguishing', SEAT_ID_MAX, null);
+      if (replay) this.setRitualState('extinguishing', SEAT_ID_MAX, null);
       if (changed) {
         console.log(`[无极] #00 显形 t=${t.toFixed(0)}s ≥ ${WUJI_REVEAL_SEC}s(24:00)：窄角冷色顶光点亮吸光体`);
       }

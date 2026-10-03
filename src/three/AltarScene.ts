@@ -153,6 +153,8 @@ export class AltarScene {
   private ritualLitSeats = 0;
   /** #00 显形档位：hidden(<24:00) / revealed(≥24:00) / silent(≥29:11)。用于幂等与一次性播报。 */
   private wujiRevealState: WujiRevealState = 'hidden';
+  /** 最近一次实际落到场景的 #00 档位签名（revealed 档含 activeSeatId，换席需重放）。 */
+  private lastWujiAppliedSig: string | null = null;
 
   // ── 公共入口 · 1800s 五幕时间轴 ────────────────────────────────────
   /** 仪式已运行秒数（仅在 ritualRunning 时随 dt 推进）。 */
@@ -884,10 +886,21 @@ export class AltarScene {
     const changed = next !== this.wujiRevealState;
     this.wujiRevealState = next;
 
+    // 重放门控：extinguishing / silence 幕的 setRitualState 是全量重写（49 花/双龙/光迹
+    // + Color/FogExp2 分配），1440s 后原实现每帧重放 ≈ 2 万次。签名含 activeSeatId：
+    // revealed 幕中换席（activeSeatId 变化）仍会刷新莲花高亮，其余帧全部跳过。
+    const sig = next === 'silent'
+      ? 'silent'
+      : next === 'revealed'
+        ? `revealed:${this.activeSeatId ?? 'none'}`
+        : 'hidden';
+    const replay = sig !== this.lastWujiAppliedSig;
+    this.lastWujiAppliedSig = sig;
+
     if (next === 'silent') {
       // 29:11 起：除 #00 的窄角冷色顶光外，全坛静默（不灰、不亮、不响）。
       // 走既有 silence 幕次：其余灯光归零、水/灯/石经收束，只留 wujiLight 一束。
-      this.setRitualState('silence', SEAT_ID_MAX, null);
+      if (replay) this.setRitualState('silence', SEAT_ID_MAX, null);
       if (changed) {
         console.log(`[无极] #00 静默 t=${t.toFixed(0)}s ≥ ${WUJI_SILENCE_SEC}s(29:11)：除冷顶光外全坛寂灭`);
       }
@@ -895,7 +908,7 @@ export class AltarScene {
     }
     if (next === 'revealed') {
       // 24:00 起：末段窄角冷色顶光点亮 #00 吸光体；其余景观按 extinguishing 收束。
-      this.setRitualState('extinguishing', SEAT_ID_MAX, this.activeSeatId);
+      if (replay) this.setRitualState('extinguishing', SEAT_ID_MAX, this.activeSeatId);
       if (changed) {
         console.log(`[无极] #00 显形 t=${t.toFixed(0)}s ≥ ${WUJI_REVEAL_SEC}s(24:00)：窄角冷色顶光点亮吸光体`);
       }
