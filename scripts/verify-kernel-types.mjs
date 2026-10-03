@@ -20,6 +20,19 @@ test('#26 工程实现不能提升为历史事实', () => {
   assert.throws(() => assertNoImplicitPromotion('工', '史'), /非法认识论提升/);
 });
 
+test('#26 非法认识论类型抛域错误而非 TypeError', () => {
+  // from 越界：必须给可诊断的域错误，而不是 promotions[from] 为 undefined 的 TypeError
+  assert.throws(
+    () => assertNoImplicitPromotion('神', '史'),
+    /未知认识论类型：神/
+  );
+  // to 越界：仍走「非法提升」路径，消息里带出实际值
+  assert.throws(
+    () => assertNoImplicitPromotion('史', '神'),
+    /非法认识论提升：史 → 神/
+  );
+});
+
 test('#26 依赖图导出', () => {
   const manifest = {
     id: 'test-scenario',
