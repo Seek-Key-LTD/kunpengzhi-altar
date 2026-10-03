@@ -1472,6 +1472,11 @@ export class AltarScene {
     if (this.destroyed) return;
     this.destroyed = true;
 
+    // L3：朗诵播放器与场景同生命周期。销毁链此前漏了它 —— 正在播的 Audio 元素
+    // 与四个回调闭包会把整个场景图钉在内存里，热更新/重进仪式逐次累积。
+    // dispose() 幂等（disposed 守卫），未播放时调用无副作用。
+    this.narration.dispose();
+
     const disposer = new SceneDisposer({
       scene: this.scene,
       renderer: this.renderer,

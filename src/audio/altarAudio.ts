@@ -276,6 +276,14 @@ class AltarAudioEngine {
     this.isInitialized = false;
     this.initPromise = null;
     this.appliedGains = null;
+    // L3：静音态随引擎一起复位。否则"静音状态下销毁 → 复进仪式"后
+    // isMuted 残留为 true，trigger* 全被拦，仪式永久无声（状态残留，非内存）。
+    this.isMuted = false;
+    try {
+      Tone.getDestination().mute = false;
+    } catch (err) {
+      console.warn('目的地静音态复位失败：', err);
+    }
   }
 }
 
