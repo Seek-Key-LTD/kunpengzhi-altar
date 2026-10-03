@@ -92,6 +92,9 @@ ok(AG.lookupPrevCredits(3, ranking).kind === 'value', 'E6b 有上期的合法席
 // 合法席位但本期无条目 → absent
 const onlySeat1 = { ...ranking, entries: [seat1] };
 deep(AG.lookupSeatHonor(5, onlySeat1), { kind: 'absent' }, 'E6c 合法席位本期无条目 → absent');
+// E6d：真源 JSON 缺字段（creditsPrev === undefined）同属「无上期快照」，不得以 value 逸出
+const noPrev = { ...ranking, entries: [{ ...seat2, creditsPrev: undefined }] };
+deep(AG.lookupPrevCredits(2, noPrev), { kind: 'absent' }, 'E6d creditsPrev 缺字段(undefined) → absent（缺项 ≠ value）');
 
 // ══════════════════════════════════════════════════════════════════════
 // E7–E8 · #00 永不入聚合条目
@@ -101,6 +104,9 @@ const agg = AG.aggregateHonor(ranking, anchors);
 eq(agg.badges.some((b) => b.seatIndex === A.WUJI_ANCHOR_ID), false, 'E7 badges 不含 seatIndex===0');
 eq(agg.badges.every((b) => A.isSeatId(b.seatIndex)), true, 'E8 badges 每条 seatIndex 均满足 isSeatId');
 ok(agg.badges.length <= A.SEAT_ID_MAX, 'E7b badges 长度 ≤ SEAT_ID_MAX(49)');
+// E7c：同席重复条目只产出一条 badge（契约由构造成立，不寄望入参干净）
+const dup = { ...ranking, entries: [seat1, seat1] };
+eq(AG.aggregateHonor(dup, anchors).badges.length, 1, 'E7c 同席重复条目只产出一条 badge');
 
 // ══════════════════════════════════════════════════════════════════════
 // E9–E10 · 分母 49 / 凭证 #00 排除

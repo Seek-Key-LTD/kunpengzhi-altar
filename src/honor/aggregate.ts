@@ -37,7 +37,7 @@ export interface HonorAggregate {
   /** 数组长度 ≤ 49；**整体不产出 #00 条目**。 */
   readonly badges: readonly HonorBadge[];
   readonly seatCount: number;
-  /** 非席位（含 #00 / 越界 / 非整数）或被锚点域排除的入参计数。 */
+  /** 非席位（含 #00 / 越界 / 非整数）、被锚点域排除、或同席重复（只取首条）的入参计数。 */
   readonly excludedCount: number;
 }
 
@@ -83,7 +83,9 @@ export function lookupPrevCredits(seatId: number, ranking: MonthlyRanking): Hono
   const reason = exclusionOf(seatId);
   if (reason) return { kind: 'excluded', reason };
   const entry = ranking.entries.find((e) => e.seatId === seatId);
-  if (!entry || entry.creditsPrev === null) return { kind: 'absent' };
+  // `== null` 同捕 null 与 undefined：接真源后 JSON 缺字段（undefined）是
+  // 「无上期快照」，不是 value —— 绝不让 undefined 冒充 number 逸出三态契约。
+  if (!entry || entry.creditsPrev == null) return { kind: 'absent' };
   return { kind: 'value', value: entry.creditsPrev };
 }
 
@@ -101,6 +103,7 @@ export function aggregateHonor(
   }
 
   const badges: HonorBadge[] = [];
+  const seenSeats = new Set<number>();
   let excludedCount = 0;
   for (const entry of ranking.entries) {
     // E7/E8：#00 与非席位一律不产出（不投影、不补 0）。
@@ -108,6 +111,13 @@ export function aggregateHonor(
       excludedCount += 1;
       continue;
     }
+    // 同席重复条目只取首条（与 lookupSeatHonor 的 find 首条语义一致），
+    // 使契约「badges ≤ 49、每席恰一条」由构造成立，不寄望于入参干净。
+    if (seenSeats.has(entry.seatId)) {
+      excludedCount += 1;
+      continue;
+    }
+    seenSeats.add(entry.seatId);
     // 花名制红线（T5）：管理面违规即失败，不静默。
     assertPublicPersonalName(entry.node, `席位 ${entry.seatId} 花名`);
     badges.push({
