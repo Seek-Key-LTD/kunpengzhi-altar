@@ -41,7 +41,10 @@ export function buildWaterWaterway(
   waterLine.geometry.setDrawRange(0, 0);
   waterworksGroup.add(waterLine);
 
-  const particleCount = 280;
+  // 槽位 = 49 席：DualDragonRig.animateParticles 每帧只定位/绘制
+  // min(lit, pathLen, count) ≤ 49 枚水珠（每已触发席一枚），多出来的槽位
+  // 永远进不了 drawRange，纯属死分配。
+  const particleCount = DRAGON_SEAT_COUNT;
   const particleGeo = new THREE.BufferGeometry();
   const positions = new Float32Array(particleCount * 3);
   const colors = new Float32Array(particleCount * 3);
@@ -95,7 +98,8 @@ export function buildSoundWaterway(
   scene.add(soundLine);
 
   const soundParticleGeo = new THREE.BufferGeometry();
-  const soundParticlePositions = new Float32Array(96 * 3);
+  // 同上：音龙粒子每帧也只画 min(lit, 49) 枚，槽位按 49 席收敛。
+  const soundParticlePositions = new Float32Array(DRAGON_SEAT_COUNT * 3);
   soundParticleGeo.setAttribute('position', new THREE.BufferAttribute(soundParticlePositions, 3));
   const soundParticleMat = new THREE.PointsMaterial({
     color: 0xe9d5ff,
