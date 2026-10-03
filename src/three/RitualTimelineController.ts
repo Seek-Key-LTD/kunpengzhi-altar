@@ -20,7 +20,7 @@ import {
   SEAT_ID_MAX
 } from '../types/altar';
 import { broadcastStateAt } from '../data/broadcastSchedule';
-import { ceremonyVisibility } from '../data/ceremonyVisibility';
+import { ceremonyVisibility, type CeremonyVisibility } from '../data/ceremonyVisibility';
 import type { RitualClock } from './RitualClock';
 import type { CameraRig } from './CameraRig';
 import type { DualDragonRig } from './DualDragonRig';
@@ -30,9 +30,6 @@ import type { StarshipRig } from './StarshipRig';
 export const RITUAL_PLAYBACK_MIN = 0.25;
 export const RITUAL_PLAYBACK_MAX = 64;
 export const RITUAL_PLAYBACK_DEFAULT = 1;
-
-/** 仪式幕背景色单例（纯黑）：setRitualState 可重入，禁止逐次 new。 */
-const RITUAL_BACKGROUND_COLOR = new THREE.Color(0x000000);
 
 export interface RitualTimelineControllerOptions {
   readonly clock: RitualClock;
@@ -91,8 +88,25 @@ export class RitualTimelineController {
   wujiRevealState: 'hidden' | 'revealed' | 'silent' = 'hidden';
   /** 最近一次实际落到场景的 #00 档位签名（revealed 档含 activeSeatId，换席需重放）。 */
   private lastWujiAppliedSig: string | null = null;
-  /** 场景雾单例：随幕次只改 density，不重建。 */
-  private ritualFog: THREE.FogExp2 | null = null;
+
+  // ── 每帧零分配 ──────────────────────────────────────────────────────
+  // setRitualState 在 extinguishing（1440→1751）与 silence（1751→1800）两幕会被
+  // setRitualTime **逐帧**调用（#00 阈值结算是唯一时间注入点）。早先每帧
+  // `new THREE.Color` + `new THREE.FogExp2` + ceremonyVisibility 对象，一轮仪式
+  // 仅这两幕就白产 ~460s×fps 个堆对象。背景色恒黑、雾型恒 FogExp2，故复用同一
+  // 实例只改 density；visibility 纯映射按幕缓存（五幕各一份）。
+  private readonly blackBackground = new THREE.Color(0x000000);
+  private readonly ritualFog = new THREE.FogExp2(0x000000, 0.006);
+  private readonly visibilityByPhase = new Map<RitualPhase, CeremonyVisibility>();
+
+  private visibilityFor(phase: RitualPhase): CeremonyVisibility {
+    let v = this.visibilityByPhase.get(phase);
+    if (!v) {
+      v = ceremonyVisibility(phase);
+      this.visibilityByPhase.set(phase, v);
+    }
+    return v;
+  }
 
   constructor(options: RitualTimelineControllerOptions) {
     this.clock = options.clock;
@@ -142,9 +156,8 @@ export class RitualTimelineController {
     this.rig.guestIndex = 0;
     this.controls.enabled = false;
     // 复用同一 Color / FogExp2 实例：本方法在幕内可能被多次调用，逐帧 new 会堆积分配。
-    this.scene.background = RITUAL_BACKGROUND_COLOR;
-    const v = ceremonyVisibility(phase);
-    if (!this.ritualFog) this.ritualFog = new THREE.FogExp2(0x000000, v.fogDensity);
+    this.scene.background = this.blackBackground;
+    const v = this.visibilityFor(phase);
     this.ritualFog.density = v.fogDensity;
     this.scene.fog = this.ritualFog;
 
@@ -219,7 +232,9 @@ export class RitualTimelineController {
     this.clock.phase = ritualPhaseAt(startSec);
     this.clock.namingLitSeats = -1;
     this.setRitualTime(startSec);
-    this.setRitualState(this.clock.phase, 0, null);
+    // litSeats 按接续时刻的稳态席数落位（与 AltarScene.startRitual 同口径）：
+    // 直播中段入场时恒置 0 会让 lanterns 等后段各幕停在空坛且无逐帧结算点可救。
+    this.setRitualState(this.clock.phase, ritualLitSeatsAt(startSec), null);
     this.onKickAudio();
   }
 

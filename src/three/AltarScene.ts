@@ -26,7 +26,8 @@ import {
 } from '../data/dualDragon';
 import {
   CELL,
-  PYRAMID_HALF
+  PYRAMID_HALF,
+  PYRAMID_TOP
 } from '../data/altarGeometry';
 import { ImperialSealObject } from './relic/ImperialSealObject';
 import { CameraRig } from './CameraRig';
@@ -938,9 +939,14 @@ export class AltarScene {
     this.ritualClock.elapsed = startSec;
     this.ritualClock.phase = ritualPhaseAt(startSec);
     this.ritualClock.namingLitSeats = -1;
-    // 先归到 #00「未显形」档（<24:00），再落到初幕 abyss（黑场、litSeats=0）。
+    // 先归到 #00「未显形」档（<24:00），再落到初幕。
+    // litSeats 不能恒置 0：直播中段入场（OPT-1 广播接续）时 startSec 可能落在
+    // lanterns/extinguishing/silence 幕 —— 落 0 会让命名/走马灯各幕的派生视觉
+    // （光迹/双龙/繁花）停在空坛，且 lanterns 幕没有逐帧结算点能把它救回来
+    // （naming 有 litSeats 台阶刷新，lanterns 只在换幕时写一次）。按接续时刻
+    // 的稳态席数落位：abyss=0、naming=当时已点席数、其后各幕=49。
     this.setRitualTime(startSec);
-    this.setRitualState(this.ritualClock.phase, 0, null);
+    this.setRitualState(this.ritualClock.phase, ritualLitSeatsAt(startSec), null);
     this.kickAudio();
   }
 
@@ -1043,6 +1049,11 @@ export class AltarScene {
     // #4 五阶段音频包络：与幕次**同源**（ritualPhaseAt），逐帧落到三条声链
     // （水声 / 翻斗链条 / 低频空间混响）。silence 幕三层归零（1751→1800 恰 49s）。
     altarAudio.applyPhaseEnvelope(phase, phaseProgress(this.ritualClock.elapsed));
+
+    // 朗诵音量同源接续：RitualNarration 的契约是「仪式秒数由既有时间轴逐帧喂入，
+    // 音量 = envelopeAt(sec).water」。本类持有朗诵实例却从未喂秒 —— ritualSec
+    // 恒 0 ⟹ envelopeAt(0).water = 0 ⟹ 一旦 startLanternNarration 起播就是静音。
+    this.narration.setRitualTime(this.ritualClock.elapsed);
   }
 
   /**
@@ -1322,9 +1333,13 @@ export class AltarScene {
     }
     if (this.fountainParticles) {
       const posAttr = this.fountainParticles.geometry.attributes.position as THREE.BufferAttribute;
+      // 回收带必须与 WujiFountainBuilder 的生成带同源：坛顶 [PYRAMID_TOP+0.5, PYRAMID_TOP+4.5]。
+      // 此前硬编码 [7.2, 11.2] 是七级方坛重建前的旧竖井几何残留——粒子会落进坛体中部变成无源悬雨。
+      const fountainFloorY = PYRAMID_TOP + 0.5;
+      const fountainRespawnY = PYRAMID_TOP + 4.5;
       for (let i = 0; i < posAttr.count; i++) {
         let y = posAttr.getY(i) - 0.03;
-        if (y < 7.2) y = 11.2;
+        if (y < fountainFloorY) y = fountainRespawnY;
         posAttr.setY(i, y);
       }
       posAttr.needsUpdate = true;
@@ -1466,6 +1481,14 @@ export class AltarScene {
   public destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    // 朗诵播放器持有游离的 HTMLAudioElement（不在场景图内、不归 SceneDisposer 管）：
+    // 不拆的话销毁后音频会继续播、元素上的 ended/error/timeupdate 监听还会
+    // 继续把回调打进已销毁的场景（onChapterStart → focusTeaLantern → rig…）。
+    this.narration.dispose();
+    this.lanternChoreographyActive = false;
+    // 演示循环一并停表：状态机虽无计时器，停掉才是销毁语义的对称收口。
+    this.stopDemo();
 
     const disposer = new SceneDisposer({
       scene: this.scene,

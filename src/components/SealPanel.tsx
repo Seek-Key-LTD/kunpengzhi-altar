@@ -10,7 +10,7 @@
 // · 断代的史事注脚（SealEraLayer.note）**不在本面板直接展示**：
 //   展示层不得自动承载史学论断，要点开合规弹窗由 director 主动唤出。
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Gem, Hammer, Stamp, Crosshair, ScrollText, Lock } from 'lucide-react';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import type { AltarCapabilities } from '../types/altar';
@@ -52,6 +52,26 @@ export const SealPanel: React.FC<SealPanelProps> = ({
   const era: SealEra = state?.era ?? 'qin';
   const exploded = state?.exploded_progress ?? 0;
   const stampCount = state?.stamp_count ?? 0;
+
+  // ── 拆解滑杆的受控回显 ──────────────────────────────────────────────
+  // value 若直接用 10Hz 轮询值：拖动时 onChange 只把意图命令式下发给 3D，
+  // React 侧要等下一个轮询 tick（≤100ms）才追上，期间受控 input 会被
+  // stale value 拉回，拖动肉眼可见地回弹。拖动期间用本地回显值接管：
+  // · 轮询值追平回显值 → 3D 已确认，交还真源（正常路径，≤100ms）；
+  // · 250ms 兜底引信 → 若有别的写入方动了进度（如同时点了「合」归零），
+  //   回显最多滞留 250ms 就放还给真源，不会永久漂移。
+  const [dragEcho, setDragEcho] = useState<number | null>(null);
+  const polledValue = Math.round(exploded * 100);
+
+  useEffect(() => {
+    if (dragEcho === null) return;
+    if (polledValue === dragEcho) {
+      setDragEcho(null);
+      return;
+    }
+    const fuse = window.setTimeout(() => setDragEcho(null), 250);
+    return () => window.clearTimeout(fuse);
+  }, [polledValue, dragEcho]);
 
   const modeButtons: Array<{ id: SealMode; label: string; enabled: boolean; hint: string }> = [
     { id: 'normal', label: '合', enabled: true, hint: '复原为完整一尊' },
@@ -156,9 +176,14 @@ export const SealPanel: React.FC<SealPanelProps> = ({
             type="range"
             min={0}
             max={100}
-            value={Math.round(exploded * 100)}
+            value={dragEcho ?? polledValue}
             disabled={!caps.sealExploded}
-            onChange={(e) => onExplodedProgress(Number(e.target.value) / 100)}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (!Number.isFinite(v)) return;
+              setDragEcho(v);
+              onExplodedProgress(v / 100);
+            }}
             className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none accent-amber-400 disabled:opacity-30"
           />
         </div>

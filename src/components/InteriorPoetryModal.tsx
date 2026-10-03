@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SEASON1_POEMS, SeasonPoem } from '../data/season1_poems';
 import { X, ChevronLeft, ChevronRight, ScrollText, Sparkles } from 'lucide-react';
 
@@ -28,6 +28,19 @@ export const InteriorPoetryModal: React.FC<InteriorPoetryModalProps> = ({
     if (isOpen) setActiveIdx(indexOfSeason(initialSeasonId));
   }, [isOpen, initialSeasonId]);
 
+  // Esc 可关 + 打开时把焦点交给弹窗本体（键盘可达性）。
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    dialogRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // 防御：数据面为空或下标越界时不渲染，而不是让 currentPoem 解引用崩溃。
@@ -36,7 +49,14 @@ export const InteriorPoetryModal: React.FC<InteriorPoetryModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-lg animate-fade-in">
-      <div className="bg-slate-900 border border-sky-500/40 rounded-3xl w-full max-w-4xl shadow-2xl p-6 md:p-8 text-slate-200 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="金字塔中空地宫 · 第一季诗词歌赋经卷"
+        className="bg-slate-900 border border-sky-500/40 rounded-3xl w-full max-w-4xl shadow-2xl p-6 md:p-8 text-slate-200 relative max-h-[90vh] overflow-y-auto custom-scrollbar outline-none"
+      >
         {/* Close Button */}
         <button
           onClick={onClose}

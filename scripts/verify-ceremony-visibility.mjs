@@ -49,4 +49,34 @@ assert.ok(sil.isDark, 'silence 暗幕');
 assert.equal(sil.outerShellVisible, true, 'silence 外壳留');
 assert.equal(sil.wujiLightIntensity, 2.4, 'silence 无极点光 2.4');
 
+// ── 与唯一权威同源：用 altar.ts 的 ritualPhaseAt 全程驱动本映射 ──────
+// RitualPhase 已收口为 types/altar.ts 的唯一定义（import type），
+// 这里用 altar 包里产出的全部幕次实跑一遍，证明两份 bundle 的枚举在运行时同一集合。
+const execFileSync2 = (await import('node:child_process')).execFileSync;
+const tmp2 = mkdtempSync(resolve(tmpdir(), 'vis-altar-'));
+execFileSync2(resolve(ROOT, 'node_modules/.bin/esbuild'), [
+  resolve(ROOT, 'src/types/altar.ts'),
+  '--bundle', '--platform=node', '--format=esm', '--log-level=warning',
+  `--outfile=${resolve(tmp2, 'altar.mjs')}`
+], { stdio: ['ignore', 'ignore', 'inherit'] });
+const A = await import(pathToFileURL(resolve(tmp2, 'altar.mjs')).href);
+rmSync(tmp2, { recursive: true, force: true });
+
+const seen = new Set();
+for (let s = 0; s < A.RITUAL_TOTAL_SEC; s += 7) {
+  const phase = A.ritualPhaseAt(s);
+  seen.add(phase);
+  const v = V.ceremonyVisibility(phase);
+  for (const [k, val] of Object.entries(v)) {
+    if (typeof val === 'number') {
+      assert.ok(Number.isFinite(val), `${phase}.${k} 必须是有限数（实际 ${val}）`);
+    }
+  }
+}
+assert.deepEqual(
+  [...seen].sort(),
+  ['abyss', 'extinguishing', 'lanterns', 'naming', 'silence'].sort(),
+  'ceremonyVisibility 必须恰好消费 altar.ts 的五幕全集'
+);
+
 console.log('ceremony-visibility: 5 幕次显隐映射断言通过');

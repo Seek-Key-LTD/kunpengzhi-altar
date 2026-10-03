@@ -104,6 +104,8 @@ export class AltarWaterLiftEngine {
    * 这里按文档补回反冲，使死点相变成为周期事件。
    */
   readonly recoilSpeed: number;
+  /** 构造时注入的初始水量：reset() 复位同源，避免构造/重置两套常数漂移。 */
+  private readonly initialWater: number;
 
   public state: WaterLadderState;
   public onPhaseTransition?: WaterLiftPhaseCallback;
@@ -141,6 +143,7 @@ export class AltarWaterLiftEngine {
     this.recoilSpeed = options?.recoilSpeed ?? 3.4; // 整定到 RFC §6：半周期 T/2 ≈ 2.00s
 
     const initWater = options?.initialWater ?? 10.0;
+    this.initialWater = initWater;
     const initialZ = 0.05; // 引入微扰打破死点随遇平衡
 
     this.state = {
@@ -284,8 +287,8 @@ export class AltarWaterLiftEngine {
   public reset(perturbation = 0.08): void {
     this.state.z = perturbation;
     this.state.v = 0.0;
-    this.state.mA = 10.0;
-    this.state.mB = 10.0;
+    this.state.mA = this.initialWater;
+    this.state.mB = this.initialWater;
     this.state.yA = this.strokeLimit + perturbation;
     this.state.yB = this.strokeLimit - perturbation;
     this.topTriggeredA = false;

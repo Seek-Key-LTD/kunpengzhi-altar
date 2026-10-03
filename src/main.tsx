@@ -1,7 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import RelicViewer from './RelicViewer';
 import './index.css';
 
 // ── 路由：hash，不用 query ───────────────────────────────────────────
@@ -14,6 +13,10 @@ import './index.css';
 // 公共 index chunk 里读不到 `altar.director.confirmed` /「导演 / 认证台」等工程文案
 // （访客 view-source 公共包也读不到）。`#/director` 行为不变，仅多一次按需拉取。
 const DirectorApp = lazy(() => import('./director/DirectorApp'));
+// perf(bundle) · 玉玺查看器同样按路由（pathname=/relic-viewer）懒加载：
+// 公共页 #/ 不渲染它，却曾为它的 three 场景代码付体积税。与 DirectorApp 同一
+// 边界策略——按需拉取，加载期间留白（查看器页是独立静态入口，非公共首屏）。
+const RelicViewer = lazy(() => import('./RelicViewer'));
 
 function currentRoute(): 'director' | 'public' {
   const first = window.location.hash.replace(/^#\/?/, '').split('/')[0];
@@ -21,7 +24,12 @@ function currentRoute(): 'director' | 'public' {
 }
 
 const Root: React.FC = () => {
-  if (window.location.pathname === '/relic-viewer') return <RelicViewer />;
+  if (window.location.pathname === '/relic-viewer')
+    return (
+      <Suspense fallback={null}>
+        <RelicViewer />
+      </Suspense>
+    );
   const [route, setRoute] = React.useState(currentRoute);
 
   React.useEffect(() => {

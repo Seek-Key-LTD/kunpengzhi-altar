@@ -19,7 +19,8 @@
  */
 
 export const BROADCAST_START_HOUR = 23; // 23:00（Asia/Shanghai 挂钟）
-export const BROADCAST_END_HOUR = 1; // 01:00（次日，Asia/Shanghai 挂钟）
+// 广播窗终点（次日 01:00）不设常量：窗长 = SHOW_COUNT × SHOW_DURATION_SEC 推导，
+// 另设 BROADCAST_END_HOUR 会成为第二口径（改场数/时长后它静默失真仍能编译）。
 export const SHOW_DURATION_SEC = 1800; // 30 分钟
 export const SHOW_COUNT = 4;
 

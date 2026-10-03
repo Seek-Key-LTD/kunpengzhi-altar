@@ -1,12 +1,13 @@
 // 传国玉玺 · 规格常量（尺寸 / 断代 / 拆解 / 材质 / 机位）
 //
 // ── 尺寸换算 ────────────────────────────────────────────────────────
-// 全坛唯一建材是立方砖 BRICK = 1.5 = 半格，故取
-//     1 寸 = BRICK / 2 = 0.75
-// 史载传国玉玺「方四寸，高三寸六」：
-//     方四寸 = 4 × 0.75 = 3.0 = CELL      ← 正好与祭坛一格等宽
-//     高三寸六 = 3.6 × 0.75 = 2.7
-// 一方印压下去，不多不少，正好盖住一格 —— 这不是巧合，是坛的度量衡先定了。
+// 全坛唯一建材是立方砖 BRICK = 3.0（一格 = CELL = 3.0），故取
+//     1 寸 = SEAL_CUN = BRICK / 2 = 1.5
+// 史载传国玉玺「方四寸，高三寸六」，印面 : 通高 = 4 : 3.6 的**比例**严格照史载；
+// 绝对尺度按 1 寸 = 半砖（1.5）取：
+//     方四寸 = 4 × 1.5 = 6.0（= 2 格）
+//     高三寸六 = 3.6 × 1.5 = 5.4
+// （印面通高比 5.4 / 6.0 = 0.9 = 3.6/4，史载比例不随绝对尺度漂移。）
 //
 // ── 位置 ────────────────────────────────────────────────────────────
 // 玉玺悬浮于坛心正上方 PYRAMID_TOP + 2.2 处（= 12.7），作「悬浮玺台」。
@@ -16,25 +17,25 @@ import { BRICK, PLINTH_HALF, PYRAMID_HALF, PYRAMID_TOP } from './altarGeometry';
 import type { SealEra, SealEraLayer, SealLod } from '../types/relic';
 
 /** 一寸（世界单位） */
-export const SEAL_CUN = BRICK / 2; // 0.75
+export const SEAL_CUN = BRICK / 2; // 1.5（半砖）
 
-/** 印面边长：方四寸 = 3.0 = 一格 */
-export const SEAL_SIDE = SEAL_CUN * 4; // 3.0（= CELL）
-/** 通高：三寸六 = 2.7 */
-export const SEAL_HEIGHT = SEAL_CUN * 3.6; // 2.7
+/** 印面边长：方四寸 = 6.0（= 2 格） */
+export const SEAL_SIDE = SEAL_CUN * 4; // 6.0
+/** 通高：三寸六 = 5.4（印面 : 通高 = 4 : 3.6 照史载） */
+export const SEAL_HEIGHT = SEAL_CUN * 3.6; // 5.4
 
 /** 印台（含印面）高度：通高的 55% */
-export const SEAL_BODY_HEIGHT = SEAL_HEIGHT * 0.55; // 1.485
+export const SEAL_BODY_HEIGHT = SEAL_HEIGHT * 0.55; // 2.97
 /** 五龙钮高度：通高的 45% */
-export const SEAL_KNOB_HEIGHT = SEAL_HEIGHT * 0.45; // 1.215
+export const SEAL_KNOB_HEIGHT = SEAL_HEIGHT * 0.45; // 2.43
 
 /** 金镶补角的边长（约 1.2 寸） */
-export const SEAL_GOLD_CORNER_SIZE = SEAL_CUN * 1.2; // 0.9
+export const SEAL_GOLD_CORNER_SIZE = SEAL_CUN * 1.2; // 1.8
 /** 印台倒角半径 */
-export const SEAL_BODY_BEVEL = SEAL_CUN * 0.08; // 0.06
+export const SEAL_BODY_BEVEL = SEAL_CUN * 0.08; // 0.12
 
-/** 悬浮中心高程：坛顶再抬 2.2 */
-export const SEAL_HOVER_Y = PYRAMID_TOP + 2.2; // 12.7
+/** 悬浮中心高程：坛顶（PYRAMID_TOP = 21）再抬 2.2 */
+export const SEAL_HOVER_Y = PYRAMID_TOP + 2.2; // 23.2
 /** 自转速度（转/分）—— 慢，是供着，不是甩着 */
 export const SEAL_SPIN_RPM = 0.35;
 /** 悬浮呼吸幅度（世界单位） */
@@ -110,12 +111,14 @@ export const SEAL_EXPLODE = {
  * 真实 GLB 资产的拆解位移（与占位几何不同）。
  *
  * 真资产里的燕尾槽是**竖直贯穿**整条印台（这是倒勾的本义：横向拔不出来，
- * 只能顺着槽拔），所以金角的拆解必须沿 +Y 滑出，行程要 ≥ 印台高 1.485，
- * 否则拔不出槽口、穿模。
+ * 只能顺着槽拔；tools/seal-asset/seal_mechanical.scad 里槽体
+ * `linear_extrude(height = BH)` 与印台等高），所以金角的拆解必须沿 +Y 滑出，
+ * 行程必须 ≥ 印台高 SEAL_BODY_HEIGHT，否则拔不出槽口、金角仍嵌在玉体里穿模。
+ * 行程由 SEAL_BODY_HEIGHT **直接推导**（不再写死数值），尺度无论怎么翻倍都不会脱钩。
  */
 export const SEAL_GLB_EXPLODE = {
-  /** 金角沿 +Y 滑出行程（须 ≥ SEAL_BODY_HEIGHT = 1.485） */
-  cornerLift: 1.75,
+  /** 金角沿 +Y 滑出行程：恒等于印台高（拉出后金角底面与印台顶面齐平，完整脱槽） */
+  cornerLift: SEAL_BODY_HEIGHT,
   /** 滑出时带一点外倾，让人看出"拔"的方向而不是"飘" */
   cornerTiltOut: 0.18,
   /** 五龙钮整体抬升（先摘钮，再拔角，工序不能反） */
@@ -130,7 +133,7 @@ export const SEAL_STAMP = {
   duration: 1.35,
   /** 触地（出印）发生在进度 0.45 处 */
   contactAt: 0.45,
-  /** 印痕边长 —— 印面方四寸，落到地上正好一格 */
+  /** 印痕边长 —— 印面方四寸（= SEAL_SIDE = 2 格，见文件头尺寸换算） */
   size: SEAL_SIDE,
   /** 淡入（秒） */
   fadeIn: 0.28,
