@@ -11,9 +11,11 @@ export function buildPrimeDiagonalLines(
   primeLinesGroup: THREE.Group
 ): void {
   const primes = seatEvents.filter((e) => e.is_prime);
-  const diagLineMat = new THREE.LineBasicMaterial({
+  // 逐线独立材质：AltarScene 渲染循环对每条线写 material.opacity 做相位脉冲
+  // （sin(elapsed*3 + idx)），共享单材质时 N 次写入只剩最后一次生效、脉冲意图失效。
+  // 线本身仍是逐条 draw call，材质开销可忽略；WebGL 下 linewidth 恒 1px，删除死参数。
+  const baseMat = new THREE.LineBasicMaterial({
     color: 0x38bdf8,
-    linewidth: 2,
     transparent: true,
     opacity: 0.55
   });
@@ -26,7 +28,7 @@ export function buildPrimeDiagonalLines(
         const v1 = getSeatWorldPos(p1);
         const v2 = getSeatWorldPos(p2);
         const geo = new THREE.BufferGeometry().setFromPoints([v1, v2]);
-        const line = new THREE.Line(geo, diagLineMat);
+        const line = new THREE.Line(geo, baseMat.clone());
         primeLinesGroup.add(line);
       }
     }
