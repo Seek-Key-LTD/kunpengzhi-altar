@@ -14,7 +14,7 @@
 // 拓印 → authenticated 起；拆解与断代 → 仅 director。
 // 断代的史事注脚只在合规弹窗里由 director 主动唤出，不自动进公共画面。
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AltarScene } from '../three/AltarScene';
 import { INITIAL_SPIRAL_EVENTS } from '../data/spiral_events';
 import { seatPresentation } from './seatPresentation';
@@ -157,12 +157,20 @@ export const DirectorApp: React.FC = () => {
   // 公共事件（坐标/音高/时序） + 导演台讲解文案（display_name/message_excerpt/…）按需合并。
   // 下标以数据长度为准（不硬编码 48/49，免得改场数后静默失真）；
   // 空数据时 activeEvent 为 null，下面的渲染守卫让席位面板整体让位，而不是解引用崩溃。
-  const seatCount = INITIAL_SPIRAL_EVENTS.length;
-  const baseEvent =
-    seatCount > 0
-      ? INITIAL_SPIRAL_EVENTS[Math.min(seatCount - 1, Math.max(0, activeSeatId - 1))]
-      : undefined;
-  const activeEvent = baseEvent ? { ...baseEvent, ...seatPresentation(baseEvent) } : null;
+  // （合并裁决：mbp useMemo 壳收敛 10Hz 轮询重渲染 —— 讲解文案只随席位变，
+  // 缓存住别在拓印/拆解读数驱动的每轮重渲染里重造对象。）
+  const activeEvent = useMemo(() => {
+    const seatCount = INITIAL_SPIRAL_EVENTS.length;
+    const baseEvent =
+      seatCount > 0
+        ? INITIAL_SPIRAL_EVENTS[Math.min(seatCount - 1, Math.max(0, activeSeatId - 1))]
+        : undefined;
+    return baseEvent ? { ...baseEvent, ...seatPresentation(baseEvent) } : null;
+  }, [activeSeatId]);
+
+  const handlePlaySeatSound = useCallback(() => {
+    if (activeEvent) altarAudio.triggerSeatEvent(activeEvent);
+  }, [activeEvent]);
 
   // ── 未确认：先挡一道 ───────────────────────────────────────────────
   if (!entered) {
@@ -218,7 +226,7 @@ export const DirectorApp: React.FC = () => {
       {activeEvent && (
         <SeatDetailPanel
           event={activeEvent}
-          onPlaySound={() => altarAudio.triggerSeatEvent(activeEvent)}
+          onPlaySound={handlePlaySeatSound}
         />
       )}
 
