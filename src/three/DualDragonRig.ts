@@ -19,6 +19,13 @@ export class DualDragonRig {
   private waterBead: THREE.Group | null = null;
   private soundBead: THREE.Group | null = null;
 
+  /**
+   * 线体 drawRange 缓存：几何顶点数只读一次（拓扑不变），
+   * lit/可见性/全段标记均未变化时跳过 setDrawRange——原实现每帧重读 attribute 并重算。
+   */
+  private waterDraw = { count: -1, lit: -1, visible: false, full: false };
+  private soundDraw = { count: -1, lit: -1, visible: false, full: false };
+
   setWaterPath(path: THREE.Vector3[]): void {
     this.waterPathPoints = path;
   }
@@ -41,6 +48,9 @@ export class DualDragonRig {
     this.waterLine = waterLine;
     this.soundLine = soundLine;
     this.soundParticles = soundParticles;
+    // 防换几何后缓存失效：重置 drawRange 缓存
+    this.waterDraw = { count: -1, lit: -1, visible: false, full: false };
+    this.soundDraw = { count: -1, lit: -1, visible: false, full: false };
   }
 
   setFrontBeads(water: THREE.Group | null, sound: THREE.Group | null): void {
@@ -51,14 +61,22 @@ export class DualDragonRig {
   private applyVisibility(lit: number, visible: boolean, fullLine: boolean): void {
     if (this.waterParticles) this.waterParticles.visible = visible;
     if (this.waterLine) {
-      const count = this.waterLine.geometry.attributes.position.count;
       this.waterLine.visible = visible;
-      this.waterLine.geometry.setDrawRange(0, fullLine ? count : Math.round(count * (lit / SEAT_ID_MAX)));
+      const c = this.waterDraw;
+      if (c.count < 0) c.count = this.waterLine.geometry.attributes.position.count; // 顶点数拓扑不变，只读一次
+      if (c.lit !== lit || c.visible !== visible || c.full !== fullLine) {
+        c.lit = lit; c.visible = visible; c.full = fullLine;
+        this.waterLine.geometry.setDrawRange(0, fullLine ? c.count : Math.round(c.count * (lit / SEAT_ID_MAX)));
+      }
     }
     if (this.soundLine) {
-      const count = this.soundLine.geometry.attributes.position.count;
       this.soundLine.visible = visible;
-      this.soundLine.geometry.setDrawRange(0, fullLine ? count : lit);
+      const c = this.soundDraw;
+      if (c.count < 0) c.count = this.soundLine.geometry.attributes.position.count; // 顶点数拓扑不变，只读一次
+      if (c.lit !== lit || c.visible !== visible || c.full !== fullLine) {
+        c.lit = lit; c.visible = visible; c.full = fullLine;
+        this.soundLine.geometry.setDrawRange(0, fullLine ? c.count : lit);
+      }
     }
     if (this.soundParticles) this.soundParticles.visible = visible;
   }
@@ -100,7 +118,8 @@ export class DualDragonRig {
 
   /** 每帧沿路径逐席 animate 双龙粒子位置（水龙下潜 / 音龙上升）。 */
   animateParticles(elapsed: number, lit: number): void {
-    if (this.waterParticles && this.waterPathPoints.length > 0) {
+    // 幕间隐藏或 lit=0 时整体跳过：省 49 次 setXYZ 与 GPU 上传（visible 由 applyVisibility 按幕次写入）
+    if (this.waterParticles && this.waterParticles.visible && lit > 0 && this.waterPathPoints.length > 0) {
       const pAttr = this.waterParticles.geometry.attributes.position as THREE.BufferAttribute;
       const visible = Math.min(lit, this.waterPathPoints.length, pAttr.count);
       for (let i = 0; i < visible; i++) {
@@ -108,10 +127,14 @@ export class DualDragonRig {
         const drift = Math.sin(elapsed * 2.4 + i * 0.7) * 0.035;
         pAttr.setXYZ(i, node.x + drift, node.y + 0.08, node.z + drift * 0.6);
       }
+      // 只上传本帧实际写过的前 visible*3 个 float（r159+ 部分上传 API），不再整段上传
+      pAttr.clearUpdateRanges();
+      pAttr.addUpdateRange(0, visible * 3);
       pAttr.needsUpdate = true;
       this.waterParticles.geometry.setDrawRange(0, visible);
     }
-    if (this.soundParticles && this.soundPath.length > 0) {
+    // sound 同理：隐藏 / lit=0 时跳过逐点写入与上传
+    if (this.soundParticles && this.soundParticles.visible && lit > 0 && this.soundPath.length > 0) {
       const pAttr = this.soundParticles.geometry.attributes.position as THREE.BufferAttribute;
       const visible = Math.min(lit, this.soundPath.length, pAttr.count);
       for (let i = 0; i < visible; i++) {
@@ -119,6 +142,9 @@ export class DualDragonRig {
         const rise = Math.sin(elapsed * 1.8 + i * 0.5) * 0.02;
         pAttr.setXYZ(i, node.x, node.y + rise, node.z);
       }
+      // 只上传本帧实际写过的前 visible*3 个 float（r159+ 部分上传 API），不再整段上传
+      pAttr.clearUpdateRanges();
+      pAttr.addUpdateRange(0, visible * 3);
       pAttr.needsUpdate = true;
       this.soundParticles.geometry.setDrawRange(0, visible);
     }
