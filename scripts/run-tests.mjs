@@ -64,7 +64,9 @@ const SUITES = [
   // 内环壁碑 · 纯函数
   ['内环壁碑·纯函数', 'scripts/verify-stela-ring.mjs'],
   // 茶史五绝赋 · 十六章数据契约
-  ['茶史五绝赋·十六章数据契约', 'scripts/verify-tea-poem-16.mjs']
+  ['茶史五绝赋·十六章数据契约', 'scripts/verify-tea-poem-16.mjs'],
+  // src/three 优化回归：蝎子楔实例化 / 素数线材质独立 / 席位构建收编
+  ['优化回归（实例化/材质/席位）', 'scripts/verify-altar-opt-regression.mjs']
 ];
 
 for (const [name, rel] of SUITES) {
