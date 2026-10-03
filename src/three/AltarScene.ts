@@ -108,6 +108,13 @@ export class AltarScene {
   private rig!: CameraRig;
   private demo!: DemoDirector;
   private ritualClock!: RitualClock;
+  /**
+   * 本帧仪式时间轴的实际推进量（秒）——L2 跨域时序对齐用。
+   * 仪式运行态 = RitualClock 的 elapsed 差值（已含 rate 缩放与 1800s 封顶）；
+   * 非仪式态（工程直入/演示循环）= 墙钟 dt（保持既有行为）。
+   * waterLift / maglev 等物理耦合体以此推进，确保物理步进与 RitualTime 同域不漂移。
+   */
+  private ritualDeltaSec = 0;
   private mech!: MechanicsRig;
   private dragon!: DualDragonRig;
   private starship!: StarshipRig;
@@ -987,7 +994,13 @@ export class AltarScene {
    * setRitualState('extinguishing' | 'silence')。
    */
   private updateRitualTimeline(dt: number) {
-    if (!this.ritualClock.running) return;
+    // 跨域时序对齐（L2）：先记录本帧仪式时间轴的实际推进量，再推进。
+    const before = this.ritualClock.elapsed;
+    if (!this.ritualClock.running) {
+      // 非仪式态（工程直入 / 演示循环）：物理耦合体仍按墙钟推进，保持既有行为。
+      this.ritualDeltaSec = Number.isFinite(dt) ? dt : 0;
+      return;
+    }
     // dt 兜底：与同文件 setRitualTime 对齐 —— 非有限 dt 一律当 0。
     // 否则一次 NaN 会让 ritualElapsed 永久 NaN，仪式卡死在终幕、再不复位。
     const step = Number.isFinite(dt) ? dt : 0;
@@ -996,6 +1009,8 @@ export class AltarScene {
       RITUAL_TOTAL_SEC,
       this.ritualClock.elapsed + step * this.ritualClock.rate
     );
+    // 实际推进量（已含 rate 缩放与封顶）：物理耦合体与 RitualTime 同域的唯一来源。
+    this.ritualDeltaSec = this.ritualClock.elapsed - before;
 
     const phase = ritualPhaseAt(this.ritualClock.elapsed);
     if (phase !== this.ritualClock.phase) {
@@ -1329,17 +1344,20 @@ export class AltarScene {
     // 8. Flowers breathing
     this.lotus.update(elapsedTime, this.activeSeatId);
 
-    // 9. RFC-007 双体水梯：引擎驱动，北坡机关由此获得动力学
-    this.waterLift.update(dt);
+    // 9. RFC-007 双体水梯：引擎驱动，北坡机关由此获得动力学。
+    //    L2：步进量 = 仪式时间轴实际推进量（ritualDeltaSec），rate≠1 时物理与
+    //    RitualTime 同域不漂移（翻斗/黄钟林钟触发始终落在正确的仪式时刻）。
+    this.waterLift.update(this.ritualDeltaSec);
     this.syncWaterLiftVisual();
 
     // 9b. RFC-008 外环磁悬浮走马灯：引擎驱动回转/悬浮/声学击发。
     //     waterLiftSeismic 是北坡双桶撞簧的地脉震颤 —— 先衰减再喂给引擎，
     //     双桶每撞一次死点 → 走马灯受一次地脉震颤 → 触发声学击发。
     //     （地脉耦合链路一字未动；茶灯 1020s 门控只作用在**视觉转角**上。）
+    //     L2：与水梯同吃 ritualDeltaSec，耦合体族整体与仪式时间轴同域。
     this.updateLanternGate();
     this.waterLiftSeismic *= 0.92;
-    this.maglev.update(dt, this.waterLiftSeismic);
+    this.maglev.update(this.ritualDeltaSec, this.waterLiftSeismic);
     this.syncMaglevVisual();
 
     // 10. Auto patrol

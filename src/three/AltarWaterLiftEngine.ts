@@ -25,6 +25,11 @@ export type WaterLiftPhaseCallback = (
   tone: 'HUANG_ZHONG' | 'LIN_ZHONG'
 ) => void;
 
+/** 单个子步上限（神簧接触刚度下半隐式欧拉的稳定步长）。 */
+const MAX_SUBSTEP_SEC = 0.0165;
+/** 单次 update 总推进上界 = MAX_SUBSTEP_SEC × 16（CPU 上界；超界丢弃，有界滑步不发散）。 */
+const MAX_FRAME_SEC = MAX_SUBSTEP_SEC * 16;
+
 /**
  * #5 · 单条参数自检结果 —— 明确「哪一环 / 期望 / 实际」。
  * 供引擎建场时校验，也供受控失败日志样例与门禁断言直接调用。
@@ -157,15 +162,21 @@ export class AltarWaterLiftEngine {
 
   /**
    * 离散物理步推进（半隐式欧拉积分）
+   *
+   * 契约：dt 为正有限数时，**恰好推进 dt**（不再有隐藏的总步长帽）——
+   * 上游（AltarScene）把 RitualClock 的实际推进量缩放后喂进来做跨域时序对齐，
+   * 这里若悄悄截断，rate≠1 时物理就会相对仪式时间轴滑步。
+   * 稳定性由**子步上限**保证（每子步 ≤ MAX_SUBSTEP_SEC），而非截断总量。
    */
   public update(dt: number): void {
     // dt 自守卫：只接受正的有限数。0/负值会以负步长反向积分（能量凭空注入），
     // NaN/Infinity 会沿 z/v/m 扩散污染全部状态量 —— 与调用方的钳制无关，
     // 内核自己不依赖外部纪律（QA 观察条目同款建议，落为内核契约）。
     if (!Number.isFinite(dt) || dt <= 0) return;
-    // 限制单步最大时间步长以保证弹簧碰撞稳定性
-    const clampedDt = Math.min(dt, 0.033);
-    const subSteps = clampedDt > 0.016 ? 2 : 1;
+    // 单次 update 的总推进上界（CPU 上界）：= MAX_SUBSTEP_SEC × MAX_SUBSTEPS，
+    // 按 60fps、rate≤4 缩放后的帧 dt 足够；超界部分丢弃（有界滑步，不发散）。
+    const clampedDt = Math.min(dt, MAX_FRAME_SEC);
+    const subSteps = Math.max(1, Math.ceil(clampedDt / MAX_SUBSTEP_SEC));
     const subDt = clampedDt / subSteps;
 
     for (let step = 0; step < subSteps; step++) {
