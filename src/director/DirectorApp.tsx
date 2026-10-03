@@ -58,20 +58,37 @@ export const DirectorApp: React.FC = () => {
   const caps = ROLE_CAPABILITIES[role];
 
   // ── 建场 ───────────────────────────────────────────────────────────
+  // 弹窗互斥开启器：三块弹窗都是独立 boolean + fixed inset-0 遮罩，
+  // 若不互斥，3D 点击回调（点灯面 → 又点内壁刻）会叠出两层 z-50 遮罩，
+  // 关掉上层还露出下层，属于非法跃迁。开一块就收掉其余两块。
+  const openTeaLanterns = useCallback((chapter: number) => {
+    setComplianceOpen(false);
+    setInteriorOpen(false);
+    setInitialChapter(chapter);
+    setLanternsOpen(true);
+  }, []);
+
+  const openInteriorPoems = useCallback((seasonId: string) => {
+    setComplianceOpen(false);
+    setLanternsOpen(false);
+    setInitialSeasonId(seasonId);
+    setInteriorOpen(true);
+  }, []);
+
+  const openCompliance = useCallback(() => {
+    setLanternsOpen(false);
+    setInteriorOpen(false);
+    setComplianceOpen(true);
+  }, []);
+
   useEffect(() => {
     if (!entered || !containerRef.current) return;
     const altar = new AltarScene(
       containerRef.current,
       INITIAL_SPIRAL_EVENTS,
       (seatId) => setActiveSeatId(seatId),
-      (chapterIndex) => {
-        setInitialChapter(chapterIndex);
-        setLanternsOpen(true);
-      },
-      (seasonId) => {
-        setInitialSeasonId(seasonId);
-        setInteriorOpen(true);
-      }
+      openTeaLanterns,
+      openInteriorPoems
     );
     altarRef.current = altar;
     altar.setRole(role);
@@ -81,7 +98,7 @@ export const DirectorApp: React.FC = () => {
       altar.destroy();
       altarRef.current = null;
     };
-  }, [entered, role]);
+  }, [entered, role, openTeaLanterns, openInteriorPoems]);
 
   // ── 意图下发：面板只喊话，状态仍在 3D ───────────────────────────────
   const handleSetMode = useCallback((mode: SealMode) => altarRef.current?.setSealMode(mode), []);
@@ -93,9 +110,9 @@ export const DirectorApp: React.FC = () => {
     []
   );
   const handleOpenEraNote = useCallback(() => {
+    openCompliance();
     setEraNoteOpen(true);
-    setComplianceOpen(true);
-  }, []);
+  }, [openCompliance]);
 
   const handleChangeCameraMode = useCallback((mode: CameraMode) => {
     setCameraMode(mode);
@@ -103,12 +120,12 @@ export const DirectorApp: React.FC = () => {
   }, []);
 
   const handleTogglePatrol = useCallback(() => {
-    setIsPatrolling((prev) => {
-      const next = !prev;
-      altarRef.current?.setAutoPatrol(next);
-      return next;
-    });
-  }, []);
+    // 副作用不放进 setState updater：StrictMode 下 updater 会被双调，
+    // 命令式下发会跟着翻倍；updater 只做纯计算。
+    const next = !isPatrolling;
+    altarRef.current?.setAutoPatrol(next);
+    setIsPatrolling(next);
+  }, [isPatrolling]);
 
   const handleSelectSeat = useCallback((seatId: number) => {
     setActiveSeatId(seatId);
@@ -121,12 +138,10 @@ export const DirectorApp: React.FC = () => {
   }, []);
 
   const handleToggleMute = useCallback(() => {
-    setIsMuted((prev) => {
-      const next = !prev;
-      altarAudio.setMuted(next);
-      return next;
-    });
-  }, []);
+    const next = !isMuted;
+    altarAudio.setMuted(next);
+    setIsMuted(next);
+  }, [isMuted]);
 
   /** 入导演台：借这次点击手势把音频起起来（Tone.js 必须由用户手势启动） */
   const enter = async () => {
@@ -140,8 +155,14 @@ export const DirectorApp: React.FC = () => {
   };
 
   // 公共事件（坐标/音高/时序） + 导演台讲解文案（display_name/message_excerpt/…）按需合并。
-  const baseEvent = INITIAL_SPIRAL_EVENTS[Math.min(48, Math.max(0, activeSeatId - 1))];
-  const activeEvent = { ...baseEvent, ...seatPresentation(baseEvent) };
+  // 下标以数据长度为准（不硬编码 48/49，免得改场数后静默失真）；
+  // 空数据时 activeEvent 为 null，下面的渲染守卫让席位面板整体让位，而不是解引用崩溃。
+  const seatCount = INITIAL_SPIRAL_EVENTS.length;
+  const baseEvent =
+    seatCount > 0
+      ? INITIAL_SPIRAL_EVENTS[Math.min(seatCount - 1, Math.max(0, activeSeatId - 1))]
+      : undefined;
+  const activeEvent = baseEvent ? { ...baseEvent, ...seatPresentation(baseEvent) } : null;
 
   // ── 未确认：先挡一道 ───────────────────────────────────────────────
   if (!entered) {
@@ -177,9 +198,9 @@ export const DirectorApp: React.FC = () => {
       <Header
         isMuted={isMuted}
         onToggleMute={handleToggleMute}
-        onOpenCompliance={() => setComplianceOpen(true)}
-        onOpenTeaLanterns={() => setLanternsOpen(true)}
-        onOpenInteriorPoems={() => setInteriorOpen(true)}
+        onOpenCompliance={openCompliance}
+        onOpenTeaLanterns={() => openTeaLanterns(initialChapter)}
+        onOpenInteriorPoems={() => openInteriorPoems(initialSeasonId)}
         activeSeatId={activeSeatId}
       />
 
@@ -203,7 +224,7 @@ export const DirectorApp: React.FC = () => {
 
       <ControlsBar
         currentSeatId={activeSeatId}
-        totalSeats={49}
+        totalSeats={seatCount}
         isPatrolling={isPatrolling}
         cameraMode={cameraMode}
         onTogglePatrol={handleTogglePatrol}
