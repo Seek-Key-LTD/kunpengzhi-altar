@@ -1,8 +1,12 @@
 // #26 World Kernel 类型单测
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assertNoImplicitPromotion } from '../src/kernel/types.ts';
-import { exportDependencyGraph } from '../src/kernel/scenario.ts';
+import { bundleTs } from './lib/bundle-ts.mjs';
+
+const [{ assertNoImplicitPromotion }, { exportDependencyGraph }] = await bundleTs([
+  'src/kernel/types.ts',
+  'src/kernel/scenario.ts',
+]);
 
 test('#26 设定不能提升为历史事实', () => {
   assert.throws(() => assertNoImplicitPromotion('设', '史'), /非法认识论提升/);

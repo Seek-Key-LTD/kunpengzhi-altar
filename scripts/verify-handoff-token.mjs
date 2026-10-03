@@ -1,7 +1,11 @@
 // #22 handoff token 单测
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isHandoffSessionValid, handoffUrl, HANDOFF_TOKEN_TTL_MS } from '../src/data/handoffSession.ts';
+import { bundleTs } from './lib/bundle-ts.mjs';
+
+const [{ isHandoffSessionValid, handoffUrl, HANDOFF_TOKEN_TTL_MS }] = await bundleTs([
+  'src/data/handoffSession.ts'
+]);
 
 const now = Date.now();
 

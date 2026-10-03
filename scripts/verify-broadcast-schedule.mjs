@@ -3,7 +3,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { broadcastStateAt } from '../src/data/broadcastSchedule.ts';
+import { bundleTs } from './lib/bundle-ts.mjs';
+
+const [{ broadcastStateAt }] = await bundleTs(['src/data/broadcastSchedule.ts']);
 
 // 构造指定时分秒的 Date（Asia/Shanghai 时区）
 // 注意：node 的 Date 用本地时区，这里我们假设本地就是 Asia/Shanghai

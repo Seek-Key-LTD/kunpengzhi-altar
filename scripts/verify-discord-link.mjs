@@ -1,7 +1,11 @@
 // #23 Discord 外链入口单测
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { discordChannelUrl, DISCORD_CHANNELS } from '../src/data/discordLink.ts';
+import { bundleTs } from './lib/bundle-ts.mjs';
+
+const [{ discordChannelUrl, DISCORD_CHANNELS }] = await bundleTs([
+  'src/data/discordLink.ts'
+]);
 
 test('#23 频道链接构造', () => {
   const url = discordChannelUrl('announcements');

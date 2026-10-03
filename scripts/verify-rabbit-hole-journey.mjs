@@ -1,14 +1,18 @@
 // #21 Rabbit Hole 递归等比门槛单测
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  rabbitHoleJourney,
-  isMonotonicDecreasing,
-  RABBIT_HOLE_AXIS,
-  RABBIT_HOLE_NODE_COUNT,
-  RABBIT_HOLE_S0,
-  RABBIT_HOLE_Q,
-} from '../src/data/rabbitHoleJourney.ts';
+import { bundleTs } from './lib/bundle-ts.mjs';
+
+const [
+  {
+    rabbitHoleJourney,
+    isMonotonicDecreasing,
+    RABBIT_HOLE_AXIS,
+    RABBIT_HOLE_NODE_COUNT,
+    RABBIT_HOLE_S0,
+    RABBIT_HOLE_Q,
+  },
+] = await bundleTs(['src/data/rabbitHoleJourney.ts']);
 
 test('#21 节点数恰为 7', () => {
   assert.equal(RABBIT_HOLE_AXIS.length, RABBIT_HOLE_NODE_COUNT);
