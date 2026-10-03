@@ -34,6 +34,13 @@ class AltarAudioEngine {
    * 未起声时仅缓存，`init()` 完成后由 doInit 落地。
    */
   private layerGains: LayerGains = { water: 1, bucket: 1, reverb: 1 };
+  /**
+   * 最近一次真正落到 Tone 节点的目标增益（ramp 去抖用）。
+   * AltarScene 逐帧调用 applyPhaseEnvelope —— 包络在幕内两点间是线性的，
+   * 同一帧间隔内目标往往纹丝不动；不判重就会每帧 `rampTo` 重启一次
+   * 0.25s 自动化调度，事件在 AudioParam 时间线上白耗 CPU。null = 尚无落地值。
+   */
+  private appliedGains: LayerGains | null = null;
 
   /**
    * 幂等且**并发安全**的初始化：多次调用共享同一个进行中的 Promise。
@@ -118,6 +125,7 @@ class AltarAudioEngine {
 
     // 落地 init 前已注入的包络（AltarScene 期间可能先调用过 applyPhaseEnvelope）
     this.rampLayerGains(this.layerGains, 0);
+    this.appliedGains = { ...this.layerGains };
     this.isInitialized = true;
   }
 
@@ -186,12 +194,23 @@ class AltarAudioEngine {
   /**
    * #4 五阶段包络：由单一时间轴（`ritualPhaseAt`，经 AltarScene 传入）驱动，
    * 给三条声链各自 gain。未起声时只缓存目标增益（`getLayerGains` 可读）。
+   * 目标与上次已落地值全等时跳过 ramp（逐帧调用的重调度去抖，目标不变则语义等价）。
    */
   public applyPhaseEnvelope(phase: RitualPhase, secProgress: number): void {
     const gains = computePhaseEnvelope(phase, secProgress);
     this.layerGains = gains;
     if (!this.isInitialized) return;
+    const a = this.appliedGains;
+    if (
+      a &&
+      Math.abs(a.water - gains.water) < 1e-6 &&
+      Math.abs(a.bucket - gains.bucket) < 1e-6 &&
+      Math.abs(a.reverb - gains.reverb) < 1e-6
+    ) {
+      return;
+    }
     this.rampLayerGains(gains);
+    this.appliedGains = { ...gains };
   }
 
   /** 当前三层包络目标增益（供断言 / 读数）。 */
@@ -256,6 +275,7 @@ class AltarAudioEngine {
     this.lowpass = null;
     this.isInitialized = false;
     this.initPromise = null;
+    this.appliedGains = null;
   }
 }
 

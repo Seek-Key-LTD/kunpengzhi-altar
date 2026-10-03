@@ -191,6 +191,24 @@ ok(!threw, '未起声时 triggerBucketChain 静默降级（不抛错）');
 au.applyPhaseEnvelope('silence', 1); // 复位，避免影响后续
 log('真单例：silence→{0,0,0}；lanterns→水 1.0；abyss→水 0；未起声静默降级✓');
 
+// ── [5b] ramp 去抖取证：目标不变时不得重复调度 ─────────────────────────
+// 行为面：重复同值注入后 getLayerGains 恒等（目标缓存不被污染）；
+// 源码面：applyPhaseEnvelope 必须含「已落地值判重 → 跳过 ramp」短路，
+//         且 dispose 重置 appliedGains、doInit 落地后同步基线（不残留旧判重值）。
+au.applyPhaseEnvelope('silence', 1);
+au.applyPhaseEnvelope('silence', 1);
+au.applyPhaseEnvelope('silence', 0.5); // silence 幕内进度不影响（三层恒 0）
+eq(JSON.stringify(au.getLayerGains()), JSON.stringify({ water: 0, bucket: 0, reverb: 0 }),
+  '重复同值/同幕注入后三层目标仍为 {0,0,0}');
+const auSrc = readSrc('src/audio/altarAudio.ts');
+ok(/appliedGains[\s\S]{0,300}rampLayerGains\(gains\)/.test(auSrc),
+  'applyPhaseEnvelope 必须先判重（appliedGains）再 rampLayerGains');
+ok((auSrc.match(/appliedGains = null/g) || []).length === 1,
+  'dispose 必须重置 appliedGains（恰好一处 null 赋值）');
+ok(/rampLayerGains\(this\.layerGains, 0\);[\s\S]{0,80}appliedGains = \{ \.\.\.this\.layerGains \}/.test(auSrc),
+  'doInit 落地初始包络后必须同步 appliedGains 基线');
+log('ramp 去抖：同值注入跳过重调度（行为 + 源码双取证）✓');
+
 // ══════════════════════════════════════════════════════════════════════
 // 6. 场景接线 + 公共入口「无倍速」审计
 // ══════════════════════════════════════════════════════════════════════
