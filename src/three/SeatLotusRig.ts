@@ -15,7 +15,9 @@ export class SeatLotusRig {
   setRitual(lit: number, isDark: boolean, activeId: number | null): void {
     this.flowers.forEach((flower, id) => {
       flower.visible = id <= lit && !isDark;
-      flower.scale.setScalar(id === activeId ? 1.12 : 0.7);
+      // 缩放统一由 update() 管理（非活动席走呼吸缩放）；
+      // 原 0.7 下一帧即被 update 的 0.65*pulse 覆盖，属死值，此处只保留活动席的静态放大基准。
+      if (id === activeId) flower.scale.setScalar(1.12);
     });
   }
 
@@ -40,6 +42,9 @@ export class SeatLotusRig {
   /** 每帧：呼吸缩放 + 绕 y 轴缓旋（活动席不压 scale，保留其静态尺寸）。 */
   update(elapsed: number, activeId: number | null): void {
     this.flowers.forEach((flower, id) => {
+      // 不可见的莲花跳过旋转/缩放写入：isDark 或未点席时 49 次 sin/setScalar 纯属白跑；
+      // 写入均为 elapsed 绝对值，恢复可见的下一帧即自动对齐，无视觉差异。
+      if (!flower.visible) return;
       const pulse = 1.0 + Math.sin(elapsed * 2.5 + id) * 0.04;
       flower.rotation.y = elapsed * 0.2 + id;
       if (id !== activeId) {

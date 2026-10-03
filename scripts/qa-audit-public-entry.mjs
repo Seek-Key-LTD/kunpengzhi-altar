@@ -28,12 +28,15 @@
  *   node scripts/qa-audit-public-entry.mjs --skip-build （复用现有 dist）
  *   node scripts/qa-audit-public-entry.mjs --self-test   （注入违规，证明门禁会判红并 exit 1）
  *   AUDIT_PORT=4500 可固定端口；🚫 与 `npm run capture` 串行（并发软光栅会 OOM/SIGKILL）
+ *   ALTAR_CHROME_PATH=<chrome 二进制> 可换浏览器夹具（luban：受管 Chrome for Testing，
+ *   一次性进程；不设则走 playwright 缺省）
  */
 import { createRequire } from 'node:module';
 import { spawn, spawnSync, execSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
+import { chromiumLaunchOptions } from './lib/chromium-launch.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,6 +48,9 @@ const LABEL = (() => { const i = process.argv.indexOf('--label'); return i >= 0 
 const SUFFIX = LABEL ? `-${LABEL}` : '';
 const SELF_TEST = process.argv.includes('--self-test');
 const LAUNCH_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+// 浏览器夹具：缺省走 playwright 自带 chromium-headless-shell；luban 上设 ALTAR_CHROME_PATH
+// 指向受管 Chrome for Testing（一次性进程，见 scripts/lib/chromium-launch.mjs 口径）
+const LAUNCH_OPTS = chromiumLaunchOptions(LAUNCH_ARGS);
 
 // 工程泄露扫描词（#5 验收口径）+ #6 荣誉层增量（docs/design/006 §6.2）—— DOM/文本/window 面
 // ⚠️ §6.2 基线前置条件：追加词后必须复跑一次基线，确认公共页「暴露词清单」仍为（无）。
@@ -230,7 +236,7 @@ async function main() {
     console.log('    server up ✓');
 
     const { chromium } = loadPlaywright();
-    const browser = await chromium.launch({ args: LAUNCH_ARGS });
+    const browser = await chromium.launch(LAUNCH_OPTS);
     // 诊断：捕获页面错误 / 控制台 error / 失败请求，避免「空白页」被误判为隔离成功
     const attachDiag = (page, errs) => {
       page.on('pageerror', (e) => errs.push('pageerror: ' + String(e && e.message ? e.message : e)));
@@ -362,6 +368,7 @@ async function main() {
         label: LABEL || 'latest',
         baseUrl: BASE,
         launchArgs: LAUNCH_ARGS,
+        browserFixture: { executablePath: LAUNCH_OPTS.executablePath || null, source: LAUNCH_OPTS.executablePath ? 'ALTAR_CHROME_PATH' : 'playwright-registry' },
         scanWords: SCAN_WORDS,
         public: {
           url: pubUrl,

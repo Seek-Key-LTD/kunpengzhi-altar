@@ -49,6 +49,10 @@ export function onWindowResize(ctx: EventContext): void {
   if (!ctx.container) return;
   const width = ctx.container.clientWidth;
   const height = ctx.container.clientHeight;
+  // 容器瞬时折叠为 0（display:none / 布局切换）时跳过本次：aspect = width/0
+  // = Infinity 会把透视投影矩阵污染成退化矩阵，且若容器恢复时不伴随 window
+  // resize 事件就再无人写回 —— 保持上一次的有效投影更稳。
+  if (width <= 0 || height <= 0) return;
   ctx.camera.aspect = width / height;
   ctx.camera.updateProjectionMatrix();
   ctx.renderer?.setSize(width, height);
@@ -121,8 +125,9 @@ export function onPointerDown(ctx: EventContext, event: MouseEvent): void {
     if (ctx.relic) {
       const relicHits = ctx.raycaster.intersectObjects(ctx.relic.pickables(), true);
       if (relicHits.length > 0) {
+        // selectRelic → RelicController.handlePick 内部已触发 onRelicSelect；
+        // 这里再直呼一次会造成同一回调双发，只保留委托路径。
         ctx.selectRelic();
-        ctx.onRelicSelect?.('imperial_seal');
       }
     }
   }

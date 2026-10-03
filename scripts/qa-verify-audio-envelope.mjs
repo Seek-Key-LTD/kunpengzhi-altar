@@ -279,12 +279,13 @@ eq(audio.getLayerGains().water, 1, 'getLayerGains 返回副本（外部改写不
 // applyPhaseEnvelope（altarAudio 方法）唯一调用点在 AltarScene 的 updateRitualTimeline 内
 const sceneCalls = (scene.match(/altarAudio\.applyPhaseEnvelope\s*\(/g) || []).length;
 eq(sceneCalls, 1, 'AltarScene 仅 1 处 altarAudio.applyPhaseEnvelope');
-// 该调用点必须在 updateRitualTimeline 体内，且置于 `if (!this.ritualRunning) return;` 之后
+// 该调用点必须在 updateRitualTimeline 体内，且置于非仪式态早退守卫之后
+// （L2：守卫先把 ritualDeltaSec 回落墙钟再 return —— 包络仍只在仪式运行态下发）
 const utlStart = scene.indexOf('updateRitualTimeline(');
-const utlGuard = scene.indexOf('if (!this.ritualClock.running) return;', utlStart);
+const utlGuard = scene.indexOf('if (!this.ritualClock.running) {', utlStart);
 const envCall = scene.indexOf('altarAudio.applyPhaseEnvelope(', utlStart);
 const utlEnd = scene.indexOf('\n  }', utlStart + 10);
-ok(utlStart >= 0 && utlGuard > utlStart, 'updateRitualTimeline 以 `if (!this.ritualClock.running) return;` 开头');
+ok(utlStart >= 0 && utlGuard > utlStart, 'updateRitualTimeline 保留非仪式态早退守卫（ritualDeltaSec 回落墙钟）');
 ok(envCall > utlGuard && envCall < utlEnd + 2, 'applyPhaseEnvelope 在守卫之后、方法体内（非运行态不执行）');
 // 非仪式档（未调 setPlaybackRate / 未 startRitual）不会触达该调用 ⟹ 包络不被下发
 eq(typeof audio.applyPhaseEnvelope, 'function', 'altarAudio.applyPhaseEnvelope 存在（仅仪式态被调用）');

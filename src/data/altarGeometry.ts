@@ -11,6 +11,13 @@
 // ── 砌法 ────────────────────────────────────────────────────────────
 // 一个格就是一个 Cube：横向、纵向、深度严格同边长。49 根柱的顶面恰好拼成
 // 7×7 无缝平面，不存在“席位之间漏一条黑缝”的第二种砖。
+//
+// ── 席位域闸门 ──────────────────────────────────────────────────────
+// 席号 → 高程/台阶级的三个 getter 与 seatMidi 同先例：唯一准入闸门 = isSeatId。
+// 非席位（#00 锚点、越界、非整数、NaN）一律 RangeError —— 高程是水路物理输入，
+// 脏值静默流下去会在引擎里造出无声的坏几何。
+
+import { isSeatId } from '../types/altar';
 
 export const BRICK = 3.0; // 全坛唯一基本能量 Cube 的边长
 export const CELL = BRICK; // 一席 = 一 Cube；相邻 Cube 面贴面
@@ -120,12 +127,15 @@ export const SEATS_PER_LEVEL = 7;
  */
 export const LEVEL_BOUNDS = [1, 5, 9, 17, 25, 37, 49];
 
-/** 席号（1..49）→ 台阶级号（1 = 顶 … 7 = 底） */
+/** 席号（1..49）→ 台阶级号（1 = 顶 … 7 = 底）。非席位一律拒绝（见文件头闸门说明）。 */
 export function seatLevel(seatId: number): number {
+  if (!isSeatId(seatId)) {
+    throw new RangeError(`seatLevel: 席位号必须是 1..49 的整数，收到 ${seatId}`);
+  }
   for (let i = 0; i < LEVEL_BOUNDS.length; i++) {
     if (seatId <= LEVEL_BOUNDS[i]) return i + 1;
   }
-  return LEVEL_BOUNDS.length;
+  return LEVEL_BOUNDS.length; // 不可达：49 ≤ LEVEL_BOUNDS[6]
 }
 
 /**
@@ -136,8 +146,11 @@ export function seatLevel(seatId: number): number {
  */
 export const DROP_PER_SEAT = (PYRAMID_TOP - BRICK) / (SEATS_PER_LEVEL * 7 - 1);
 
-/** 席号 → 该席台面高程（连续螺旋坡） */
+/** 席号 → 该席台面高程（连续螺旋坡，21 → 3）。非席位一律拒绝。 */
 export function seatElevation(seatId: number): number {
+  if (!isSeatId(seatId)) {
+    throw new RangeError(`seatElevation: 席位号必须是 1..49 的整数，收到 ${seatId}`);
+  }
   return PYRAMID_TOP - (seatId - 1) * DROP_PER_SEAT;
 }
 
@@ -152,8 +165,11 @@ export const SCORPION_BORE_RADIUS = BRICK * 0.075;
 export const SCORPION_CASING_RADIUS = BRICK * 0.13;
 export const SCORPION_EMBED_DEPTH = BRICK * 0.56;
 
-/** 席位 n 的蝎子楔水芯高程；严格随 n 增大而下降。 */
+/** 席位 n 的蝎子楔水芯高程；严格随 n 增大而下降。非席位一律拒绝。 */
 export function scorpionWaterElevation(seatId: number): number {
+  if (!isSeatId(seatId)) {
+    throw new RangeError(`scorpionWaterElevation: 席位号必须是 1..49 的整数，收到 ${seatId}`);
+  }
   return seatElevation(seatId) - SCORPION_EMBED_DEPTH;
 }
 

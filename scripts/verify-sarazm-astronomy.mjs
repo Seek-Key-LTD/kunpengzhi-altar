@@ -1,14 +1,18 @@
 // #15 Sarazm 天球计算单测
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  SARAZM_LAT_RAD,
-  SARAZM_LON_RAD,
-  SARAZM_ELEVATION_M,
-  localSiderealTime,
-  equatorialToHorizontal,
-  sunPosition,
-} from '../src/data/sarazmAstronomy.ts';
+import { bundleTs } from './lib/bundle-ts.mjs';
+
+const [
+  {
+    SARAZM_LAT_RAD,
+    SARAZM_LON_RAD,
+    SARAZM_ELEVATION_M,
+    localSiderealTime,
+    equatorialToHorizontal,
+    sunPosition,
+  },
+] = await bundleTs(['src/data/sarazmAstronomy.ts']);
 
 test('#15 Sarazm 纬度约 39.5°N', () => {
   const deg = SARAZM_LAT_RAD * 180 / Math.PI;

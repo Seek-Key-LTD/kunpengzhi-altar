@@ -1,9 +1,9 @@
 # #5 公共/工程入口隔离 · QA 独立审查报告
 （本轮为 #5【当前态】：同一条命令复跑，前/后 diff 即 #5 证据）
 
-- HEAD: 5e4d67ef9a8ecda86e368988b8f7bdf8440e4ebf
-- 时间: 2026-10-03T15:12:41.373Z
-- 被测: http://127.0.0.1:4213（vite preview 本地产物，非线上）
+- HEAD: ea29d5ac00da46f90bf8368d84bc0d680bc25a64
+- 时间: 2026-10-03T15:04:42.547Z
+- 被测: http://127.0.0.1:4211（vite preview 本地产物，非线上）
 - 复跑: `node scripts/qa-audit-public-entry.mjs`（或 `--skip-build` 复用 dist）
 
 ## 1) 公共页 #/ 工程暴露逐词命中

@@ -64,4 +64,25 @@ eq(T.PLINTH_HALF, 15, 'PLINTH_HALF = 15');
 ok(T.PLINTH_THICKNESS > 0, 'PLINTH_THICKNESS > 0');
 eq(T.RIVER_WIDTH, 3.0, 'RIVER_WIDTH = CELL');
 
+// ── 席位域闸门：席位 getter 对非席位一律 RangeError（与 seatMidi 同先例）──
+const seatGetters = ['seatLevel', 'seatElevation', 'scorpionWaterElevation'];
+for (const name of seatGetters) {
+  const fn = T[name];
+  ok(typeof fn === 'function', `有 ${name}`);
+  for (const bad of [0, -1, 50, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => fn(bad), RangeError, `${name}(${String(bad)}) 必须 RangeError（非席位拒绝）`);
+  }
+}
+// 边界值仍畅通：第 1 席（顶）、第 49 席（底）
+eq(T.seatLevel(1), 1, 'seatLevel(1) = 1（顶层）');
+eq(T.seatLevel(5), 2, 'seatLevel(5) = 2（LEVEL_BOUNDS 第二级上界）');
+eq(T.seatLevel(49), 7, 'seatLevel(49) = 7（底层）');
+eq(T.seatElevation(1), 21.0, 'seatElevation(1) = 21（塔顶）');
+eq(T.seatElevation(49), 3.0, 'seatElevation(49) = 3（贴台基）');
+ok(T.seatElevation(49) < T.seatElevation(1), '高程严格随席号下降');
+ok(
+  T.scorpionWaterElevation(1) === T.seatElevation(1) - T.SCORPION_EMBED_DEPTH,
+  '水芯高程 = 台面高程 − 嵌入深度'
+);
+
 console.log(`✓ altarGeometry · ${checks} 断言通过`);

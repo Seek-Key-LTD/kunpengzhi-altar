@@ -104,6 +104,8 @@ export class AltarWaterLiftEngine {
    * 这里按文档补回反冲，使死点相变成为周期事件。
    */
   readonly recoilSpeed: number;
+  /** 构造时注入的初始水量：reset() 复位同源，避免构造/重置两套常数漂移。 */
+  private readonly initialWater: number;
 
   public state: WaterLadderState;
   public onPhaseTransition?: WaterLiftPhaseCallback;
@@ -111,6 +113,8 @@ export class AltarWaterLiftEngine {
   // 状态防重触发锁
   private topTriggeredA = false;
   private topTriggeredB = false;
+  /** 未消费的物理时间残差 (s)：掉帧部分累积到此，按固定子步补推，保证帧率无关 */
+  private accDt = 0.0;
 
   constructor(options?: {
     height?: number;
@@ -141,6 +145,7 @@ export class AltarWaterLiftEngine {
     this.recoilSpeed = options?.recoilSpeed ?? 3.4; // 整定到 RFC §6：半周期 T/2 ≈ 2.00s
 
     const initWater = options?.initialWater ?? 10.0;
+    this.initialWater = initWater;
     const initialZ = 0.05; // 引入微扰打破死点随遇平衡
 
     this.state = {
@@ -156,15 +161,25 @@ export class AltarWaterLiftEngine {
   }
 
   /**
-   * 离散物理步推进（半隐式欧拉积分）
+   * 离散物理步推进（半隐式欧拉积分，残差累积 + 固定 1/60 子步）
+   *
+   * 合并裁决（mini×raccoon）：骨架取 mini 的残差累积（物理推进总量只取决于
+   * 真实流逝时间，帧率无关），入口叠加 raccoon 的 dt 自守卫（内核不依赖外部纪律）。
    */
   public update(dt: number): void {
-    // 限制单步最大时间步长以保证弹簧碰撞稳定性
-    const clampedDt = Math.min(dt, 0.033);
-    const subSteps = clampedDt > 0.016 ? 2 : 1;
-    const subDt = clampedDt / subSteps;
-
-    for (let step = 0; step < subSteps; step++) {
+    // dt 自守卫（合并自 raccoon）：只接受正的有限数。0/负值会以负步长反向积分
+    // （能量凭空注入），NaN/Infinity 会沿 z/v/m 扩散污染全部状态量；且
+    // Math.max(NaN,0)=NaN，无守卫则 accDt 一旦沾 NaN 即永久冻结水梯。
+    if (!Number.isFinite(dt) || dt <= 0) return;
+    // 为什么：旧实现 min(dt, 0.033) 会把掉帧部分整段丢弃，帧率越低水梯越慢。
+    // 改为残差累积：超时部分存入 accDt，后续帧按固定 1/60 子步补推，
+    // 物理推进总量只取决于真实流逝时间，与帧率无关。
+    // 上限 0.25s 防死亡螺旋：连续长卡顿时单帧最多补 15 个子步，不无限追帧
+    // （即 raccoon 方案中 MAX_FRAME_SEC 的 CPU 上界语义，由 0.25 帽承担）。
+    this.accDt = Math.min(this.accDt + dt, 0.25);
+    const subDt = 1 / 60;
+    while (this.accDt >= subDt) {
+      this.accDt -= subDt;
       this.subStep(subDt);
     }
 
@@ -284,11 +299,13 @@ export class AltarWaterLiftEngine {
   public reset(perturbation = 0.08): void {
     this.state.z = perturbation;
     this.state.v = 0.0;
-    this.state.mA = 10.0;
-    this.state.mB = 10.0;
+    this.state.mA = this.initialWater;
+    this.state.mB = this.initialWater;
     this.state.yA = this.strokeLimit + perturbation;
     this.state.yB = this.strokeLimit - perturbation;
     this.topTriggeredA = false;
     this.topTriggeredB = false;
+    // 为什么：重置即时间零点，未消费的时间残差一并清零，避免复位后多推若干子步
+    this.accDt = 0.0;
   }
 }

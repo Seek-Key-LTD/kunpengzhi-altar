@@ -41,7 +41,7 @@ try {
 const {
   RITUAL_TOTAL_SEC, RITUAL_ABYSS_END_SEC, RITUAL_NAMING_END_SEC, RITUAL_LANTERNS_END_SEC,
   WUJI_REVEAL_SEC, WUJI_SILENCE_SEC, SEAT_ID_MAX,
-  ritualPhaseAt, ritualLitSeatsAt, isTimelineDrivenPhase
+  ritualPhaseAt, ritualLitSeatsAt, isTimelineDrivenPhase, wujiRevealStateAt
 } = T;
 
 // ── 1. 时长与阈值常量 ───────────────────────────────────────────────
@@ -131,6 +131,18 @@ for (let s = 0; s <= RITUAL_TOTAL_SEC; s++) {
 }
 ok(monotonic, 'litSeats 必须随仪式时间单调不减');
 ok(inRange, 'litSeats 必须恒在 [0, 49]');
+
+// ── 5. 非有限时间钝化：三个权威映射对同一脏输入必须给出同一套 0s 稳态 ──
+// 修复前：ritualPhaseAt(NaN) 落 'silence' 而 ritualLitSeatsAt(NaN) 返回 NaN —— 两映射互相矛盾，
+// 且 NaN litSeats 会漏进逐席触发驱动源（dualDragonActiveSeats）。现一律按 0s 处理。
+for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+  eq(ritualPhaseAt(bad), 'abyss', `非有限时间 ${String(bad)} → abyss（0s 稳态）`);
+  eq(ritualLitSeatsAt(bad), 0, `非有限时间 ${String(bad)} → litSeats 0（NaN 不外漏）`);
+  eq(wujiRevealStateAt(bad), 'hidden', `非有限时间 ${String(bad)} → #00 hidden（0s 稳态）`);
+}
+// 与同仓库 fogCaptionsAt / broadcastStateAtMs 的"脏输入走 0s/off-air"先例同口径：
+eq(ritualPhaseAt(0), ritualPhaseAt(Number.NaN), 'NaN 行为必须与 0s 完全一致');
+eq(ritualLitSeatsAt(0), ritualLitSeatsAt(Number.NaN), 'NaN litSeats 必须与 0s 完全一致');
 
 console.log(
   `ritual-timeline: 1800s / 5 acts (boundaries 180/1020/1440/1751) verified on real module; ` +

@@ -26,7 +26,8 @@ import {
 } from '../data/dualDragon';
 import {
   CELL,
-  PYRAMID_HALF
+  PYRAMID_HALF,
+  PYRAMID_TOP
 } from '../data/altarGeometry';
 import { ImperialSealObject } from './relic/ImperialSealObject';
 import { CameraRig } from './CameraRig';
@@ -108,6 +109,13 @@ export class AltarScene {
   private rig!: CameraRig;
   private demo!: DemoDirector;
   private ritualClock!: RitualClock;
+  /**
+   * 本帧仪式时间轴的实际推进量（秒）——L2 跨域时序对齐用。
+   * 仪式运行态 = RitualClock 的 elapsed 差值（已含 rate 缩放与 1800s 封顶）；
+   * 非仪式态（工程直入/演示循环）= 墙钟 dt（保持既有行为）。
+   * waterLift / maglev 等物理耦合体以此推进，确保物理步进与 RitualTime 同域不漂移。
+   */
+  private ritualDeltaSec = 0;
   private mech!: MechanicsRig;
   private dragon!: DualDragonRig;
   private starship!: StarshipRig;
@@ -818,6 +826,8 @@ export class AltarScene {
       });
     }
     this.isAutoPatrol = false;
+    // 模式切换自愈边界：demo 期间可能改写仪式视觉，退出/进入后强制下帧重放。
+    this.lastWujiAppliedSig = null;
     this.demoController.start();
     this.kickAudio();
   }
@@ -825,6 +835,7 @@ export class AltarScene {
   /** 停掉演示循环（导演/工程入口不需要时）。 */
   public stopDemo(): void {
     this.demoController?.stop();
+    this.lastWujiAppliedSig = null;
   }
 
   /**
@@ -839,6 +850,8 @@ export class AltarScene {
     this.ritualMode = false;
     this.ritualLitSeats = 49;
     this.isAutoPatrol = false;
+    // 模式切换自愈边界：直显状态不经 setRitualState，复位签名避免旧档位残留。
+    this.lastWujiAppliedSig = null;
     this.scene.background = new THREE.Color(0x000000);
     this.scene.fog = new THREE.FogExp2(0x000000, 0.006);
 
@@ -938,9 +951,18 @@ export class AltarScene {
     this.ritualClock.elapsed = startSec;
     this.ritualClock.phase = ritualPhaseAt(startSec);
     this.ritualClock.namingLitSeats = -1;
-    // 先归到 #00「未显形」档（<24:00），再落到初幕 abyss（黑场、litSeats=0）。
+    // 先归到 #00「未显形」档（<24:00），再落到初幕。
+    // litSeats 不能恒置 0：直播中段入场（OPT-1 广播接续）时 startSec 可能落在
+    // lanterns/extinguishing/silence 幕 —— 落 0 会让命名/走马灯各幕的派生视觉
+    // （光迹/双龙/繁花）停在空坛，且 lanterns 幕没有逐帧结算点能把它救回来
+    // （naming 有 litSeats 台阶刷新，lanterns 只在换幕时写一次）。按接续时刻
+    // 的稳态席数落位：abyss=0、naming=当时已点席数、其后各幕=49。
     this.setRitualTime(startSec);
-    this.setRitualState(this.ritualClock.phase, 0, null);
+    this.setRitualState(this.ritualClock.phase, ritualLitSeatsAt(startSec), null);
+    // 门控自愈边界：上面的显式序列（setRitualTime 先落 #00 档、setRitualState 再按幕覆盖）
+    // 会让签名停在最后一次写入上；复位后强制下一帧按当前时间/幕次重放正确状态，
+    // 消除"直播窗中途开页被 litSeats=0 覆盖后永久卡死"的回归。
+    this.lastWujiAppliedSig = null;
     this.kickAudio();
   }
 
@@ -1000,7 +1022,13 @@ export class AltarScene {
    * setRitualState('extinguishing' | 'silence')。
    */
   private updateRitualTimeline(dt: number) {
-    if (!this.ritualClock.running) return;
+    // 跨域时序对齐（L2）：先记录本帧仪式时间轴的实际推进量，再推进。
+    const before = this.ritualClock.elapsed;
+    if (!this.ritualClock.running) {
+      // 非仪式态（工程直入 / 演示循环）：物理耦合体仍按墙钟推进，保持既有行为。
+      this.ritualDeltaSec = Number.isFinite(dt) ? dt : 0;
+      return;
+    }
     // dt 兜底：与同文件 setRitualTime 对齐 —— 非有限 dt 一律当 0。
     // 否则一次 NaN 会让 ritualElapsed 永久 NaN，仪式卡死在终幕、再不复位。
     const step = Number.isFinite(dt) ? dt : 0;
@@ -1009,6 +1037,8 @@ export class AltarScene {
       RITUAL_TOTAL_SEC,
       this.ritualClock.elapsed + step * this.ritualClock.rate
     );
+    // 实际推进量（已含 rate 缩放与封顶）：物理耦合体与 RitualTime 同域的唯一来源。
+    this.ritualDeltaSec = this.ritualClock.elapsed - before;
 
     const phase = ritualPhaseAt(this.ritualClock.elapsed);
     if (phase !== this.ritualClock.phase) {
@@ -1043,6 +1073,11 @@ export class AltarScene {
     // #4 五阶段音频包络：与幕次**同源**（ritualPhaseAt），逐帧落到三条声链
     // （水声 / 翻斗链条 / 低频空间混响）。silence 幕三层归零（1751→1800 恰 49s）。
     altarAudio.applyPhaseEnvelope(phase, phaseProgress(this.ritualClock.elapsed));
+
+    // 朗诵音量同源接续：RitualNarration 的契约是「仪式秒数由既有时间轴逐帧喂入，
+    // 音量 = envelopeAt(sec).water」。本类持有朗诵实例却从未喂秒 —— ritualSec
+    // 恒 0 ⟹ envelopeAt(0).water = 0 ⟹ 一旦 startLanternNarration 起播就是静音。
+    this.narration.setRitualTime(this.ritualClock.elapsed);
   }
 
   /**
@@ -1145,17 +1180,19 @@ export class AltarScene {
    * （保留旧的公开方法签名，内部改由引擎驱动，避免两套转速逻辑打架。）
    */
   public setLanternRotationSpeed(speed: number) {
-    this.maglev.state.omega = speed;
+    // 引擎 override 语义：显式调速期间关闭驱动项并双向锁速；clearLanternSpeedOverride() 恢复驱动。
+    // 原实现直写 state.omega 会被引擎恒定驱动几秒内拉回 maxOmega，公开调速接口实际失效。
+    this.maglev.setOmegaOverride(speed);
   }
 
   public setSpeedMode(mode: 'pause' | 'ultra_slow' | 'slow') {
-    if (mode === 'pause') {
-      this.maglev.state.omega = 0.0;
-    } else if (mode === 'ultra_slow') {
-      this.maglev.state.omega = 0.0015;
-    } else if (mode === 'slow') {
-      this.maglev.state.omega = 0.005;
-    }
+    const targets = { pause: 0.0, ultra_slow: 0.0015, slow: 0.005 } as const;
+    this.maglev.setOmegaOverride(targets[mode]);
+  }
+
+  /** 解除显式调速，恢复引擎额定驱动（回 maxOmega）。 */
+  public clearLanternSpeedOverride() {
+    this.maglev.clearOmegaOverride();
   }
 
   /**
@@ -1322,9 +1359,13 @@ export class AltarScene {
     }
     if (this.fountainParticles) {
       const posAttr = this.fountainParticles.geometry.attributes.position as THREE.BufferAttribute;
+      // 回收带必须与 WujiFountainBuilder 的生成带同源：坛顶 [PYRAMID_TOP+0.5, PYRAMID_TOP+4.5]。
+      // 此前硬编码 [7.2, 11.2] 是七级方坛重建前的旧竖井几何残留——粒子会落进坛体中部变成无源悬雨。
+      const fountainFloorY = PYRAMID_TOP + 0.5;
+      const fountainRespawnY = PYRAMID_TOP + 4.5;
       for (let i = 0; i < posAttr.count; i++) {
         let y = posAttr.getY(i) - 0.03;
-        if (y < 7.2) y = 11.2;
+        if (y < fountainFloorY) y = fountainRespawnY;
         posAttr.setY(i, y);
       }
       posAttr.needsUpdate = true;
@@ -1342,17 +1383,20 @@ export class AltarScene {
     // 8. Flowers breathing
     this.lotus.update(elapsedTime, this.activeSeatId);
 
-    // 9. RFC-007 双体水梯：引擎驱动，北坡机关由此获得动力学
-    this.waterLift.update(dt);
+    // 9. RFC-007 双体水梯：引擎驱动，北坡机关由此获得动力学。
+    //    L2：步进量 = 仪式时间轴实际推进量（ritualDeltaSec），rate≠1 时物理与
+    //    RitualTime 同域不漂移（翻斗/黄钟林钟触发始终落在正确的仪式时刻）。
+    this.waterLift.update(this.ritualDeltaSec);
     this.syncWaterLiftVisual();
 
     // 9b. RFC-008 外环磁悬浮走马灯：引擎驱动回转/悬浮/声学击发。
     //     waterLiftSeismic 是北坡双桶撞簧的地脉震颤 —— 先衰减再喂给引擎，
     //     双桶每撞一次死点 → 走马灯受一次地脉震颤 → 触发声学击发。
     //     （地脉耦合链路一字未动；茶灯 1020s 门控只作用在**视觉转角**上。）
+    //     L2：与水梯同吃 ritualDeltaSec，耦合体族整体与仪式时间轴同域。
     this.updateLanternGate();
     this.waterLiftSeismic *= 0.92;
-    this.maglev.update(dt, this.waterLiftSeismic);
+    this.maglev.update(this.ritualDeltaSec, this.waterLiftSeismic);
     this.syncMaglevVisual();
 
     // 10. Auto patrol
@@ -1466,6 +1510,15 @@ export class AltarScene {
   public destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    // 朗诵播放器持有游离的 HTMLAudioElement（不在场景图内、不归 SceneDisposer 管）：
+    // 不拆的话销毁后音频会继续播、元素上的 ended/error/timeupdate 监听还会
+    // 继续把回调打进已销毁的场景（onChapterStart → focusTeaLantern → rig…）。
+    // （合并裁决：narration.dispose 三方重复修复——luban 版为超集，raccoon/mbp 同点 hunk 弃用。）
+    this.narration.dispose();
+    this.lanternChoreographyActive = false;
+    // 演示循环一并停表：状态机虽无计时器，停掉才是销毁语义的对称收口。
+    this.stopDemo();
 
     const disposer = new SceneDisposer({
       scene: this.scene,

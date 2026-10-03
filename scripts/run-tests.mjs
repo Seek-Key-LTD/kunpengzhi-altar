@@ -41,6 +41,7 @@ const SUITES = [
   ['#15 Sarazm 天球计算', 'scripts/verify-sarazm-astronomy.mjs'],
   ['#7 WebGL 静默降级', 'scripts/verify-webgl-fallback.mjs'],
   ['#26 World Kernel 类型', 'scripts/verify-kernel-types.mjs'],
+  ['L2 音频×物理时序对齐（ritualDeltaSec）', 'scripts/verify-ritual-physics-clock.mjs'],
   ['QA 独立门禁（#4）', 'scripts/qa-verify-audio-envelope.mjs'],
   // #6 荣誉层：数据契约 + #00 三态（44 断言） + 公共入口不可达（15 断言）
   ['荣誉层聚合·#00 三态（#6 T1–T6）', 'scripts/verify-honor-aggregation.mjs'],
@@ -64,7 +65,13 @@ const SUITES = [
   // 内环壁碑 · 纯函数
   ['内环壁碑·纯函数', 'scripts/verify-stela-ring.mjs'],
   // 茶史五绝赋 · 十六章数据契约
-  ['茶史五绝赋·十六章数据契约', 'scripts/verify-tea-poem-16.mjs']
+  ['茶史五绝赋·十六章数据契约', 'scripts/verify-tea-poem-16.mjs'],
+  // 无极泉 · 粒子回收带与生成带同源（ea29d5a 防回漂：7.2/11.2 类魔数不得重现）
+  ['无极泉·回收带与生成带同源（源码级）', 'scripts/verify-fountain-band.mjs'],
+  // 导演台 · 席位讲解/汇报字段
+  ['导演台·席位讲解字段', 'scripts/verify-seat-presentation.mjs'],
+  // src/three 优化回归：蝎子楔实例化 / 素数线材质独立 / 席位构建收编
+  ['优化回归（实例化/材质/席位）', 'scripts/verify-altar-opt-regression.mjs']
 ];
 
 for (const [name, rel] of SUITES) {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X, Shield, Droplets, BookOpen, AlertCircle, Sparkles } from 'lucide-react';
 import type { SealEraLayer } from '../types/relic';
 
@@ -16,11 +16,32 @@ interface ComplianceModalProps {
 }
 
 export const ComplianceModal: React.FC<ComplianceModalProps> = ({ isOpen, onClose, relicEra }) => {
+  // Esc 可关 + 打开时把焦点交给弹窗本体（键盘可达性）。
+  // 本弹窗仅导演台使用（公共入口不渲染它），不影响公共交互纪律。
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    dialogRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl shadow-2xl p-6 text-slate-200 relative max-h-[85vh] overflow-y-auto custom-scrollbar">
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="实施规范与合规声明"
+        className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl shadow-2xl p-6 text-slate-200 relative max-h-[85vh] overflow-y-auto custom-scrollbar outline-none"
+      >
         {/* Close Button */}
         <button
           onClick={onClose}
