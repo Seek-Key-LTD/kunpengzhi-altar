@@ -55,8 +55,10 @@ export class RelicController {
     this.relic = seal;
 
     // 用真实资产接管程序化占位几何（public/models/imperial_seal.glb）。
+    // 为什么：异步完成回调必须确认挂载者仍是当前实例（dispose 后已完成加载
+    // 会由 ImperialSealObject 自行回收并返回 false），避免对已销毁实例做日志/操作。
     void seal.loadSealFromGLB().then((ok) => {
-      if (ok) {
+      if (ok && this.relic === seal) {
         console.info('[玉玺] 高精 GLB 已接管，三角面 =', seal.countTriangles());
       }
     });

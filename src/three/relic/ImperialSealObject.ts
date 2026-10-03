@@ -338,6 +338,8 @@ export class ImperialSealObject {
   private transmissionEnabled: boolean = SEAL_TRANSMISSION_PRESET.enabled;
   private glbLoaded = false;
   private dracoLoader: DRACOLoader | null = null;
+  /** 已销毁标志：GLB 异步加载完成时据此拒绝挂载，防止把模型挂到已游离的 root 上泄漏 */
+  private disposed = false;
 
   private readonly onStamp?: () => void;
   private readonly onModeChange?: (mode: SealMode) => void;
@@ -1047,6 +1049,14 @@ export class ImperialSealObject {
       const gltf = await loader.loadAsync(url);
       const model = gltf.scene;
 
+      // 为什么：dispose 可能在 await 期间发生（如 RelicController 卸载玉玺）。
+      // 完成回调若发现已销毁，必须把刚加载的模型连同其几何/材质/贴图完整回收
+      // 并拒绝挂载 —— 否则模型被挂到已游离的 root 上，GLB 资源永久泄漏。
+      if (this.disposed) {
+        this.disposeUnmountedGltf(model);
+        return false;
+      }
+
       // 归一化到规格尺寸：方四寸 = SEAL_SIDE
       const box = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
@@ -1059,6 +1069,14 @@ export class ImperialSealObject {
       model.position.sub(center); // 几何中心对齐到 root 原点
 
       if (applyJadeMaterial) {
+        // 为什么：下面直接覆写 GLB 原生材质（含贴图），原资源从此无人引用会永久泄漏
+        // —— 替换前先收集并释放（材质/贴图各用一个 Set 去重，共享实例只释放一次）。
+        const nativeMaterials = new Set<THREE.Material>();
+        const nativeTextures = new Set<THREE.Texture>();
+        this.collectMeshMaterials(model, nativeMaterials);
+        this.collectMaterialTextures(nativeMaterials, nativeTextures);
+        nativeTextures.forEach((tex) => tex.dispose());
+        nativeMaterials.forEach((mat) => mat.dispose());
         model.traverse((obj) => {
           const mesh = obj as THREE.Mesh;
           if (!mesh.isMesh) return;
@@ -1100,7 +1118,10 @@ export class ImperialSealObject {
       return true;
     } catch (err) {
       console.warn('[玉玺] GLB 加载失败，保留程序化占位几何：', err);
-      this.root.visible = true;
+      // 为什么：销毁后加载才失败的竞态下，root 已清空游离，不得再改任何状态
+      if (!this.disposed) {
+        this.root.visible = true;
+      }
       return false;
     } finally {
       // 解码器只在加载期间需要，用完即弃
@@ -1168,9 +1189,52 @@ export class ImperialSealObject {
     // 占位材质/贴图仍在 disposables 里登记着，留到 dispose() 统一回收
   }
 
+  /** 收集 object 树上网格引用的全部材质（去重：GLB 多网格常共享同一材质实例） */
+  private collectMeshMaterials(root: THREE.Object3D, out: Set<THREE.Material>): void {
+    root.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        if (m) out.add(m);
+      }
+    });
+  }
+
+  /** 收集材质集合引用到的全部贴图（去重：dispose 幂等，但去重避免重复扫描/释放共享贴图） */
+  private collectMaterialTextures(materials: Set<THREE.Material>, out: Set<THREE.Texture>): void {
+    materials.forEach((mat) => {
+      for (const value of Object.values(mat)) {
+        if (value && (value as THREE.Texture).isTexture) {
+          out.add(value as THREE.Texture);
+        }
+      }
+    });
+  }
+
+  /**
+   * 完整释放一个尚未挂载的 GLB 模型（几何 + 材质 + 贴图，全部去重）。
+   * 供 dispose 竞态路径使用：加载完成但玉玺已销毁时，把刚拿到的资源全数回收。
+   */
+  private disposeUnmountedGltf(model: THREE.Object3D): void {
+    const materials = new Set<THREE.Material>();
+    const textures = new Set<THREE.Texture>();
+    this.collectMeshMaterials(model, materials);
+    this.collectMaterialTextures(materials, textures);
+    textures.forEach((tex) => tex.dispose());
+    materials.forEach((mat) => mat.dispose());
+    model.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh) mesh.geometry?.dispose();
+    });
+  }
+
   // ── 释放 ──────────────────────────────────────────────────────────
 
   public dispose(): void {
+    // 为什么：先置位 —— 异步 loadSealFromGLB 完成时据此识别销毁并自我回收，
+    // 防止"destroy 后加载完成仍把模型挂到已游离的 root"的泄漏路径。
+    this.disposed = true;
     this.root.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (mesh.isMesh) mesh.geometry?.dispose();
