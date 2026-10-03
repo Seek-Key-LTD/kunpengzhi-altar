@@ -3,6 +3,8 @@
 // 每个 mode 对应一个机位（pos + lookAt）。
 // 不碰 three.js，可被单元测试断言安全边界（不穿墙、不飞出 120 半径）。
 
+import { CAMERA_SAFETY_BY_ROLE } from '../types/altar';
+
 export interface CameraPose {
   pos: [number, number, number];
   lookAt: [number, number, number];
@@ -20,11 +22,12 @@ export const CAMERA_MODE_POSES: Record<string, CameraPose> = {
   patrol: { pos: [46, 24, 46], lookAt: [0, 5, 0] }
 } as const;
 
-/** 安全边界（与 CameraRig 对齐） */
-export const CAMERA_SAFETY = {
-  minY: 0.3,
-  maxRadius: 120
-} as const;
+/**
+ * 安全边界：直接引用 types/altar.ts 的 guest 档（0.3 / 120）。
+ * 游客档是「一个数字都不能动」的公共入口红线，唯一权威在 altar.ts ——
+ * 这里原先手抄一份字面量，权威表一旦调整就会静默漂移成第二口径。
+ */
+export const CAMERA_SAFETY = CAMERA_SAFETY_BY_ROLE.guest;
 
 /** 机位是否在安全边界内 */
 export function poseWithinSafety(pose: CameraPose): boolean {
