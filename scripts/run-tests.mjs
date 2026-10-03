@@ -64,7 +64,9 @@ const SUITES = [
   // 内环壁碑 · 纯函数
   ['内环壁碑·纯函数', 'scripts/verify-stela-ring.mjs'],
   // 茶史五绝赋 · 十六章数据契约
-  ['茶史五绝赋·十六章数据契约', 'scripts/verify-tea-poem-16.mjs']
+  ['茶史五绝赋·十六章数据契约', 'scripts/verify-tea-poem-16.mjs'],
+  // 导演台 · 席位讲解/汇报字段
+  ['导演台·席位讲解字段', 'scripts/verify-seat-presentation.mjs']
 ];
 
 for (const [name, rel] of SUITES) {

@@ -55,8 +55,22 @@ export function isHandoffSessionValid(t: HandoffSession, now: number = Date.now(
   return true;
 }
 
-/** 构造 handoff URL（纯函数） */
+/**
+ * 构造 handoff URL（纯函数）。
+ *
+ * 第六道闸（构造侧）：layer / yaw 必须是有限数，否则 RangeError 拒绝构造 ——
+ * 修复前 NaN/Infinity 会静默流成 `layer=NaN` / `yaw=NaN`，由消费端解析出脏状态。
+ * 校验器（isHandoffSessionValid）与构造器两侧都设闸，脏载荷无处可流。
+ */
 export function handoffUrl(t: HandoffSession): string {
+  if (t === null || typeof t !== 'object') {
+    throw new TypeError('handoffUrl: 载荷必须是 HandoffSession 对象');
+  }
+  if (!Number.isFinite(t.layer) || !Number.isFinite(t.yaw)) {
+    throw new RangeError(
+      `handoffUrl: layer/yaw 必须是有限数，收到 layer=${t.layer} yaw=${t.yaw}`
+    );
+  }
   const params = new URLSearchParams({
     token: t.token,
     layer: String(t.layer),

@@ -2,9 +2,10 @@
 //
 // 输入 RitualPhase，输出每个 group/光/雾该是什么状态。
 // 不碰 three.js，可被单元测试断言。AltarScene 只负责把结果写进场景图。
-
-export type RitualPhase =
-  | 'abyss' | 'naming' | 'lanterns' | 'extinguishing' | 'silence';
+//
+// RitualPhase 只有一处定义（types/altar.ts 唯一权威），本模块 import type 复用 ——
+// 编译期擦除、零运行时字节；五幕枚举增删时这里自动跟随，不再有第二份会漂移的副本。
+import type { RitualPhase } from '../types/altar';
 
 export interface CeremonyVisibility {
   /** 是否暗幕（abyss/silence）：灭环境光、浓雾 */

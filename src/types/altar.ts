@@ -7,7 +7,7 @@ export interface SpiralEvent {
   spiral_index: number; // 1 to 49
   grid_x: number; // -3 to 3
   grid_z: number; // -3 to 3
-  elevation: number; // 7 (highest) to 1 (lowest)
+  elevation: number; // 21（顶）降到 3（底），见 altarGeometry.seatElevation
   water_arrival_beat: number;
   water_arrival_seconds: number;
   midi_note: number; // MIDI number e.g. 60 = C4
@@ -209,8 +209,10 @@ export type WujiRevealState = 'hidden' | 'revealed' | 'silent';
 /**
  * 由仪式时间（秒）推 #00 显形档位 —— 唯一权威映射。
  * 阈值边界：sec ≥ 1440 显形；sec ≥ 1751 静默。纯函数，便于断言与复用。
+ * 非有限输入（NaN/±Infinity）一律按 0s 处理 → hidden（与下面两个映射同口径）。
  */
 export function wujiRevealStateAt(sec: number): WujiRevealState {
+  if (!Number.isFinite(sec)) return 'hidden';
   if (sec >= WUJI_SILENCE_SEC) return 'silent';
   if (sec >= WUJI_REVEAL_SEC) return 'revealed';
   return 'hidden';
@@ -242,8 +244,11 @@ export type RitualPhase = 'abyss' | 'naming' | 'lanterns' | 'extinguishing' | 's
 /**
  * 仪式时间（秒）→ 五幕。纯函数，唯一权威映射。
  * 边界：<180 abyss｜<1020 naming｜<1440 lanterns｜<1751 extinguishing｜其余 silence。
+ * 非有限输入（NaN/±Infinity）一律按 0s 处理 → abyss：三个权威映射必须对同一脏输入
+ * 给出同一套稳态（修复前 NaN 会落到 silence，而 ritualLitSeatsAt(NaN) 返回 NaN，两映射互相矛盾）。
  */
 export function ritualPhaseAt(sec: number): RitualPhase {
+  if (!Number.isFinite(sec)) return 'abyss';
   if (sec < RITUAL_ABYSS_END_SEC) return 'abyss';
   if (sec < RITUAL_NAMING_END_SEC) return 'naming';
   if (sec < RITUAL_LANTERNS_END_SEC) return 'lanterns';
@@ -266,8 +271,11 @@ export function isTimelineDrivenPhase(phase: RitualPhase): boolean {
  * naming 幕内 litSeats 的线性爬升 [0, 49]。
  * 幕外返回该幕的稳态值（abyss=0、lanterns/extinguishing/silence=49），
  * 供时间轴与断言共用，避免两处各写一遍插值。
+ * 非有限输入（NaN/±Infinity）一律按 0s 处理 → 0：litSeats 是逐席触发驱动源，
+ * NaN 漏出去会让下游按 NaN 计数（修复前行为），与 ritualPhaseAt 同口径钝化。
  */
 export function ritualLitSeatsAt(sec: number): number {
+  if (!Number.isFinite(sec)) return 0;
   if (sec <= RITUAL_ABYSS_END_SEC) return 0;
   if (sec >= RITUAL_NAMING_END_SEC) return SEAT_ID_MAX;
   const t = (sec - RITUAL_ABYSS_END_SEC) / (RITUAL_NAMING_END_SEC - RITUAL_ABYSS_END_SEC);

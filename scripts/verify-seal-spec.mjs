@@ -2,11 +2,12 @@
  * 传国玉玺 · 规格常量验收
  *
  * 对 sealSpec.ts 做结构断言：
- *   1. 尺寸换算正确（1寸=0.75，方四寸=3.0，高三寸六=2.7）
+ *   1. 尺寸换算正确（1寸=1.5，方四寸=6.0=2格，高三寸六=5.4，通高/印面=0.9 照史载比例）
  *   2. 位置正确（SEAL_HOVER_Y = PYRAMID_TOP + 2.2）
  *   3. 五面刻字齐全
  *   4. 断代层齐全（秦/汉新/魏晋十六国/辽金）
  *   5. 机位常量正确
+ *   6. GLB 拆解行程不变量：cornerLift ≥ 印台高（燕尾槽竖直贯穿，行程不足即穿模）
  *
  * 运行：node scripts/verify-seal-spec.mjs
  */
@@ -43,8 +44,25 @@ try {
 eq(T.SEAL_CUN, 1.5, '1寸 = 1.5（BRICK/2）');
 eq(T.SEAL_SIDE, 6.0, '方四寸 = 6.0（= 2格）');
 eq(T.SEAL_HEIGHT, 5.4, '高三寸六 = 5.4');
+eq(T.SEAL_HEIGHT / T.SEAL_SIDE, 0.9, '通高/印面 = 3.6/4 = 0.9（史载比例锁死）');
 ok(T.SEAL_BODY_HEIGHT > 0, '印台高度 > 0');
 ok(T.SEAL_KNOB_HEIGHT > 0, '五龙钮高度 > 0');
+eq(T.SEAL_BODY_HEIGHT + T.SEAL_KNOB_HEIGHT, T.SEAL_HEIGHT, '印台 + 五龙钮 = 通高');
+eq(T.SEAL_BODY_HEIGHT, T.SEAL_HEIGHT * 0.55, '印台 = 通高的 55%');
+
+// GLB 拆解行程不变量：燕尾槽竖直贯穿整条印台，金角行程必须 ≥ 印台高
+ok(T.SEAL_GLB_EXPLODE, '有 SEAL_GLB_EXPLODE');
+ok(
+  T.SEAL_GLB_EXPLODE.cornerLift >= T.SEAL_BODY_HEIGHT,
+  `金角滑出行程 ≥ 印台高（${T.SEAL_GLB_EXPLODE.cornerLift} ≥ ${T.SEAL_BODY_HEIGHT}），否则拔不出槽口穿模`
+);
+eq(
+  T.SEAL_GLB_EXPLODE.cornerLift,
+  T.SEAL_BODY_HEIGHT,
+  '金角行程由 SEAL_BODY_HEIGHT 直接推导（尺度翻倍不脱钩）'
+);
+ok(T.SEAL_GLB_EXPLODE.cornerTiltOut > 0, '滑出带外倾（能读出"拔"的方向）');
+ok(T.SEAL_GLB_EXPLODE.knobLift > 0, '五龙钮抬升 > 0');
 
 // 位置
 ok(T.SEAL_HOVER_Y > 20, `SEAL_HOVER_Y > 20（实际 ${T.SEAL_HOVER_Y}）`);
