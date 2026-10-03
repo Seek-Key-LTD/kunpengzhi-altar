@@ -925,9 +925,14 @@ export class AltarScene {
     this.ritualClock.elapsed = startSec;
     this.ritualClock.phase = ritualPhaseAt(startSec);
     this.ritualClock.namingLitSeats = -1;
-    // 先归到 #00「未显形」档（<24:00），再落到初幕 abyss（黑场、litSeats=0）。
+    // 先归到 #00「未显形」档（<24:00），再落到初幕。
+    // litSeats 不能恒置 0：直播中段入场（OPT-1 广播接续）时 startSec 可能落在
+    // lanterns/extinguishing/silence 幕 —— 落 0 会让命名/走马灯各幕的派生视觉
+    // （光迹/双龙/繁花）停在空坛，且 lanterns 幕没有逐帧结算点能把它救回来
+    // （naming 有 litSeats 台阶刷新，lanterns 只在换幕时写一次）。按接续时刻
+    // 的稳态席数落位：abyss=0、naming=当时已点席数、其后各幕=49。
     this.setRitualTime(startSec);
-    this.setRitualState(this.ritualClock.phase, 0, null);
+    this.setRitualState(this.ritualClock.phase, ritualLitSeatsAt(startSec), null);
     this.kickAudio();
   }
 
