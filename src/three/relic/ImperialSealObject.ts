@@ -1059,6 +1059,9 @@ export class ImperialSealObject {
       model.position.sub(center); // 几何中心对齐到 root 原点
 
       if (applyJadeMaterial) {
+        // 被本类共享材质顶下来的 GLTF 原始材质（含其贴图位图）：替换后立即回收，
+        // 不留悬空引用——它们从未上屏，不存在 GPU 侧副作用，dispose 只还内存。
+        const retired = new Set<THREE.Material>();
         model.traverse((obj) => {
           const mesh = obj as THREE.Mesh;
           if (!mesh.isMesh) return;
@@ -1066,11 +1069,25 @@ export class ImperialSealObject {
           mesh.receiveShadow = true;
           // ⚠️ 判定只认 'gold'。**不能**再加 'jin'：
           //    「魏晋」的拼音 weijin 里就有 jin，会把玺肩刻痕误判成黄金。
-          mesh.material = mesh.name.includes('gold')
-            ? this.goldMaterial
-            : mesh.name.startsWith('era_') || mesh.name.includes('inscription')
-              ? this.inscriptionMaterial
-              : this.jadeMaterial;
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach((m) => retired.add(m));
+            mesh.material = mesh.name.includes('gold') ? this.goldMaterial : this.jadeMaterial;
+          } else {
+            if (mesh.material) retired.add(mesh.material);
+            mesh.material = mesh.name.includes('gold')
+              ? this.goldMaterial
+              : mesh.name.startsWith('era_') || mesh.name.includes('inscription')
+                ? this.inscriptionMaterial
+                : this.jadeMaterial;
+          }
+        });
+        retired.forEach((material) => {
+          const record = material as unknown as Record<string, unknown>;
+          Object.keys(record).forEach((key) => {
+            const value = record[key];
+            if (value instanceof THREE.Texture) value.dispose();
+          });
+          material.dispose();
         });
       }
 
