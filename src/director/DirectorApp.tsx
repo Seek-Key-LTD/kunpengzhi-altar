@@ -58,20 +58,37 @@ export const DirectorApp: React.FC = () => {
   const caps = ROLE_CAPABILITIES[role];
 
   // ── 建场 ───────────────────────────────────────────────────────────
+  // 弹窗互斥开启器：三块弹窗都是独立 boolean + fixed inset-0 遮罩，
+  // 若不互斥，3D 点击回调（点灯面 → 又点内壁刻）会叠出两层 z-50 遮罩，
+  // 关掉上层还露出下层，属于非法跃迁。开一块就收掉其余两块。
+  const openTeaLanterns = useCallback((chapter: number) => {
+    setComplianceOpen(false);
+    setInteriorOpen(false);
+    setInitialChapter(chapter);
+    setLanternsOpen(true);
+  }, []);
+
+  const openInteriorPoems = useCallback((seasonId: string) => {
+    setComplianceOpen(false);
+    setLanternsOpen(false);
+    setInitialSeasonId(seasonId);
+    setInteriorOpen(true);
+  }, []);
+
+  const openCompliance = useCallback(() => {
+    setLanternsOpen(false);
+    setInteriorOpen(false);
+    setComplianceOpen(true);
+  }, []);
+
   useEffect(() => {
     if (!entered || !containerRef.current) return;
     const altar = new AltarScene(
       containerRef.current,
       INITIAL_SPIRAL_EVENTS,
       (seatId) => setActiveSeatId(seatId),
-      (chapterIndex) => {
-        setInitialChapter(chapterIndex);
-        setLanternsOpen(true);
-      },
-      (seasonId) => {
-        setInitialSeasonId(seasonId);
-        setInteriorOpen(true);
-      }
+      openTeaLanterns,
+      openInteriorPoems
     );
     altarRef.current = altar;
     altar.setRole(role);
@@ -81,7 +98,7 @@ export const DirectorApp: React.FC = () => {
       altar.destroy();
       altarRef.current = null;
     };
-  }, [entered, role]);
+  }, [entered, role, openTeaLanterns, openInteriorPoems]);
 
   // ── 意图下发：面板只喊话，状态仍在 3D ───────────────────────────────
   const handleSetMode = useCallback((mode: SealMode) => altarRef.current?.setSealMode(mode), []);
@@ -93,9 +110,9 @@ export const DirectorApp: React.FC = () => {
     []
   );
   const handleOpenEraNote = useCallback(() => {
+    openCompliance();
     setEraNoteOpen(true);
-    setComplianceOpen(true);
-  }, []);
+  }, [openCompliance]);
 
   const handleChangeCameraMode = useCallback((mode: CameraMode) => {
     setCameraMode(mode);
@@ -177,9 +194,9 @@ export const DirectorApp: React.FC = () => {
       <Header
         isMuted={isMuted}
         onToggleMute={handleToggleMute}
-        onOpenCompliance={() => setComplianceOpen(true)}
-        onOpenTeaLanterns={() => setLanternsOpen(true)}
-        onOpenInteriorPoems={() => setInteriorOpen(true)}
+        onOpenCompliance={openCompliance}
+        onOpenTeaLanterns={() => openTeaLanterns(initialChapter)}
+        onOpenInteriorPoems={() => openInteriorPoems(initialSeasonId)}
         activeSeatId={activeSeatId}
       />
 
