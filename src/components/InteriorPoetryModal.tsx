@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SEASON1_POEMS, SeasonPoem } from '../data/season1_poems';
 import { X, ChevronLeft, ChevronRight, ScrollText, Sparkles } from 'lucide-react';
 
@@ -8,20 +8,31 @@ interface InteriorPoetryModalProps {
   onClose: () => void;
 }
 
+/** seasonId → 数组下标（未知名次回落 0，负值同样钳到 0）。 */
+function indexOfSeason(seasonId: string): number {
+  const idx = SEASON1_POEMS.findIndex((p) => p.seasonId === seasonId);
+  return Math.max(0, idx);
+}
+
 export const InteriorPoetryModal: React.FC<InteriorPoetryModalProps> = ({
   isOpen,
   initialSeasonId = 'S01',
   onClose
 }) => {
-  const initialIndex = Math.max(
-    0,
-    SEASON1_POEMS.findIndex((p) => p.seasonId === initialSeasonId)
-  );
-  const [activeIdx, setActiveIdx] = useState(initialIndex);
+  const [activeIdx, setActiveIdx] = useState(() => indexOfSeason(initialSeasonId));
+
+  // initialSeasonId 只在 mount 时被 useState 快照一次；导演台两次打开之间
+  // 换期（DirectorApp 以状态变量传参）会让弹窗停在上一期的位置。
+  // 这里在「每次打开」时按最新 initialSeasonId 重新对位。
+  useEffect(() => {
+    if (isOpen) setActiveIdx(indexOfSeason(initialSeasonId));
+  }, [isOpen, initialSeasonId]);
 
   if (!isOpen) return null;
 
-  const currentPoem: SeasonPoem = SEASON1_POEMS[activeIdx];
+  // 防御：数据面为空或下标越界时不渲染，而不是让 currentPoem 解引用崩溃。
+  const currentPoem: SeasonPoem | undefined = SEASON1_POEMS[activeIdx] ?? SEASON1_POEMS[0];
+  if (!currentPoem) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-lg animate-fade-in">
