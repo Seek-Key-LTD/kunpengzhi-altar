@@ -55,6 +55,10 @@ export function buildInnerStelaeRing(
   const stelaH = BRICK * 0.9;
   const stelaW = BRICK * 2.4;
 
+  // 碑板/碑框几何 13 份全同 → 循环外共享一份（材质本就共享；碑板保留逐席 Mesh 供拾取）。
+  const slabGeo = new THREE.BoxGeometry(stelaW, stelaH, 0.1);
+  const frameGeo = new THREE.BoxGeometry(stelaW + 0.12, stelaH + 0.12, 0.06);
+
   picks.forEach((ev, i) => {
     const poem = SEASON1_POEMS[i % SEASON1_POEMS.length];
     const sp = stelaPose(ev, CELL, BRICK, stelaH);
@@ -64,15 +68,12 @@ export function buildInnerStelaeRing(
     stelaGroup.position.set(cx, cy, cz);
     stelaGroup.rotation.y = Math.atan2(nx, nz);
 
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(stelaW, stelaH, 0.1), slabMat);
+    const slab = new THREE.Mesh(slabGeo, slabMat);
     slab.userData = { type: 'interior_stela', seasonId: poem.seasonId };
     stelaGroup.add(slab);
     interiorStelae.set(poem.seasonId, slab);
 
-    const frame = new THREE.Mesh(
-      new THREE.BoxGeometry(stelaW + 0.12, stelaH + 0.12, 0.06),
-      frameMat
-    );
+    const frame = new THREE.Mesh(frameGeo, frameMat);
     frame.position.z = -0.03;
     stelaGroup.add(frame);
 
@@ -98,6 +99,27 @@ export function buildOuter16TeaLanterns(
   const lanternRadius = 23.5;
   const lanternHeight = 4.6;
 
+  // 灯面/灯杆的几何与材质 16 份全同 → 循环外共享：
+  // 画面内容在 Sprite 的 CanvasTexture 上，screenMat 无 map 且运行时无逐面板改写，可安全共用。
+  const screenGeo = new THREE.PlaneGeometry(3.8, lanternHeight);
+  const screenMat = new THREE.MeshStandardMaterial({
+    color: 0x0c1322,
+    emissive: 0x1e293b,
+    emissiveIntensity: 0.4,
+    roughness: 0.4,
+    metalness: 0.3,
+    side: THREE.DoubleSide,
+  });
+  const rodGeo = new THREE.CylinderGeometry(0.08, 0.08, 4.0, 8);
+  rodGeo.rotateZ(Math.PI / 2);
+  const rodMat = new THREE.MeshStandardMaterial({
+    color: 0xf59e0b,
+    metalness: 0.9,
+    roughness: 0.2,
+    emissive: 0x92400e,
+    emissiveIntensity: 0.4,
+  });
+
   TEA_POEM_16_CHAPTERS.forEach((ch, idx) => {
     const angle = (idx / 16) * Math.PI * 2;
     const x = Math.sin(angle) * lanternRadius;
@@ -107,29 +129,11 @@ export function buildOuter16TeaLanterns(
     panelGroup.position.set(x, lanternHeight / 2 + 0.3, z);
     panelGroup.rotation.y = angle;
 
-    const screenGeo = new THREE.PlaneGeometry(3.8, lanternHeight);
-    const screenMat = new THREE.MeshStandardMaterial({
-      color: 0x0c1322,
-      emissive: 0x1e293b,
-      emissiveIntensity: 0.4,
-      roughness: 0.4,
-      metalness: 0.3,
-      side: THREE.DoubleSide,
-    });
     const screenMesh = new THREE.Mesh(screenGeo, screenMat);
     screenMesh.userData = { type: 'tea_lantern', chapterIndex: ch.chapterIndex };
     panelGroup.add(screenMesh);
     lanternPanels.set(ch.chapterIndex, screenMesh);
 
-    const rodGeo = new THREE.CylinderGeometry(0.08, 0.08, 4.0, 8);
-    rodGeo.rotateZ(Math.PI / 2);
-    const rodMat = new THREE.MeshStandardMaterial({
-      color: 0xf59e0b,
-      metalness: 0.9,
-      roughness: 0.2,
-      emissive: 0x92400e,
-      emissiveIntensity: 0.4,
-    });
     const topRod = new THREE.Mesh(rodGeo, rodMat);
     topRod.position.y = lanternHeight / 2;
     panelGroup.add(topRod);
