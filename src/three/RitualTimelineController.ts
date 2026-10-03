@@ -220,6 +220,8 @@ export class RitualTimelineController {
     this.clock.namingLitSeats = -1;
     this.setRitualTime(startSec);
     this.setRitualState(this.clock.phase, 0, null);
+    // 门控自愈边界：复位签名，强制下一帧按当前时间/幕次重放（与 AltarScene.startRitual 同约定）。
+    this.lastWujiAppliedSig = null;
     this.onKickAudio();
   }
 

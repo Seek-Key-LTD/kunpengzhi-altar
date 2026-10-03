@@ -154,7 +154,8 @@ export class CameraRig {
       // 固定时长过渡（≈1.2s），用 easeInOut 曲线，到了就停死。
       // 为什么：固定 k=0.085 是帧率相关的（144Hz 下收敛快 ~2.4 倍），
       // 改为指数衰减的帧率无关形式后，任意刷新率下过渡节奏一致。
-      const k = 1 - Math.exp(-7 * dt);
+      // 速率取 5.1/s：60fps 下 k≈0.085，精确保留旧 60fps 基线观感。
+      const k = 1 - Math.exp(-5.1 * dt);
       this.camera.position.lerp(this.targetPos, k);
       this.controls.target.lerp(this.targetLookAt, k);
       // 距离阈值放大到 0.4：早停，不做无限指数衰减（消除"吸附感"）

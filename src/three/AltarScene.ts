@@ -818,6 +818,8 @@ export class AltarScene {
       });
     }
     this.isAutoPatrol = false;
+    // 模式切换自愈边界：demo 期间可能改写仪式视觉，退出/进入后强制下帧重放。
+    this.lastWujiAppliedSig = null;
     this.demoController.start();
     this.kickAudio();
   }
@@ -825,6 +827,7 @@ export class AltarScene {
   /** 停掉演示循环（导演/工程入口不需要时）。 */
   public stopDemo(): void {
     this.demoController?.stop();
+    this.lastWujiAppliedSig = null;
   }
 
   /**
@@ -839,6 +842,8 @@ export class AltarScene {
     this.ritualMode = false;
     this.ritualLitSeats = 49;
     this.isAutoPatrol = false;
+    // 模式切换自愈边界：直显状态不经 setRitualState，复位签名避免旧档位残留。
+    this.lastWujiAppliedSig = null;
     this.scene.background = new THREE.Color(0x000000);
     this.scene.fog = new THREE.FogExp2(0x000000, 0.006);
 
@@ -941,6 +946,10 @@ export class AltarScene {
     // 先归到 #00「未显形」档（<24:00），再落到初幕 abyss（黑场、litSeats=0）。
     this.setRitualTime(startSec);
     this.setRitualState(this.ritualClock.phase, 0, null);
+    // 门控自愈边界：上面的显式序列（setRitualTime 先落 #00 档、setRitualState 再按幕覆盖）
+    // 会让签名停在最后一次写入上；复位后强制下一帧按当前时间/幕次重放正确状态，
+    // 消除"直播窗中途开页被 litSeats=0 覆盖后永久卡死"的回归。
+    this.lastWujiAppliedSig = null;
     this.kickAudio();
   }
 
