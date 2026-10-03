@@ -101,8 +101,9 @@ ok(
 );
 guard.update(0.016);
 ok(
-  guard.state.z !== snap.z || guard.state.v !== snap.v,
-  '合法正 dt 必须正常推进（守卫不得吞掉合法步进）'
+  guard.state.z !== snap.z || guard.state.v !== snap.v ||
+  guard.state.mA !== snap.mA || guard.state.mB !== snap.mB,
+  '合法正 dt 必须正常推进（守卫不得吞掉合法步进；单步内至少质量交换发生）'
 );
 log(`dt 守卫：NaN/∞/0/负值被忽略、合法 dt 正常推进 ✓`);
 console.log(`physics-failure: dt 自守卫取证 · ${checks} 项断言通过`);
