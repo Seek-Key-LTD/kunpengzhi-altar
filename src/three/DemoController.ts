@@ -37,6 +37,8 @@ export class DemoController {
   private readonly scene: THREE.Scene;
   private readonly wujiLight: THREE.SpotLight | null;
   private readonly wujiAbsorber: THREE.Object3D | null;
+  /** 前锋珠惰性单例：start/stop 循环只切 visible，灯光数量恒定避免全场景 shader 重编译。 */
+  private frontBeads: { water: THREE.Group; sound: THREE.Group } | null = null;
 
   constructor(options: DemoControllerOptions) {
     this.demo = options.demo;
@@ -60,11 +62,18 @@ export class DemoController {
     if (this.demo.isActive) return;
     this.demo.start();
 
-    const waterBead = buildFrontBead(0x38bdf8, 0.72, 0x0b7ab8, 3.2);
-    this.waterworksGroup.add(waterBead);
-    const soundBead = buildFrontBead(0xc4b5fd, 0.55, 0x7c5cbf, 2.6);
-    this.scene.add(soundBead);
-    this.dragon.setFrontBeads(waterBead, soundBead);
+    // 前锋珠只建一次、常驻场景：反复 start/stop 每轮 add 2 颗珠 + 2 盏点光会
+    // 无限累积灯光（每次还触发全场景 MeshStandardMaterial 重编译，演示启动卡顿）。
+    if (!this.frontBeads) {
+      const waterBead = buildFrontBead(0x38bdf8, 0.72, 0x0b7ab8, 3.2);
+      this.waterworksGroup.add(waterBead);
+      const soundBead = buildFrontBead(0xc4b5fd, 0.55, 0x7c5cbf, 2.6);
+      this.scene.add(soundBead);
+      this.frontBeads = { water: waterBead, sound: soundBead };
+    }
+    this.frontBeads.water.visible = true;
+    this.frontBeads.sound.visible = true;
+    this.dragon.setFrontBeads(this.frontBeads.water, this.frontBeads.sound);
 
     // #00 无极点：演示循环中给一束常驻冷顶光
     if (this.wujiLight) this.wujiLight.intensity = 0.9;
@@ -77,6 +86,10 @@ export class DemoController {
   stop(): void {
     if (!this.demo.isActive) return;
     this.demo.stop();
+    if (this.frontBeads) {
+      this.frontBeads.water.visible = false;
+      this.frontBeads.sound.visible = false;
+    }
     if (this.wujiLight) this.wujiLight.intensity = 0;
   }
 
