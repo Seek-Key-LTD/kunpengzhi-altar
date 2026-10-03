@@ -8,7 +8,12 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { broadcastStateAt, broadcastStateAtMs } from '../src/data/broadcastSchedule.ts';
+// 合并裁决：直导 .ts 在 Node<23.6 无默认类型剥离会 ERR_UNKNOWN_FILE_EXTENSION
+// （raccoon 修复项），统一走共享 esbuild 打包；正文仍用 modern main 的断言集，
+// 故 bundleTs 解构需同时取 broadcastStateAt 与 broadcastStateAtMs。
+import { bundleTs } from './lib/bundle-ts.mjs';
+
+const [{ broadcastStateAt, broadcastStateAtMs }] = await bundleTs(['src/data/broadcastSchedule.ts']);
 
 /** 构造"Asia/Shanghai 挂钟为 hour:minute:second"的时刻（UTC 锚点，时区无关）。 */
 function shanghaiDate(hour, minute, second) {

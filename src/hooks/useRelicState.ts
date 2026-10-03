@@ -26,12 +26,15 @@ function sameState(a: ImperialSealState | null, b: ImperialSealState | null): bo
     a.glb_loaded === b.glb_loaded &&
     a.lod === b.lod &&
     a.transmission_enabled === b.transmission_enabled &&
-    a.hover_y === b.hover_y &&
     a.stamp_count === b.stamp_count &&
     // 连续量只在"肉眼可辨"的粒度上比较，避免小数点后抖动引发重渲染
     Math.abs(a.exploded_progress - b.exploded_progress) < 0.005 &&
     Math.abs(a.stamp_progress - b.stamp_progress) < 0.005
   );
+  // 注（L3）：hover_y 不参与比较 —— 它取自呼吸悬浮的 root.position.y，逐帧连续
+  // 变化，且 React 侧无任何消费方；精确 === 比较曾使 10Hz 轮询每次都判不等，
+  // setState 以 10Hz 永久空转（30 分钟 ≈ 18000 次）。hover_y 仍随 state 快照下发，
+  // 只是不再触发重渲染。
 }
 
 /**

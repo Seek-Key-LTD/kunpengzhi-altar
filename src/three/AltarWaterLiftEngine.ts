@@ -162,13 +162,21 @@ export class AltarWaterLiftEngine {
 
   /**
    * 离散物理步推进（半隐式欧拉积分，残差累积 + 固定 1/60 子步）
+   *
+   * 合并裁决（mini×raccoon）：骨架取 mini 的残差累积（物理推进总量只取决于
+   * 真实流逝时间，帧率无关），入口叠加 raccoon 的 dt 自守卫（内核不依赖外部纪律）。
    */
   public update(dt: number): void {
+    // dt 自守卫（合并自 raccoon）：只接受正的有限数。0/负值会以负步长反向积分
+    // （能量凭空注入），NaN/Infinity 会沿 z/v/m 扩散污染全部状态量；且
+    // Math.max(NaN,0)=NaN，无守卫则 accDt 一旦沾 NaN 即永久冻结水梯。
+    if (!Number.isFinite(dt) || dt <= 0) return;
     // 为什么：旧实现 min(dt, 0.033) 会把掉帧部分整段丢弃，帧率越低水梯越慢。
     // 改为残差累积：超时部分存入 accDt，后续帧按固定 1/60 子步补推，
     // 物理推进总量只取决于真实流逝时间，与帧率无关。
-    // 上限 0.25s 防死亡螺旋：连续长卡顿时单帧最多补 15 个子步，不无限追帧。
-    this.accDt = Math.min(this.accDt + Math.max(dt, 0), 0.25);
+    // 上限 0.25s 防死亡螺旋：连续长卡顿时单帧最多补 15 个子步，不无限追帧
+    // （即 raccoon 方案中 MAX_FRAME_SEC 的 CPU 上界语义，由 0.25 帽承担）。
+    this.accDt = Math.min(this.accDt + dt, 0.25);
     const subDt = 1 / 60;
     while (this.accDt >= subDt) {
       this.accDt -= subDt;

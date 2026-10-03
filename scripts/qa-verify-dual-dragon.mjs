@@ -245,8 +245,8 @@ const sceneSrc = readFileSync(resolve(ROOT, 'src/three/AltarScene.ts'), 'utf8');
 const KEY = /maglev\.update|onAcousticStrum|waterLiftSeismic|seismic/i;
 const keyLines = sceneSrc.split('\n').filter((l) => KEY.test(l));
 ok(keyLines.length > 0, `地脉耦合符号仍在当前代码中（命中 ${keyLines.length} 行）`);
-// HEAD 现存：三处耦合行必须在场
-ok(/this\.maglev\.update\(dt,\s*this\.waterLiftSeismic\)/.test(sceneSrc), 'HEAD 现存 maglev.update(dt, waterLiftSeismic)');
+// HEAD 现存：三处耦合行必须在场（L2 起 maglev 与水梯同吃 ritualDeltaSec，与仪式时间轴同域）
+ok(/this\.maglev\.update\(this\.ritualDeltaSec,\s*this\.waterLiftSeismic\)/.test(sceneSrc), 'HEAD 现存 maglev.update(ritualDeltaSec, waterLiftSeismic)（L2 同域步进）');
 ok(/this\.waterLiftSeismic\s*\*=\s*0\.92/.test(sceneSrc), 'HEAD 现存 waterLiftSeismic 衰减');
 ok(/this\.maglev\.onAcousticStrum\s*=/.test(sceneSrc), 'HEAD 现存 maglev.onAcousticStrum 回调装配');
 ok(/this\.waterLiftSeismic\s*=\s*THREE\.MathUtils\.clamp/.test(sceneSrc), 'HEAD 现存 waterLiftSeismic 由水梯质量喂入');

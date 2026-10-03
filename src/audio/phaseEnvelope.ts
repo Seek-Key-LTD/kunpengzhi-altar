@@ -58,7 +58,11 @@ export function phaseWindow(phase: RitualPhase): PhaseWindow {
 /** 幕内进度 [0,1]：由 ritualPhaseAt(sec) 定位幕次后线性归一到 [0,1]。纯函数。 */
 export function phaseProgress(sec: number): number {
   const s = Number.isFinite(sec) ? sec : 0;
-  const w = phaseWindow(ritualPhaseAt(s));
+  return progressInWindow(phaseWindow(ritualPhaseAt(s)), s);
+}
+
+/** 幕内进度（已知窗口）：线性归一到 [0,1]。envelopeAt 与 phaseProgress 的共用内核。 */
+function progressInWindow(w: PhaseWindow, s: number): number {
   const span = w.end - w.start;
   if (span <= 0) return 0;
   return Math.min(1, Math.max(0, (s - w.start) / span));
@@ -106,11 +110,13 @@ export function applyPhaseEnvelope(phase: RitualPhase, secProgress: number): Lay
 
 /**
  * 单一时间轴取用：给定仪式时间（秒）→ 三层增益。
- * 完全由 `ritualPhaseAt(sec)` + `phaseProgress(sec)` 决定，不引入任何旁路时间源。
+ * 完全由 `ritualPhaseAt(sec)` 决定，不引入任何旁路时间源。
+ * 热路径注记：相位与进度共用同一次查窗（原先 ritualPhaseAt 每次取用要查两遍）。
  */
 export function envelopeAt(sec: number): LayerGains {
   const s = Number.isFinite(sec) ? sec : 0;
-  return applyPhaseEnvelope(ritualPhaseAt(s), phaseProgress(s));
+  const w = phaseWindow(ritualPhaseAt(s));
+  return applyPhaseEnvelope(w.phase, progressInWindow(w, s));
 }
 
 /** silence 幕时长（秒）—— 1751→1800 恰 49s。 */

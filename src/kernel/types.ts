@@ -83,7 +83,15 @@ export function assertNoImplicitPromotion(
     '演': ['演', '推'],       // 演绎可以提升为推论
     '工': ['工'],             // 工程实现不能提升为事实
   };
-  if (!promotions[from].includes(to)) {
+  // 运行时先验：unknown 值（含 JS 侧传入的越界字符串）必须抛域错误，
+  // 而不是让 promotions[from] 为 undefined 时炸出 TypeError。
+  const allowed = (promotions as Record<string, EpistemicType[] | undefined>)[from];
+  if (!allowed) {
+    throw new Error(
+      `未知认识论类型：${String(from)}（合法值：史/模/推/设/演/工）`
+    );
+  }
+  if (!allowed.includes(to)) {
     throw new Error(`非法认识论提升：${from} → ${to}（显式转换不允许静默提升）`);
   }
 }

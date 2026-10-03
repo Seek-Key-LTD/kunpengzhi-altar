@@ -18,6 +18,8 @@ export default defineConfig({
         // 两者均为公共页静态依赖（AltarScene 同步路径不动），vite 会为静态 chunk 生成
         // modulepreload，首屏不加 RTT。tone 仍留主 chunk：唯一消费者 src/audio/altarAudio.ts
         // 与 AltarScene 同生命周期，单独成 chunk 无独立缓存收益。
+        // （合并裁决：raccoon 的 tone 单拆条目并入时已否决——tone 与主场景同生命周期，
+        // 独立 chunk 无缓存收益，且对象式/函数式混用会使 rollup 报错。）
         manualChunks(id: string) {
           if (id.includes('/node_modules/three/')) return 'three-vendor';
           if (
