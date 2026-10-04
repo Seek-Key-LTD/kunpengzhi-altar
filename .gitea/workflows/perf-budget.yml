@@ -1,0 +1,73 @@
+name: Performance Budget Gate
+
+# 性能预算门禁（tools/perf/）：任何超支 → exit 1 → 本工作流红。
+# 口径与校准流程见 docs/perf-budget.md。
+on:
+  push:
+    branches:
+      - 'w1/**'
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'package.json'
+      - '.gitea/workflows/**'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'package.json'
+      - '.gitea/workflows/**'
+  workflow_dispatch:
+
+jobs:
+  perf-budget:
+    name: Perf Budget (frame / render / bundle / memory)
+    # 本仓 Actions 跑 raccoon（与 deploy.yml 一致）
+    runs-on: [raccoon]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Build Project
+        run: npm run build
+
+      # 已装则秒过；CDN 抽风时不让基建问题伪装成预算超支（真缺浏览器时
+      # measure 会在探针层如实 SKIP/FAIL，不会静默绿）
+      - name: Ensure Playwright Chromium
+        run: |
+          if ls "$HOME/.cache/ms-playwright/"chromium-* >/dev/null 2>&1; then
+            echo "chromium 缓存在场，跳过 CDN 下载"
+          else
+            npx playwright install chromium
+          fi
+
+      # 量完即裁：任何探针超预算 → exit 1 → 本步红
+      - name: Performance Budget Gate
+        run: npm run perf:budget
+
+      - name: Dump perf report (diagnose on failure)
+        if: failure()
+        run: cat tools/perf/report.json 2>/dev/null || echo "report.json 不存在"
+
+      # 把实测报告推到 perf-report 分支（Gitea 本版日志 API 不可读，
+      # 分支即日志：收口人经 API 直接读 CI 真实数值/失败原因）
+      - name: Publish report to perf-report branch
+        if: always()
+        run: |
+          git config user.name "amber"
+          git config user.email "amber@git4ta.fun"
+          git fetch origin perf-report 2>/dev/null || true
+          (git checkout -B perf-report origin/perf-report 2>/dev/null || git checkout --orphan perf-report)
+          cp tools/perf/report.json ./report-latest.json
+          git add report-latest.json
+          git commit -m "perf report: $GITEA_REF_NAME @ ${GITEA_SHA::7} status=$?" 2>/dev/null || echo "report 无变化"
+          git push "https://amber:${GITHUB_TOKEN}@gitea.capitaltrain.cn/seekkey/kunpengzhi-altar.git" perf-report 2>&1 | grep -v "^remote:" || true

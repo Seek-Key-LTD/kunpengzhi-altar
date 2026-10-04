@@ -71,7 +71,12 @@ const SUITES = [
   // 导演台 · 席位讲解/汇报字段
   ['导演台·席位讲解字段', 'scripts/verify-seat-presentation.mjs'],
   // src/three 优化回归：蝎子楔实例化 / 素数线材质独立 / 席位构建收编
-  ['优化回归（实例化/材质/席位）', 'scripts/verify-altar-opt-regression.mjs']
+  ['优化回归（实例化/材质/席位）', 'scripts/verify-altar-opt-regression.mjs'],
+
+  // W3 验收台账（#35）：需求缺口补测——观礼红线 / 玉玺五面对齐
+  ['观礼人体尺度红线（#20/#5）', 'scripts/verify-observation-redline.mjs'],
+  ['传国玉玺五面刻字对齐（#1/#18）', 'scripts/verify-seal-five-faces.mjs'],
+  ['物理调速/子步回归（RFC-007/008）', 'scripts/verify-physics-override.mjs']
 ];
 
 for (const [name, rel] of SUITES) {
