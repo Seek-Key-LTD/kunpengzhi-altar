@@ -126,6 +126,8 @@ export type WebglTier =
 
 **选定 A（主）+ B（辅）。** 理由：唯一能"零应用钩子"证伪的路径；复用既有 Playwright 工具链（`capture.mjs`）；与 #5 隔离天然相容。
 
+> 运行环境备注（luban，2026-10）：`chromium-headless-shell` 夹具在本机不可下载（官方 CDN 超时、npmmirror linux-x64 止步 chromium 1200，playwright 1.63 需 v1243）。浏览器取证脚本已统一接入 `scripts/lib/chromium-launch.mjs` 夹具：设 `ALTAR_CHROME_PATH=<受管 Chrome for Testing 路径>` 即以 `executablePath` 一次性启动受管 chrome，未设则与 playwright 缺省行为完全一致。用法与串行约束详见 README「测试与 QA（40 套件 + luban 节点运行指南）」。设计语义不变。
+
 ### 4.3 断言集（可机械判红）
 
 落于 `tools/capture/verify-webgl-degradation.mjs`（**新**，独立命令，**不入 `npm test`**——同 `capture.mjs:29` 之训）：

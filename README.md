@@ -361,18 +361,51 @@ npm install
 ```bash
 npm run dev
 ```
-打开浏览器访问 `http://localhost:5173/`。
+打开浏览器访问 `http://localhost:3001/`。
 
 ### 构建生产制品
 ```bash
 npm run build
 ```
-输出位于 `dist/` 目录。
+输出位于 `dist/` 目录。产物分包：`three-vendor` / `react-vendor` 两个公共 vendor chunk（`vite.config.ts` 的 `manualChunks`），按路由懒加载的 `DirectorApp` / `RelicViewer` 入口输出为中性 `chunk-[hash].js`（view-source 口径不暴露模块名）。
 
 ### 部署到 Cloudflare Pages
 ```bash
 npm run deploy
 ```
+
+---
+
+## 🧪 测试与 QA（40 套件 + luban 节点运行指南）
+
+### 门禁总览
+
+* **`npm test`**（= `node --test scripts/run-tests.mjs`）：**40 个套件**一条命令跑完。零依赖 node:test runner，每个套件在子进程里独立执行、互不污染，任一失败即非零退出；**全部 node 可跑，不需要浏览器 / WebGL**。
+* **浏览器取证类独立命令**（不进 `npm test`，需 Playwright 无头 Chromium，WebGL2 经 ANGLE/SwiftShader 软栅格）：
+
+| 命令 | 脚本 | 做什么 |
+| :--- | :--- | :--- |
+| `npm run audit:entry` | `scripts/qa-audit-public-entry.mjs` | 公共/工程入口隔离硬门禁（A–F 六断言）：`npm run build` + `vite preview` 实测本地产物；`--skip-build` 复用现有 dist，`--self-test` 注入违规自证判红，`AUDIT_PORT` 可固定端口 |
+| `npm run test:isolation` | `scripts/verify-entry-isolation.mjs` | 无头 Chromium 核三条：公共 hash 零导演态 / `#/director` 未确认只见确认门 / 确认后可达；自拉 vite dev server（端口 3000）。如实声明：前端伪认证，只挡误入、挡不住有意绕过 |
+| `npm run verify:degrade` | `tools/capture/verify-webgl-degradation.mjs` | WebGL 静默降级取证（`docs/design/007-webgl-degradation.md` §4）：A 路径启动参数真能力剥夺 + B 路径 `WEBGL_lose_context` 运行中丢失；判据 = draw call 冻结 + rAF 时钟存活；支持 `--skip-build` / `--self-test`，`PW_NODE_MODULES` 可换 playwright 来源 |
+| `npm run capture:ceremony` | `tools/capture/verify-ceremony-view.mjs` | 公共仪式幕次取景 C-1…C-7（真 AltarScene + 真实五幕运镜）；C-7 连带跑 `audit:entry` 并覆写 `artifacts/audit/` 基线，跑完 `git checkout -- artifacts/audit` 还原；`--skip-audit` 可跳过 |
+| `npm run record:full` | `tools/capture/record-full.mjs` | 1800s 全程录屏（rate=64）+ 黑场清单 + pose 对拍 + B 路径短证据；`--mobile` 出移动端口径。webm/PNG 不入库，blackframe manifest / probe.json 入库 |
+
+### ALTAR_CHROME_PATH · 浏览器夹具（luban 基建加固）
+
+playwright 1.63 所需的 `chromium-headless-shell`（v1243）在 luban 下载不了：官方 CDN 超时，npmmirror 镜像的 linux-x64 包止步于 chromium 1200。`scripts/lib/chromium-launch.mjs` 导出 `chromiumLaunchOptions(extraArgs)` 夹具，六个浏览器脚本均已接入：
+
+```bash
+ALTAR_CHROME_PATH=/home/ben/.cache/puppeteer/chrome/linux-149.0.7827.22/chrome-linux64/chrome npm run verify:degrade
+```
+
+* **未设** `ALTAR_CHROME_PATH`：与 playwright 缺省行为完全一致（仍由 registry 解析自带 chromium），零行为变化。
+* **设了**：以 `executablePath` 启动本机受管 Chrome for Testing。每次 `chromium.launch()` 仍是独立一次性进程，跑完 `browser.close()` 收尾——**绝不连** `127.0.0.1:9222` 的 CDP 常驻实例（chrome-cdp.service），也**不留常驻浏览器**。
+* luban（uid 1000）实测无需 `--no-sandbox`；缺省沙箱保持不变，其他环境若需要由调用方自行追加 launch args。
+
+### 并发软栅格 OOM 注意事项（铁律）
+
+SwiftShader 软栅格吃内存，**以下命令互相必须串行执行，严禁并发**：`npm run capture`、`audit:entry`、`verify:degrade`、`capture:ceremony`、`record:full`（并发软光栅会 OOM / 被 SIGKILL）。纯 node 的 `npm test` 不占浏览器，不受此限。
 
 ---
 
