@@ -58,13 +58,6 @@ jobs:
         if: failure()
         run: cat tools/perf/report.json 2>/dev/null || echo "report.json 不存在"
 
-      - name: Upload Perf Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: perf-report
-          path: tools/perf/report.json
-
       # 把实测报告推到 perf-report 分支（Gitea 本版日志 API 不可读，
       # 分支即日志：收口人经 API 直接读 CI 真实数值/失败原因）
       - name: Publish report to perf-report branch
