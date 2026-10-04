@@ -14,4 +14,4 @@ artifacts/capture/record/video/
 artifacts/capture/record/frames/
 artifacts/capture/record-mobile/video/
 artifacts/capture/record-mobile/frames/
-tools/perf/report.json
+artifacts/e2e/

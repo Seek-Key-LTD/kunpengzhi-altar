@@ -26,7 +26,8 @@
     "perf:budget": "node tools/perf/check-budget.mjs",
     "audit:entry": "node scripts/qa-audit-public-entry.mjs",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name=kunpengzhi-altar"
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=kunpengzhi-altar",
+    "e2e:scene": "node scripts/e2e/scene-ceremony.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
