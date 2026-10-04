@@ -6,11 +6,18 @@ on:
   push:
     branches:
       - 'w1/**'
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'package.json'
+      - '.gitea/workflows/**'
   pull_request:
     paths:
       - 'src/**'
       - 'tools/**'
       - 'package.json'
+      - '.gitea/workflows/**'
+  workflow_dispatch:
 
 jobs:
   perf-budget:
@@ -41,7 +48,8 @@ jobs:
       # 量完即裁：任何探针超预算 → exit 1 → 本步红
       - name: Performance Budget Gate
         run: npm run perf:budget
-- name: Dump perf report (diagnose on failure)
+
+      - name: Dump perf report (diagnose on failure)
         if: failure()
         run: cat tools/perf/report.json 2>/dev/null || echo "report.json 不存在"
 
