@@ -36,11 +36,14 @@ jobs:
       # 已装则秒过；CDN 抽风时不让基建问题伪装成预算超支（真缺浏览器时
       # measure 会在探针层如实 SKIP/FAIL，不会静默绿）
       - name: Ensure Playwright Chromium
-        run: npx playwright install chromium 2>/dev/null || true
+        run: npx playwright install chromium
 
       # 量完即裁：任何探针超预算 → exit 1 → 本步红
       - name: Performance Budget Gate
         run: npm run perf:budget
+- name: Dump perf report (diagnose on failure)
+        if: failure()
+        run: cat tools/perf/report.json 2>/dev/null || echo "report.json 不存在"
 
       - name: Upload Perf Report
         if: always()
