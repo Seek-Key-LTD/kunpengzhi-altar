@@ -169,6 +169,7 @@ export class AltarScene {
   private orthoTopdownCamera: THREE.OrthographicCamera | null = null;
   private ritualElapsed = 0;
   private ritualRunning = false;
+  private isCameraTransitioning = false;
   /** #00 显形档位：hidden(<24:00) / revealed(≥24:00) / silent(≥29:11)。用于幂等与一次性播报。 */
   private wujiRevealState: WujiRevealState = 'hidden';
   /** 最近一次实际落到场景的 #00 档位签名（revealed 档含 activeSeatId，换席需重放）。 */
@@ -1345,6 +1346,8 @@ export class AltarScene {
   private applyCeremonyView(sec: number) {
     if (this.orthoTopdownCamera !== null) return;
     if (!this.ritualRunning) return;
+    // 防御读取：旧 lerp 过渡通道在飞时整写抢占会抖动，待其落定（当前恒 false，行为等价）。
+    if (this.isCameraTransitioning) return;
     const pose = ceremonyPoseAt(sec);
     this.camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
     this.controls.target.set(pose.target[0], pose.target[1], pose.target[2]);
