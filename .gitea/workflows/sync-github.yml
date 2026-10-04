@@ -1,6 +1,10 @@
 name: Sync GitHub Mirror
 
 # Gitea 是唯一写入口；GitHub 是只出不进的公开镜像。
+# 只同步 main（生产/发布分支）；dev 与 stage（开发分支）一律不镜像到 GitHub。
+# 镜像走 SSH（git@github.com），不使用 HTTPS token：
+#   · HTTPS 依赖 Actions secret GITHUB_MIRROR_TOKEN，secret 缺失/过期即整体失败；
+#   · SSH 复用 runner（raccoon 本机）~/.ssh 中已认证的 GitHub 部署密钥，无凭据漂移。
 on:
   push:
     branches:
@@ -17,18 +21,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Require mirror credential
-        env:
-          GITHUB_MIRROR_TOKEN: ${{ secrets.GITHUB_MIRROR_TOKEN }}
+      - name: Fast-forward public mirror via SSH
         run: |
-          test -n "$GITHUB_MIRROR_TOKEN" || {
-            echo 'Missing Actions secret: GITHUB_MIRROR_TOKEN' >&2
+          git remote remove github-mirror 2>/dev/null || true
+          git remote add github-mirror "git@github.com:Seek-Key-LTD/kunpengzhi-altar.git"
+          # 与 GH 镜像旧 HEAD 对齐后快进推送；若远端领先（不应发生），明确报错而非强推覆盖
+          git fetch github-mirror refs/heads/main:refs/remotes/github-mirror/main || true
+          if git merge-base --is-ancestor github-mirror/main HEAD 2>/dev/null; then
+            git push github-mirror HEAD:refs/heads/main
+          else
+            echo 'GitHub mirror HEAD is ahead of Gitea main — aborting to avoid clobbering public mirror' >&2
             exit 1
-          }
-
-      - name: Fast-forward public mirror
-        env:
-          GITHUB_MIRROR_TOKEN: ${{ secrets.GITHUB_MIRROR_TOKEN }}
-        run: |
-          git remote add github-mirror "https://x-access-token:${GITHUB_MIRROR_TOKEN}@github.com/Seek-Key-LTD/kunpengzhi-altar.git"
-          git push github-mirror HEAD:refs/heads/main
+          fi
