@@ -25,6 +25,7 @@ import { mkdirSync, writeFileSync, existsSync, mkdtempSync, rmSync } from 'node:
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { chromiumLaunchOptions } from '../../scripts/lib/chromium-launch.mjs';
 import { dirname, resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { analyze } from './lib/png-probe.mjs';
@@ -183,7 +184,7 @@ async function main() {
   try {
     // ── 主路径（软栅格，出画）─────────────────────────────────────────
     console.log('[2] 主路径：软栅格 + startRitual 真时间轴 …');
-    const browser = await chromium.launch({ args: ARGS_SOFTWARE });
+    const browser = await chromium.launch(chromiumLaunchOptions(ARGS_SOFTWARE));
     try {
       const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 })).newPage();
       const errors = await collectErrors(page);
@@ -325,7 +326,7 @@ async function main() {
 
     // ── C-2 #7 相容：禁 WebGL 启动（tier='none' 空转）────────────────
     console.log('[7] C-2 #7 相容：禁 WebGL 启动（同一条时间轴空转）…');
-    const browser2 = await chromium.launch({ args: ARGS_NO_WEBGL });
+    const browser2 = await chromium.launch(chromiumLaunchOptions(ARGS_NO_WEBGL));
     try {
       const page = await (await browser2.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
       const errors = await collectErrors(page);

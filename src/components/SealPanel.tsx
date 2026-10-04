@@ -10,7 +10,7 @@
 // · 断代的史事注脚（SealEraLayer.note）**不在本面板直接展示**：
 //   展示层不得自动承载史学论断，要点开合规弹窗由 director 主动唤出。
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Gem, Hammer, Stamp, Crosshair, ScrollText, Lock } from 'lucide-react';
 import type { ImperialSealState, SealEra, SealMode } from '../types/relic';
 import type { AltarCapabilities } from '../types/altar';
@@ -60,7 +60,14 @@ export const SealPanel: React.FC<SealPanelProps> = ({
   // · 轮询值追平回显值 → 3D 已确认，交还真源（正常路径，≤100ms）；
   // · 250ms 兜底引信 → 若有别的写入方动了进度（如同时点了「合」归零），
   //   回显最多滞留 250ms 就放还给真源，不会永久漂移。
-  const [dragEcho, setDragEcho] = useState<number | null>(null);
+  //   引信从**回显设置时刻**起算（绝对期限）：若按"每次轮询变化重 arm"实现，
+  //   持续变化的轮询值（如 stamp 动画期间）会把回显饿死在动画全程。
+  const [dragEcho, setDragEchoState] = useState<number | null>(null);
+  const dragEchoSetAtRef = useRef<number>(0);
+  const setDragEcho = (v: number | null) => {
+    dragEchoSetAtRef.current = Date.now();
+    setDragEchoState(v);
+  };
   const polledValue = Math.round(exploded * 100);
 
   useEffect(() => {
@@ -69,7 +76,8 @@ export const SealPanel: React.FC<SealPanelProps> = ({
       setDragEcho(null);
       return;
     }
-    const fuse = window.setTimeout(() => setDragEcho(null), 250);
+    const remain = 250 - (Date.now() - dragEchoSetAtRef.current);
+    const fuse = window.setTimeout(() => setDragEcho(null), Math.max(0, remain));
     return () => window.clearTimeout(fuse);
   }, [polledValue, dragEcho]);
 

@@ -17,6 +17,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { chromium } from 'playwright';
+import { chromiumLaunchOptions } from '../scripts/lib/chromium-launch.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 3000;
@@ -111,7 +112,7 @@ async function snapshot(page) {
 async function main() {
   const server = await ensureServer();
   console.log(`\n[isolation] dev server ${server ? '已拉起' : '复用现存'}：${BASE}`);
-  const browser = await chromium.launch({ args: CHROMIUM_ARGS });
+  const browser = await chromium.launch(chromiumLaunchOptions(CHROMIUM_ARGS));
   let failed = false;
   try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
