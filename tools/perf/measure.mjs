@@ -29,6 +29,7 @@
  *   npm run perf:budget                      # 量完 + 对照预算裁决（CI 用这条）
  */
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import { hostname, platform, cpus } from 'node:os';
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
@@ -43,7 +44,19 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REPORT_PATH = resolve(ROOT, 'tools/perf/report.json');
 const BUDGET_PATH = resolve(ROOT, 'tools/perf/budget.json');
 const DIST_DIR = resolve(ROOT, 'dist');
-const PORT = 4173;
+// 并发防护：同一 runner 上两个门禁同时触发（如 stage+w1 各一份）会撞固定端口
+// —— run 349 绿/350 红同 sha 实证。改为每次抢一个空闲端口。
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.once('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const p = srv.address().port;
+      srv.close(() => resolve(p));
+    });
+  });
+}
+const PORT = await freePort();
 const BASE = `http://127.0.0.1:${PORT}`;
 
 /** hash 路由 → 路径映射（与 src/main.tsx 的 currentRoute 口径一致）。 */
