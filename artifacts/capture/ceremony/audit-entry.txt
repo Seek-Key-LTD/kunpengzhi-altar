@@ -3,10 +3,10 @@
 > node scripts/qa-audit-public-entry.mjs
 
 
-══ QA 公共入口审查 · HEAD 0f24515 ══
+══ QA 公共入口审查 · HEAD 26766f0 ══
 [1] npm run build …
-[1b] dist chunk：静态引用 1 个 · 懒加载 1 个 → chunk-DMhr3J48.js
-[2] vite preview @ http://127.0.0.1:4279 （指本地产物，不测线上）…
+[1b] dist chunk：静态引用 3 个 · 懒加载 2 个 → chunk--mGtbCbo.js, chunk-hTyEZxMs.js
+[2] vite preview @ http://127.0.0.1:4307 （指本地产物，不测线上）…
     server up ✓
 [3] 公共页 #/ 扫描 …
 [3b] 公共页下发 bundle 扫描 …
@@ -19,17 +19,17 @@
 window 污染: __altar=false __capture=false
 #/director 无确认: hasCanvas=false gate=true → 挡住
 #/director 有确认: hasCanvas=true gate=false → 进入(可达)
-网络侧: 公共页加载懒加载chunk = 无 ✓; 导演页加载 = chunk-DMhr3J48.js
+网络侧: 公共页加载懒加载chunk = 无 ✓; 导演页加载 = chunk-hTyEZxMs.js
 
 ──── 硬门禁断言（6 项）────
   ✓ [A.dom-zero] 公共页 #/ DOM/文本/window 词表命中 = 0 — 命中: 0
   ✓ [B.bundle-zero] 公共页下发 bundle 逐 token 命中 = 0（且扫描有效） — 夹带: 0
   ✓ [C.window-clean] window.__altar / window.__capture 均未定义 — __altar=false __capture=false
   ✓ [D.public-no-lazy] 网络侧：公共页 #/ 不请求导演懒加载 chunk — 未请求 ✓
-  ✓ [E.director-hits-lazy] 正向对照：#/director（已确认）命中导演懒加载 chunk — 命中: chunk-DMhr3J48.js
+  ✓ [E.director-hits-lazy] 正向对照：#/director（已确认）命中导演懒加载 chunk — 命中: chunk-hTyEZxMs.js
   ✓ [F.director-lazy-has-marker] 正向对照：导演懒加载 chunk 内含导演标记 — 含导演标记 ✓
 ✅ 门禁 PASS：公共入口零暴露 + 正/负向对照成立
-报告写入: /Users/ben/code/kunpengzhi-altar/artifacts/audit/audit-public-entry.{json,txt,html.txt}
+报告写入: /tmp/altar3-capture-run/artifacts/audit/audit-public-entry.{json,txt,html.txt}
 
 完成。
 
