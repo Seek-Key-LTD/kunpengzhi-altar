@@ -155,6 +155,7 @@ export const DirectorApp: React.FC = () => {
   };
 
   // 公共事件（坐标/音高/时序） + 导演台讲解文案（display_name/message_excerpt/…）按需合并。
+
   // 下标以数据长度为准（不硬编码 48/49，免得改场数后静默失真）；
   // 空数据时 activeEvent 为 null，下面的渲染守卫让席位面板整体让位，而不是解引用崩溃。
   // （合并裁决：mbp useMemo 壳收敛 10Hz 轮询重渲染 —— 讲解文案只随席位变，
@@ -170,6 +171,7 @@ export const DirectorApp: React.FC = () => {
 
   const handlePlaySeatSound = useCallback(() => {
     if (activeEvent) altarAudio.triggerSeatEvent(activeEvent);
+
   }, [activeEvent]);
 
   // ── 未确认：先挡一道 ───────────────────────────────────────────────
