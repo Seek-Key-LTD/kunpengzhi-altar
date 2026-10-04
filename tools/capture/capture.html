@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 内联 data-URI icon（同 index.html）：抑掉浏览器对 /favicon.ico 的自动请求 ——
+         否则 dev server 404 → console error=1，C-1/C-2「console error = 0」门禁恒红。 -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>" />
     <title>华夏祭坛 · 无头取证入口（#7 前置）</title>
     <style>
       html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
