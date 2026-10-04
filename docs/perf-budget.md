@@ -91,3 +91,15 @@ playwright 的 chromium 已安装（没装时 `npx playwright install chromium`�
   换浏览器内核即 SKIP；
 - `bundle` 的「主 chunk」按 gzip 最大文件取，若未来某个懒加载 chunk 反超入口
   chunk，口径含义会漂移（报告里带 `main_chunk_file` 字段可查）。
+
+## CI 报告读取（perf-report 分支）
+
+每次门禁运行（无论成败）都会把实测 `report.json` 以 `report-latest.json` 推到仓库 `perf-report` 分支：
+
+```bash
+tea run ... # 或直接 API：
+curl -H "Authorization: token $GITEA_TOKEN" \
+  https://gitea.capitaltrain.cn/seekkey/kunpengzhi-altar/raw/branch/perf-report/report-latest.json
+```
+
+用途：本版 Gitea 的 Actions 日志 API 不可程序化读取，`perf-report` 分支即门禁的持久观测面——CI 红时先看它，不用猜。
