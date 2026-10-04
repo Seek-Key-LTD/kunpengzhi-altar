@@ -23,6 +23,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Gitea 的 refs/pull/<N>/merge 在启用了分支保护时常缺（实测 PR#37 只有
+          # head 无 merge）—— checkout 默认抓 merge ref 会整任务 cancelled。
+          # 改钉 PR head SHA：pull_request 事件取 head、push/dispatch 取 github.sha，
+          # 门禁语义不变（对被测提交本身负责）。
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
