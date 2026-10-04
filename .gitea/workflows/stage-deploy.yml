@@ -31,7 +31,7 @@ jobs:
       - name: Health Check
         run: |
           # 验证本地 Caddy 与 Staging 端点响应
-          curl -sf http://127.0.0.1/ | grep -q "华夏祭坛" || {
+          curl -sf -H "Host: altar-staging.capitaltrain.cn" http://127.0.0.1/ | grep -q "华夏祭坛" || {
             echo "Local Caddy health check failed" >&2
             exit 1
           }
