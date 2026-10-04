@@ -22,6 +22,8 @@
     "verify:degrade": "node tools/capture/verify-webgl-degradation.mjs",
     "capture:ceremony": "node tools/capture/verify-ceremony-view.mjs",
     "record:full": "node tools/capture/record-full.mjs",
+    "perf:measure": "node tools/perf/measure.mjs",
+    "perf:budget": "node tools/perf/check-budget.mjs",
     "audit:entry": "node scripts/qa-audit-public-entry.mjs",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler pages deploy dist --project-name=kunpengzhi-altar"

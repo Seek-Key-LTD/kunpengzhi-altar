@@ -1,0 +1,50 @@
+name: Performance Budget Gate
+
+# 性能预算门禁（tools/perf/）：任何超支 → exit 1 → 本工作流红。
+# 口径与校准流程见 docs/perf-budget.md。
+on:
+  push:
+    branches:
+      - 'w1/**'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'package.json'
+
+jobs:
+  perf-budget:
+    name: Perf Budget (frame / render / bundle / memory)
+    # 本仓 Actions 跑 raccoon（与 deploy.yml 一致）
+    runs-on: [raccoon]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Build Project
+        run: npm run build
+
+      # 已装则秒过；CDN 抽风时不让基建问题伪装成预算超支（真缺浏览器时
+      # measure 会在探针层如实 SKIP/FAIL，不会静默绿）
+      - name: Ensure Playwright Chromium
+        run: npx playwright install chromium 2>/dev/null || true
+
+      # 量完即裁：任何探针超预算 → exit 1 → 本步红
+      - name: Performance Budget Gate
+        run: npm run perf:budget
+
+      - name: Upload Perf Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-report
+          path: tools/perf/report.json

@@ -1,0 +1,7 @@
+{
+  "_comment": "华夏祭坛 · 性能预算（全部可配置）。口径：宁宽勿严 + 按环境校准。frame 的 p50/p99 是为【无头 Chromium + SwiftShader 软栅格 + Intel i5-8257U】校准的宽口径 —— 三次实测基线 p50=52.6/133.4/62.8ms、p99=355.5/547.6/701.2ms（软栅格 CPU 渲染 + 外接盘 I/O 噪声），预算取包络上限留余量；换真 GPU / raccoon 等更快机器后必须按 docs/perf-budget.md 重新校准收紧（真 GPU 建议 p50≤20ms / p99≤100ms），不得沿用软栅格宽口径装作性能合格。updates_per_sec_max=3 把导演台 10Hz 重渲染风暴编码成硬断言：空闲态每秒 DOM 变更批次 >3 即超支（与机器速度无关，任何环境不得放宽）。",
+  "frame": { "sample_seconds": 30, "p50_ms_max": 150, "p99_ms_max": 750, "page": "public" },
+  "render": { "sample_seconds": 15, "updates_per_sec_max": 3, "page": "director" },
+  "bundle": { "total_gzip_kb_max": 420, "main_chunk_gzip_kb_max": 380 },
+  "memory": { "cycles": 6, "growth_mb_max": 25, "growth_ratio_max": 0.35, "page": "public" }
+}
