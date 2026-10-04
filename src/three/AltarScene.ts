@@ -164,6 +164,11 @@ export class AltarScene {
   private wujiLight: THREE.SpotLight | null = null;
   private ritualMode = false;
   private ritualLitSeats = 0;
+  // —— 合并修复（55c6286 验收回归）：mbp ceremony-view 接线字段，#31 SKIP 整支致 main 缺基础，
+  // 按 mbp/altar-opt 同款声明补齐（applyCeremonyView / destroy 8b / R key 复位依赖）。
+  private orthoTopdownCamera: THREE.OrthographicCamera | null = null;
+  private ritualElapsed = 0;
+  private ritualRunning = false;
   /** #00 显形档位：hidden(<24:00) / revealed(≥24:00) / silent(≥29:11)。用于幂等与一次性播报。 */
   private wujiRevealState: WujiRevealState = 'hidden';
   /** 最近一次实际落到场景的 #00 档位签名（revealed 档含 activeSeatId，换席需重放）。 */
