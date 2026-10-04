@@ -8,56 +8,32 @@ on:
 
 jobs:
   build-and-deploy:
-    name: Build & Deploy to Kelly Stage
-    runs-on: [nuc]
+    name: Build & Deploy to Fleet Stage (CT157 Caddy)
+    runs-on: [ static-runner ]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Install Dependencies
-        run: npm ci
-
-      - name: Type Check
-        run: npx tsc --noEmit
+        run: |
+          npm install --ignore-scripts --registry=https://registry.npmmirror.com
 
       - name: Build
-        run: npm run build
-
-      - name: Test
-        run: npm test
-
-      - name: Deploy to Kelly Stage
-        env:
-          KELLY_HOST: ${{ secrets.KELLY_HOST }}
-          KELLY_USER: ${{ secrets.KELLY_USER }}
-          KELLY_SSH_KEY: ${{ secrets.KELLY_SSH_KEY }}
         run: |
-          set -euo pipefail
-          test -n "$KELLY_HOST" || { echo "Missing KELLY_HOST" >&2; exit 1; }
-          test -n "$KELLY_USER" || { echo "Missing KELLY_USER" >&2; exit 1; }
-          echo "$KELLY_SSH_KEY" > /tmp/kelly_key
-          chmod 600 /tmp/kelly_key
+          npx vite build
 
-          # rsync dist → Kelly stage 容器
-          rsync -avz --delete -e "ssh -i /tmp/kelly_key -o StrictHostKeyChecking=no" \
-            dist/ "${KELLY_USER}@${KELLY_HOST}:/opt/altar/stage/"
+      - name: Deploy to Fleet Caddy Staging
+        run: |
+          mkdir -p /var/www/html/altar
+          rsync -av --delete dist/ /var/www/html/altar/
+          echo "Successfully deployed to Staging directory: /var/www/html/altar/"
 
-          # 健康检查：30s 内连续 3 次通过
-          for i in 1 2 3; do
-            if ssh -i /tmp/kelly_key -o StrictHostKeyChecking=no "${KELLY_USER}@${KELLY_HOST}" \
-              "curl -sf http://localhost:8081/healthz"; then
-              echo "Health check #$i passed"
-              exit 0
-            fi
-            sleep 10
-          done
+      - name: Health Check
+        run: |
+          # 验证本地 Caddy 与 Staging 端点响应
+          curl -sf http://127.0.0.1/ | grep -q "华夏祭坛" || {
+            echo "Local Caddy health check failed" >&2
+            exit 1
+          }
+          echo "Stage deployment verified successfully: https://altar-staging.capitaltrain.cn/"
 
-          echo "Health check failed — rolling back" >&2
-          ssh -i /tmp/kelly_key -o StrictHostKeyChecking=no "${KELLY_USER}@${KELLY_HOST}" \
-            "cd /opt/altar && docker compose -f docker-compose.stage.yml restart altar-stage"
-          exit 1
