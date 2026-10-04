@@ -1,0 +1,42 @@
+name: CI
+
+# w4/eng-flow（第四包·工程流）：main 合并门禁的可执行面。
+# 与 dev-ci 的差别只在触发器 —— 本仓的完整门禁（npm test 39 套件 + tsc + build）
+# 此前从不覆盖「PR → main」这条路径，main 分支保护（CI 绿才可合并）没有
+# 可挂的 status context。本 workflow 补上：PR → main 必须全绿才可合并；
+# push main 与手动 dispatch 同样跑一遍作发布前闸。
+# 配方与 dev-ci 逐字同源（checkout → node22 → npm ci → tsc → build → test），
+# 差异只有 on 触发器与名称；runner 同为 raccoon（Node 22.22.1，npm test 全绿已实证）。
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: verify
+    runs-on: [raccoon]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Type Check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Test（39 套件全绿门禁）
+        run: npm test
