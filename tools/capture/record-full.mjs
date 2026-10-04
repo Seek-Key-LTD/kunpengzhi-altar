@@ -32,6 +32,7 @@ import { mkdirSync, writeFileSync, renameSync, readdirSync, mkdtempSync, rmSync 
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { chromiumLaunchOptions } from '../../scripts/lib/chromium-launch.mjs';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { analyze } from './lib/png-probe.mjs';
@@ -196,7 +197,7 @@ async function main() {
   let degrade = null;
   let mainPathErrors = 0;
 
-  const browser = await chromium.launch({ args: ARGS_SOFTWARE });
+  const browser = await chromium.launch(chromiumLaunchOptions(ARGS_SOFTWARE));
   try {
     // ── 主路径：1800s 全程真跑 + 录屏 + 采样 ─────────────────────────
     console.log(`[2] 主路径（${PROFILE_LABEL}）：seek(0) + start(${RUN_RATE}x) 真跑全程 + recordVideo …`);

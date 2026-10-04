@@ -35,6 +35,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze, NONBLACK_LEVEL, BRIGHT_LEVEL } from './lib/png-probe.mjs';
 import { chromium } from 'playwright';
+import { chromiumLaunchOptions } from '../../scripts/lib/chromium-launch.mjs';
 
 // ── 常量 ────────────────────────────────────────────────────────────────────
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -188,7 +189,7 @@ async function main() {
   const server = await ensureServer();
   console.log(`[capture] dev server ${server ? '已拉起' : '复用现存'}：${URL}`);
 
-  const browser = await chromium.launch({ args: CHROMIUM_ARGS });
+  const browser = await chromium.launch(chromiumLaunchOptions(CHROMIUM_ARGS));
   const shots = [];
   let glInfo = 'unknown';
   let fps = null;

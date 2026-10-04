@@ -50,7 +50,7 @@ assert.match(
 );
 // 旧竖井魔数回漂：回收行内不得再出现 y<7.2 / y=11.2 形态的写死比较
 assert.doesNotMatch(sceneSrc, /y\s*<\s*7\.2/, '禁止回漂：回收比较不得写死 y<7.2');
-assert.doesNotMatch(sceneSrc, /y\s*=\s*11\.2\s*;/, '禁止回漂：回收重生不得写死 y=11.2');
+assert.doesNotMatch(sceneSrc, /y\s*=\s*11\.2/, '禁止回漂：回收重生不得写死 y=11.2');
 
 // ── ② 生成带（WujiFountainBuilder）：必须由 PYRAMID_TOP 推导 ──
 const SPAWN = builderSrc.match(/PYRAMID_TOP\s*\+\s*([\d.]+)\s*\+\s*Math\.random\(\)\s*\*\s*([\d.]+)/);

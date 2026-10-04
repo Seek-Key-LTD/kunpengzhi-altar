@@ -172,11 +172,21 @@ p3.catch(() => {});
 // ══ 6. 时间轴控制流镜像（真值函数 + AltarScene.updateRitualTimeline 的三行控制流）══
 // 说明：AltarScene 需要 WebGL，无法在 node 实例化；此处只镜像其可读控制流，
 //       阈值/相位/litSeats 全部来自上面的真值模块，**不复制任何常量**。
+//       startRitual(startSec) 镜像真实语义（AltarScene.startRitual）：off-air/default
+//       落 0/abyss；直播中段入场（broadcast.showSec）落场内秒数并**接续** phase/litSeats
+//       （71ba36f），不再无条件归零。
 const makeTimeline = () => {
   const st = { running: false, elapsed: 0, phase: null, lit: -1, writes: [], wuji: null };
   return {
     st,
-    startRitual() { st.running = true; st.elapsed = 0; st.phase = 'abyss'; st.lit = -1; st.wuji = wujiRevealStateAt(0); st.writes = []; },
+    startRitual(startSec = 0) {
+      st.running = true; st.elapsed = startSec;
+      st.phase = ritualPhaseAt(startSec); st.lit = -1; st.writes = [];
+      // setRitualTime(startSec) 结算镜像：wuji 显隐与 litSeats 一并落位
+      st.wuji = wujiRevealStateAt(startSec);
+      st.lit = ritualLitSeatsAt(startSec);
+      if (st.wuji !== 'hidden') st.lit = SEAT_ID_MAX;
+    },
     tick(dt) {
       if (!st.running) return;
       st.elapsed = Math.min(RITUAL_TOTAL_SEC, st.elapsed + dt);      // AltarScene.ts:1631
@@ -196,15 +206,25 @@ const makeTimeline = () => {
 
 const t1 = makeTimeline();
 t1.startRitual();
-eq(t1.st.elapsed, 0, 'startRitual() 必须把 elapsed 归零');
-eq(t1.st.phase, 'abyss', 'startRitual() 必须落初幕 abyss');
+eq(t1.st.elapsed, 0, 'startRitual()（off-air/default）必须落 0s');
+eq(t1.st.phase, 'abyss', 'startRitual()（off-air/default）必须落初幕 abyss');
 eq(t1.st.wuji, 'hidden', 'startRitual() 时 #00 必须未显形');
 
-// 重入：跑一段后再次 startRitual() → 归零
+// 直播中段入场：seed = broadcast.showSec（修复 71ba36f 的语义）——不归零，按场内秒接续
+const tMid = makeTimeline();
+tMid.startRitual(1500); // extinguishing 段（1440–1751）
+eq(tMid.st.elapsed, 1500, '直播中段入场：elapsed 必须接续场内秒数，不得归零');
+eq(tMid.st.phase, 'extinguishing', '直播中段入场：phase 必须接续到场内相位');
+eq(tMid.st.lit, SEAT_ID_MAX, '直播中段入场：晚段席位必须全额在场，不得空坛');
+tMid.startRitual(300); // naming 段
+eq(tMid.st.phase, 'naming', '直播中段入场（naming）：phase 接续');
+ok(tMid.st.lit > 0 && tMid.st.lit < SEAT_ID_MAX, '直播中段入场（naming）：litSeats 必须是当时席数而非 0/49');
+
+// 重入：跑一段后再次 startRitual(0) → 归零（off-air 语义）
 for (let i = 0; i < 600; i++) t1.tick(1); // 走到 600s（naming 中）
 eq(t1.st.phase, 'naming', '600s 应处于 naming');
-t1.startRitual();
-eq(t1.st.elapsed, 0, '重入 startRitual() 必须把 elapsed 再次归零');
+t1.startRitual(0);
+eq(t1.st.elapsed, 0, '重入 startRitual(0) 必须把 elapsed 再次归零');
 eq(t1.st.phase, 'abyss', '重入后回到 abyss');
 
 // 正常步进到终态，并检查「时间轴只写早段三幕」
