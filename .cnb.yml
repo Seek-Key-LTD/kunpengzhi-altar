@@ -1,0 +1,47 @@
+# 华夏祭坛 · 腾讯云 CNB (云原生构建) 配置文件
+# 架构：Staging 预览环境对接 Tencent Cloud EdgeOne 边缘加速网络
+# 算力：CNB 云端原生 Node 22 环境构建，输出 dist/ 静态制品
+
+$:
+  vscode:
+    - docker:
+        image: node:22
+
+cnb:
+  push:
+    - docker:
+        image: node:22
+      stages:
+        - name: install-dependencies
+          script: |
+            npm config set registry https://mirrors.cloud.tencent.com/npm/
+            npm ci
+        - name: build-staging
+          script: |
+            npm run build
+            echo "=== Altar Staging Build Finished (EdgeOne Preview Ready) ==="
+  tag_push:
+    - docker:
+        image: node:22
+      stages:
+        - name: install-dependencies
+          script: |
+            npm config set registry https://mirrors.cloud.tencent.com/npm/
+            npm ci
+        - name: build-release
+          script: |
+            npm run build
+
+main:
+  push:
+    - docker:
+        image: node:22
+      stages:
+        - name: install-dependencies
+          script: |
+            npm config set registry https://mirrors.cloud.tencent.com/npm/
+            npm ci
+        - name: test-and-build
+          script: |
+            npx tsc --noEmit
+            npm run build
