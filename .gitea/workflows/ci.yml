@@ -11,9 +11,13 @@ on:
   push:
     branches:
       - main
+      - cnb
+      - production
   pull_request:
     branches:
       - main
+      - cnb
+      - production
   workflow_dispatch:
 
 jobs:
